@@ -5,7 +5,8 @@ backend/bin/
 frontend/node_modules/
 frontend/.env.local
 
-# Environment
+# Claude
+.claude/settings.local.json
 
 # Binaries for programs and plugins
 *.exe
