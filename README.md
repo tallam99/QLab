@@ -39,6 +39,51 @@ The local stack (Docker Compose + Postgres, driven by `mage` targets) lands in
 Phase 2 — see [`docs/runbook.md`](docs/runbook.md). Until then there is nothing to
 run locally.
 
+## Development environment
+
+Quelab is developed on **Windows + WSL2 (Ubuntu)**. GUI apps stay on Windows; all
+terminal, IDE, and toolchain work runs inside Linux — matching production (Linux
+containers) and sidestepping Windows-only tooling bugs (see the troubleshooting log
+below).
+
+| Runs on Windows | Runs in WSL2 / Ubuntu |
+|-----------------|------------------------|
+| Web browser (OAuth flows, the running PWA), any GUI app | Repo, terminal, VS Code (*Remote – WSL*), Claude Code, and every CLI: Go, Node, `firebase`, `buf`, `mage`, `docker`, `gcloud` |
+
+**Key choices:**
+
+- **Repo lives on the WSL filesystem** (`~/repos/qlab`), *not* `/mnt/c`. Native ext4
+  is far faster for Go builds and `node_modules`; `/mnt/c` crosses a translation
+  layer that is slow for many small files. Open it with `code .` from the WSL shell
+  (the *Remote – WSL* extension); reach it from Windows Explorer at
+  `\\wsl.localhost\Ubuntu\home\<user>\repos\qlab` when needed.
+- **Line endings are LF** — `git config --global core.autocrlf false` inside WSL, so
+  files don't round-trip through CRLF like Windows-native git.
+- **Docker runs natively in WSL** (Docker Engine as a **systemd** service, *not*
+  Docker Desktop). The daemon auto-starts on every WSL launch — nothing to start by
+  hand — and the user is in the `docker` group so `docker` needs no `sudo`. systemd
+  is already enabled in the distro (`/etc/wsl.conf` → `[boot] systemd=true`).
+- **Node** via `nvm` (Node 22); **`firebase`** via the keep-alive workaround in the
+  troubleshooting log.
+
+### One-time WSL setup
+
+```bash
+# Docker Engine — native, auto-starting (systemd is already on in this distro)
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"        # then `wsl --shutdown` from Windows to apply group
+
+# Go (current stable from https://go.dev/dl/), then buf + mage via `go install`
+GO_VER=<latest>   # e.g. go1.2x.y
+curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz" | sudo tar -C /usr/local -xz
+# add to ~/.bashrc: export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"
+go install github.com/bufbuild/buf/cmd/buf@latest
+go install github.com/magefile/mage@latest
+
+git config --global core.autocrlf false
+```
+
 ## Environment troubleshooting log
 
 Symptom → cause → fix for environment problems hit during setup, recorded so we

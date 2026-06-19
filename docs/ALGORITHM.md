@@ -486,24 +486,24 @@ history untouched; determinism (run twice, compare).
 
 ---
 
-## 12. Open decisions for review (consolidated)
+## 12. Decisions — confirmed
 
-Several earlier decisions are now **settled** by your notes (no compression; no
+Earlier decisions were already settled by the design notes (no compression; no
 overflow/infeasible; no wall-clock anchors; auto-apply within window via the
-availability contract; `CLOCK_IN_GRACE = 15 min`). Remaining items to confirm:
+availability contract; `CLOCK_IN_GRACE = 15 min`). The remaining six are now
+**confirmed**; this spec is the schema-of-record the engine implements.
 
-1. **§2 / §2.2** — `window` = *forward* band only (`[winStart, winStart+window]`),
-   earliness bounded by `winStart`, ratcheting later when forced. Confirm this is
-   forward-only (not symmetric around the booked start).
-2. **§1.1 / §10** — **dynamic bench assignment** ⇒ an *equipment pool* in the data
-   model and a bench chosen near clock-in (not a fixed `equipment_id` at booking).
-   Confirm; this drives a `docs/PLAN.md` Phase 4 change.
-3. **§10** — ship the **general N-bench engine with `benches == 1`** for the first
-   lab rather than a single-bench special case. Confirm.
-4. **§6** — overrun handling = *settle on clock-out* + one projected recompute when
-   an active slot crosses its scheduled end. Confirm.
-5. **§2.3** — `CLOCK_IN_GRACE = 15 min` (note 6) and `NO_SHOW` as a distinct status.
-   Confirm the value and that no-show auto-frees + reschedules.
-6. **§8.3** — max-priority slots are a post-MVP feature implemented purely as the
-   lowest `priority` key (no new engine machinery, never interrupts active).
-   Confirm the deferral.
+1. **§2 / §2.2 — `window` is forward-only.** Band `[winStart, winStart+window]`;
+   earliness bounded by `winStart`; ratchets later when forced — not symmetric
+   around the booked start. ✓
+2. **§1.1 / §10 — dynamic bench assignment.** Equipment is modelled as a *pool*;
+   a bench is chosen near clock-in, not fixed at booking. Drives the Phase 4
+   schema. ✓
+3. **§10 — one general N-bench engine.** Ship it with `benches == 1` for the first
+   lab rather than a single-bench special case. ✓
+4. **§6 — overruns settle on clock-out**, with one projected recompute when an
+   active slot crosses its scheduled end. ✓
+5. **§2.3 — `CLOCK_IN_GRACE = 15 min`**, `NO_SHOW` is a distinct status, and a
+   no-show auto-frees the bench and reschedules. ✓
+6. **§8.3 — max-priority slots are post-MVP**, implemented purely as the lowest
+   `priority` key (no new engine machinery, never interrupts an active slot). ✓
