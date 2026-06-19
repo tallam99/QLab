@@ -39,6 +39,47 @@ The local stack (Docker Compose + Postgres, driven by `mage` targets) lands in
 Phase 2 — see [`docs/runbook.md`](docs/runbook.md). Until then there is nothing to
 run locally.
 
+## Environment troubleshooting log
+
+Symptom → cause → fix for environment problems hit during setup, recorded so we
+don't re-debug them.
+
+### `firebase login` fails: "Unable to authenticate using the provided code" (`FetchError: Premature close`)
+
+- **Symptom:** `firebase login` (or `--reauth`) opens the browser, you authorize
+  and obtain the auth code, then the CLI dies with *"Unable to authenticate using
+  the provided code."* The debug log shows `FetchError: Invalid response body
+  while trying to fetch https://accounts.google.com/o/oauth2/token: Premature
+  close`. Reproduces on Windows-native Node **and** inside WSL, and survives
+  switching networks (e.g. a mobile hotspot) — so it is not the machine, the
+  network, a proxy, or the clock.
+- **Cause:** firebase-tools bundles **`node-fetch` v2.7.0**. With no proxy set it
+  passes no HTTP agent, so node-fetch uses Node's *global* agent. **Node 19+
+  changed the global agent's default to `keepAlive: true`**; node-fetch v2
+  mishandles a kept-alive connection that the server closes (Google's OAuth token
+  endpoint does exactly that) and throws "Premature close." `curl` and Node's
+  built-in `fetch` (undici) reach the same endpoint fine — the bug is specific to
+  node-fetch v2 + keep-alive, which is why this is a recent, confusing failure.
+- **Fix:** force the global HTTP agents back to `keepAlive: false` for the
+  firebase CLI via a `NODE_OPTIONS` preload (no patching of `node_modules`,
+  survives upgrades, applies to every firebase command). Preload module
+  `~/.firebase-no-keepalive.js`:
+
+  ```js
+  const http = require("http");
+  const https = require("https");
+  http.globalAgent = new http.Agent({ keepAlive: false });
+  https.globalAgent = new https.Agent({ keepAlive: false });
+  ```
+
+  plus a scoped wrapper in `~/.bashrc`:
+
+  ```bash
+  firebase() { NODE_OPTIONS="--require $HOME/.firebase-no-keepalive.js${NODE_OPTIONS:+ $NODE_OPTIONS}" command firebase "$@"; }
+  ```
+
+  This generalizes to any Node 19+ tool that bundles node-fetch v2.
+
 ## Cost
 
 The entire stack is designed to run within free tiers — **$0/month** aside from
