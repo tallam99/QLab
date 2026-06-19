@@ -39,3 +39,6 @@ go.work.sum
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+firebase-debug.log
