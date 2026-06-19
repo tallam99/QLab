@@ -1,7 +1,7 @@
 # Quelab — Scheduling Engine Specification
 
 > This is the **schema-of-record for the core scheduling logic**. It is written
-> *before* any engine code (see `PLAN.md`, Phase 6, which only *implements* this
+> *before* any engine code (see `docs/PLAN.md`, Phase 6, which only *implements* this
 > document). The goal is to surface and settle the hard problems on paper, where
 > they're cheap to change, rather than discovering them in a half-built handler.
 >
@@ -444,7 +444,7 @@ pushes others back. It is *priority*, not a wall-clock anchor:
 - **Bench-assignment data model (⚠️ REVIEW, §1.1/§1.4):** dynamic fan-out implies a
   slot's *specific* bench is chosen by the engine (near clock-in), not fixed at
   booking. The schema therefore needs an **equipment *pool*** concept and a nullable
-  assigned-bench, not a hard `equipment_id` at creation. This affects `PLAN.md`
+  assigned-bench, not a hard `equipment_id` at creation. This affects `docs/PLAN.md`
   Phase 4 — see the sync note when reviewing.
 - **v1 scope (⚠️ REVIEW):** full multi-bench gap-fill is specified above. If the
   first lab has a **single** hood, the same algorithm degenerates correctly to one
@@ -497,7 +497,7 @@ availability contract; `CLOCK_IN_GRACE = 15 min`). Remaining items to confirm:
    forward-only (not symmetric around the booked start).
 2. **§1.1 / §10** — **dynamic bench assignment** ⇒ an *equipment pool* in the data
    model and a bench chosen near clock-in (not a fixed `equipment_id` at booking).
-   Confirm; this drives a `PLAN.md` Phase 4 change.
+   Confirm; this drives a `docs/PLAN.md` Phase 4 change.
 3. **§10** — ship the **general N-bench engine with `benches == 1`** for the first
    lab rather than a single-bench special case. Confirm.
 4. **§6** — overrun handling = *settle on clock-out* + one projected recompute when

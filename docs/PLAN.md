@@ -1,7 +1,7 @@
 # Quelab — Build Plan
 
 > Lab equipment scheduling PWA with a live queue + multi-bench scheduling engine.
-> See **`ALGORITHM.md`** for the
+> See **`docs/ALGORITHM.md`** for the
 > scheduling-engine specification (written up front, before any engine code). This
 > file is the *engineering* roadmap: broad phases, ordered, with exit criteria.
 
@@ -50,16 +50,21 @@ requirement on Phase 2 and Phase 4, not a nicety.
 
 ### 3. Documentation-first, for fast Claude bootstrap
 You must be able to open a fresh Claude session *anywhere* in the codebase and get
-it productive quickly. That means living, discoverable docs:
-- Root **`README.md`** (what/why, quickstart), **`ARCHITECTURE.md`** (the map),
-  **`ALGORITHM.md`** (the engine), and a **`docs/runbook.md`** (how to run/debug
-  local infra — the same commands Claude uses).
+it productive quickly. **Project docs live in a top-level `docs/` folder**, with
+`README.md` at the repo root as the entry point; any subfolder that warrants its
+own area docs gets its own `docs/` folder too.
+- **`README.md`** (repo root) — what/why, quickstart, and pointers into `docs/`.
+- **`docs/`** — project-wide docs: **`docs/ARCHITECTURE.md`** (the map),
+  **`docs/ALGORITHM.md`** (the engine), **`docs/PLAN.md`** (this roadmap),
+  **`docs/runbook.md`** (how to run/debug local infra — the same commands Claude
+  uses), and a **`docs/decisions/`** decision log capturing the "why" behind choices
+  that aren't obvious from code (e.g. the `window` semantics, the bench-pool model,
+  the topology split).
 - A root **`CLAUDE.md`** plus **per-area `CLAUDE.md`** files (`backend/`,
-  `frontend/`, `proto/`) that point Claude at the conventions and the key files
-  for that area.
-- A lightweight **decision log** (`docs/decisions/`) capturing the "why" behind
-  choices that aren't obvious from code (e.g. the `window` semantics, the topology
-  split). Every phase's exit criteria includes *"docs updated."*
+  `frontend/`, `proto/`) pointing Claude at each area's conventions and key files; a
+  subfolder needing more than a `CLAUDE.md` gets its own `docs/` (e.g.
+  `backend/docs/`).
+- Every phase's exit criteria includes *"docs updated."*
 
 ---
 
@@ -165,7 +170,7 @@ pre-commit hooks.
 Use **[Yaak](https://yaak.app/)** as the dev API client. The rule: **every time we
 introduce a new behavior variation we want to reproduce, add a Yaak request for
 it.** That makes Yaak a living, runnable catalogue of the system's behaviors —
-each reschedule scenario from `ALGORITHM.md`'s test matrix, each auth
+each reschedule scenario from `docs/ALGORITHM.md`'s test matrix, each auth
 state (no token / valid / wrong-lab / member-vs-head), each error case.
 - Commit the **exported Yaak workspace** to the repo (e.g. `yaak/quelab.yaak.json`)
   so the request collection is versioned and shared.
@@ -248,7 +253,7 @@ Make demo/test data **trivial for devs to reach in staging** and **difficult in 
 engine is specified on paper** — nothing built yet.
 
 **Work:**
-- **Finalize `ALGORITHM.md`** (already drafted): review the six flagged decisions in
+- **Finalize `docs/ALGORITHM.md`** (already drafted): review the six flagged decisions in
   §12 and sign off (notably window forward-only and the bench-pool data model). This
   is the "solve it up front" step — the engine is the riskiest logic, so it's pinned
   down before any code.
@@ -264,11 +269,11 @@ engine is specified on paper** — nothing built yet.
 - **Reserve the test inboxes** and the plus-addressing scheme (see conventions).
 - Create the GitHub monorepo; branch protection on `main`, squash-merge, auto-delete
   branches.
-- Seed the docs skeleton: `README.md`, `ARCHITECTURE.md`, `docs/runbook.md`,
+- Seed the docs skeleton: `README.md`, `docs/ARCHITECTURE.md`, `docs/runbook.md`,
   `docs/decisions/`, root + per-area `CLAUDE.md`.
 
 **Exit criteria:** `gcloud`, `buf`, `docker`, `go`, `node` run locally; Yaak
-installed; repo cloned with the docs skeleton; **`ALGORITHM.md` decisions signed
+installed; repo cloned with the docs skeleton; **`docs/ALGORITHM.md` decisions signed
 off.**
 
 **Notes:**
@@ -384,12 +389,12 @@ and prod branches, with **seedable demo data for staging/local.**
   **equipment as a *pool* of interchangeable benches** (see the data-model note),
   `slots` (id, user_id, lab_id, **pool_id**, **assigned_bench_id** (nullable),
   **priority**, **win_start**, window, duration, **actual_start**, status, note —
-  per `ALGORITHM.md` §1.1), **and `outbox`** (for notifications — designed now per
+  per `docs/ALGORITHM.md` §1.1), **and `outbox`** (for notifications — designed now per
   the notifications convention).
 - Run migrations against local Postgres and both Neon branches (locally + via
   `mage migrate`; staging/prod runs are triggered by **you**).
 - **Seed scripts** (`mage seed`) that build demo labs/users/bench-pools/queues —
-  the same scenarios as `ALGORITHM.md`'s test matrix (single- and multi-bench, gap-
+  the same scenarios as `docs/ALGORITHM.md`'s test matrix (single- and multi-bench, gap-
   fill, no-show), so the UI and API have realistic situations to show. **Seeding is
   staging/local only** (guarded by `QUELAB_ENV`).
 
@@ -401,20 +406,20 @@ branch.
 **Notes:**
 - **Modeling time:** use **`timestamptz`** for `win_start` / `actual_start`
   (timezones, DST, human-readability); the engine works in absolute instants +
-  minute deltas, consistent with `ALGORITHM.md`. `duration` and `window` are minute
+  minute deltas, consistent with `docs/ALGORITHM.md`. `duration` and `window` are minute
   integers.
-- **`window` is start-time flexibility, *not* tied to duration** (per `ALGORITHM.md`
+- **`window` is start-time flexibility, *not* tied to duration** (per `docs/ALGORITHM.md`
   §2). Enforce only `window ≥ 0` at the DB level (`CHECK`). **Do not** add a
   `window ≤ duration` constraint — durations are inviolable and unrelated to the
-  window. `window = 0` means *rigid* (`ALGORITHM.md` §2.4).
-- **Equipment pool (⚠️ data-model decision, `ALGORITHM.md` §10/§12):** the engine
+  window. `window = 0` means *rigid* (`docs/ALGORITHM.md` §2.4).
+- **Equipment pool (⚠️ data-model decision, `docs/ALGORITHM.md` §10/§12):** the engine
   fans a single queue out across interchangeable benches and assigns the *specific*
   bench near clock-in — so model `equipment` as a **pool** of benches and keep
   `slots.assigned_bench_id` **nullable** until clocked in (not a hard `equipment_id`
   fixed at booking). Confirm this before writing the migration; it's the one place
   the corrected algorithm reshapes the schema.
 - **Statuses:** the `status` enum includes **`NO_SHOW`** (auto-applied when the
-  clock-in grace lapses — `ALGORITHM.md` §1.2/§2.3) alongside SCHEDULED / ACTIVE /
+  clock-in grace lapses — `docs/ALGORITHM.md` §1.2/§2.3) alongside SCHEDULED / ACTIVE /
   COMPLETE / CANCELLED.
 - **Multi-tenancy:** `lab_id` on every tenant-scoped row. Index `lab_id`, and
   `(pool_id, priority)` for queue order plus `(assigned_bench_id, actual_start)` for
@@ -434,8 +439,8 @@ Connect service compiles and serves.
   Slot, Membership; a `Slot.Status` enum (incl. `NO_SHOW`); the SSE **event
   envelope** message; a **reschedule result** message (the recomputed schedule —
   per-slot `actual_start`, `assigned_bench`, ratcheted `win_start`, and a
-  re-committed/notify flag per `ALGORITHM.md` §5). There is **no** overflow/
-  infeasible result — the schedule never fails (`ALGORITHM.md` §8).
+  re-committed/notify flag per `docs/ALGORITHM.md` §5). There is **no** overflow/
+  infeasible result — the schedule never fails (`docs/ALGORITHM.md` §8).
 - Define the service methods (list slots, create slot, clock in/out, cancel,
   overrun) — stub them; implement in Phase 7.
 - `buf.yaml` + `buf.gen.yaml`; wire `buf lint`, `buf breaking`, `buf generate` into
@@ -459,14 +464,14 @@ request hits one Connect endpoint and gets `Unimplemented`.
 
 ## Phase 6 — Core domain: queue + scheduling engine
 
-**Goal:** Implement the engine **exactly as specified in `ALGORITHM.md`**, as pure,
+**Goal:** Implement the engine **exactly as specified in `docs/ALGORITHM.md`**, as pure,
 exhaustively-tested Go.
 
 **Work:**
 - Implement `internal/scheduling` as **pure functions** over slot slices — *no DB,
-  no HTTP, no clock reads* (the engine contract, `ALGORITHM.md` §10). The corrected
+  no HTTP, no clock reads* (the engine contract, `docs/ALGORITHM.md` §10). The corrected
   model is **a single `reschedule(slots, benches, now)`** (a greedy, priority-
-  ordered, multi-bench list scheduler with gap-fill — `ALGORITHM.md` §5); cascade
+  ordered, multi-bench list scheduler with gap-fill — `docs/ALGORITHM.md` §5); cascade
   and pull-forward are the *same* call. No compression, no `MIN_DURATION`, no
   overflow/infeasible result.
 - **Table-driven `testify` suite** covering the **full §11 test matrix** (16 cases:
@@ -483,7 +488,7 @@ DB/HTTP/proto (conversions happen at the edges); `mage test` runs it fast.
 - This is the heart of the product and the easiest thing to get subtly wrong —
   which is exactly why it was specified up front and is built in isolation before
   wiring. Resist writing it inside an HTTP handler.
-- The §12 decisions in `ALGORITHM.md` must be signed off (Phase 0) before this
+- The §12 decisions in `docs/ALGORITHM.md` must be signed off (Phase 0) before this
   starts — the implementation encodes them (notably: window forward-only, and the
   bench-pool model).
 
@@ -494,7 +499,7 @@ DB/HTTP/proto (conversions happen at the edges); `mage test` runs it fast.
 **Goal:** Real, persisted operations exposed over the Connect/proto API.
 
 **Work:**
-- Implement the Phase 5 stubs as the engine **events** (`ALGORITHM.md` §6): book/
+- Implement the Phase 5 stubs as the engine **events** (`docs/ALGORITHM.md` §6): book/
   create, clock-in (→ `ACTIVE`, pin to a bench), clock-out / early-finish (→
   `COMPLETE`), cancel (→ `CANCELLED`), overrun (active past scheduled end), and the
   **no-show sweep** (grace lapsed → `NO_SHOW`). Every event mutates state then calls
@@ -523,7 +528,7 @@ grace lapse → see `NO_SHOW` re-flow the queue. Each is a saved Yaak request.
   evaluating grace lazily on the next event/read). Pick one; note it.
 - Concurrency: the per-operation transaction + `SELECT … FOR UPDATE` on the pool's
   slots is what stops two simultaneous clock-outs from corrupting the schedule
-  (`ALGORITHM.md` §10).
+  (`docs/ALGORITHM.md` §10).
 
 ---
 
@@ -615,7 +620,7 @@ updates.
 
 **Work:**
 - **Queue view:** the single priority-ordered line with status, user, time, window.
-- **Timeline view:** slots over time, **fanned out per bench** (`ALGORITHM.md`
+- **Timeline view:** slots over time, **fanned out per bench** (`docs/ALGORITHM.md`
   §1.4) — where the amber "flexible" vs rigid distinction and overrun-red from the
   branding matter; surface **pushed / re-committed** slots and `NO_SHOW`s clearly,
   and make execution-order-≠-priority-order legible when gap-fill reorders.
@@ -653,7 +658,7 @@ events; weekly summary runs on a schedule.
   retries with backoff, idempotent sends; exhausted messages → **dead-letter** +
   **alert the admin address** (and an error span/log). Triggers: bench freed (notify
   whoever the reschedule now places next), **slot re-committed** (a `win_start`
-  ratcheted past its window — notify of the new start, per `ALGORITHM.md` §2.2),
+  ratcheted past its window — notify of the new start, per `docs/ALGORITHM.md` §2.2),
   slot pulled forward, and `NO_SHOW` recorded.
 - **Weekly cron:** Cloud Scheduler → a backend endpoint that compiles the lab usage
   summary and emails the head; also keeps Neon warm. Protect it (OIDC from Cloud
@@ -692,7 +697,7 @@ a phone, and edge cases are handled.
   available; a member with no lab; expired tokens (frontend refreshes the Firebase
   token); dead-letter alerting verified.
 - Final pass on **docs** so a fresh Claude session can bootstrap anywhere:
-  `ARCHITECTURE.md` current, runbook complete, per-area `CLAUDE.md` accurate,
+  `docs/ARCHITECTURE.md` current, runbook complete, per-area `CLAUDE.md` accurate,
   decision log captures the topology + `window` / bench-pool choices.
 
 **Exit criteria:** The full app works from a phone against staging (you), then prod
@@ -718,7 +723,7 @@ From the primer, not scheduled here but design with them in mind: multiple
 equipment types, maintenance/calibration scheduling, training gates, consumables,
 experiment logs, onboarding checklists, noticeboard, protocol library, lab-meeting
 scheduling. Most are additive tables + endpoints + UI. Engine-relevant ones tracked
-in `ALGORITHM.md`: **max-priority slots** (jump to the front of the queue; never
+in `docs/ALGORITHM.md`: **max-priority slots** (jump to the front of the queue; never
 interrupt an active experiment — §8.3) and richer booking placement. Note that
 **wall-clock anchors are permanently out of scope** (§8.2: experiments necessarily
 run over) and that gap-fill placement is already in the v1 engine. The scheduling
@@ -727,7 +732,7 @@ features.
 
 ## Suggested PR slicing
 
-Each phase is roughly one or a few PRs; keep PRs deployable. `ALGORITHM.md` sign-off
+Each phase is roughly one or a few PRs; keep PRs deployable. `docs/ALGORITHM.md` sign-off
 (Phase 0) and the pure engine (Phase 6) are their own reviewable units. Recommended
 order of *first* deploys to prod: Phase 3 (hello world, both surfaces), then auth
 (8) + DB (4) before any real feature, so prod always has working auth + persistence
