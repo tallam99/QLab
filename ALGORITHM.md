@@ -1,4 +1,4 @@
-# Quelab — Cascade Scheduling Engine Specification
+# Quelab — Scheduling Engine Specification
 
 > This is the **schema-of-record for the core scheduling logic**. It is written
 > *before* any engine code (see `PLAN.md`, Phase 6, which only *implements* this
@@ -15,9 +15,10 @@
 
 A booking calendar is a solved problem. The differentiator is what happens when
 reality diverges from the plan: someone runs 20 minutes over, someone cancels,
-someone finishes early. Quelab's job is to **automatically re-flow the queue**
-within the flexibility each person declared, and to clearly flag the cases it
-cannot absorb so a human can intervene.
+someone finishes early, a bench frees up. Quelab's job is to **continuously
+re-flow the queue across the available benches to keep them maximally used**,
+within the flexibility each person declared, while never harming anyone ahead of
+them in line and never interrupting an experiment already in progress.
 
 Everything else in the system (auth, API, UI, notifications) exists to feed this
 engine inputs and broadcast its outputs.
@@ -26,431 +27,483 @@ engine inputs and broadcast its outputs.
 
 ## 1. Domain model
 
-The engine operates on the **queue of one piece of equipment within one lab**.
-Cross-equipment and cross-lab concerns never enter here.
+The engine operates on **one equipment pool within one lab** — a set of
+interchangeable **benches** (e.g. all the ventilation hoods) and the single
+priority-ordered queue of people waiting to use one. Cross-pool and cross-lab
+concerns never enter here.
 
 ### 1.1 Slot
 
 | Field         | Type             | Meaning |
 |---------------|------------------|---------|
-| `id`          | opaque id        | Stable identity; used as the deterministic tie-breaker. |
-| `user_id`     | opaque id        | Who booked it. Engine treats it as an opaque label. |
-| `equipment_id`| opaque id        | All slots in one engine call share this. |
+| `id`          | opaque id        | Stable identity; deterministic tie-breaker. |
+| `user_id`     | opaque id        | Who booked it. Opaque label to the engine. |
 | `lab_id`      | opaque id        | All slots in one engine call share this. |
-| `start`       | instant          | Current effective start (what users see). |
-| `duration`    | minutes (> 0)    | Current effective length. `end = start + duration`. |
-| `window`      | minutes (≥ 0)    | **Declared flexibility.** See §2 — this is the heart of the model. |
-| `status`      | enum             | `SCHEDULED` \| `ACTIVE` \| `COMPLETE` \| `CANCELLED`. |
+| `pool` / `equipment` | opaque id | The interchangeable bench pool (see §1.4). The *specific* bench is assigned by the scheduler, not at booking (⚠️ data-model decision, §10). |
+| `priority`    | ordered key      | Position in line. Lower = ahead. Derived from booking order (and, future, max-priority — §8.3). |
+| `window`      | minutes (≥ 0)    | **Forward start-time flexibility.** See §2. |
+| `winStart`    | instant          | Earliest acceptable start. Equals the booked start initially; **ratchets later** when forced (§2). The band is `[winStart, winStart + window]`. |
+| `duration`    | minutes (> 0)    | Fixed. **Never changed by the engine** (note: no compression — §2). |
+| `actualStart` | instant          | Where the current schedule places this slot. Output of the engine. |
+| `assignedBench` | opaque id (nullable) | Which bench the schedule put it on (paired with `actualStart`). Output of the engine; provisional until clock-in, fixed once `ACTIVE`. |
+| `status`      | enum             | See §1.2. |
 | `note`        | text             | Opaque to the engine. |
 
-Derived: `end(slot) = slot.start + slot.duration`.
+Occupancy is always `[actualStart, actualStart + duration]` — full duration,
+always.
 
 ### 1.2 Status semantics
 
-- **`SCHEDULED`** — a future booking. The only status the engine *moves*.
-- **`ACTIVE`** — someone has clocked in; this slot is running *now*. It is the
-  usual **trigger** of a cascade (overrun) or pull-forward (early finish). The
-  engine does not move the active slot's `start`; it reads the active slot's
-  *actual/projected end* as the propagation seed.
-- **`COMPLETE`** / **`CANCELLED`** — immutable history. The engine reads them only
-  to skip over them; it never edits them.
+- **`SCHEDULED`** — a future booking the engine may place anywhere in its band.
+- **`ACTIVE`** — someone has clocked in; running *now* on a specific bench.
+  **Pinned**: the engine never moves or interrupts it. Its projected end seeds the
+  reschedule.
+- **`COMPLETE`** — finished (on time, early, or over). Immutable history.
+- **`CANCELLED`** — withdrawn by the user. Immutable history.
+- **`NO_SHOW`** — auto-applied when the clock-in grace lapses (§2.3). Behaves like
+  a cancellation for scheduling (frees the slot, triggers a reschedule) but is
+  recorded distinctly for analytics. The user must rebook.
 
-### 1.3 Queue ordering
+### 1.3 Priority order vs. execution order — reordering is allowed
 
-Within an engine call, slots are processed in ascending `start`, with `id` as a
-deterministic tie-breaker. **The engine never reorders the queue** — it only
-shifts start times (and, on delay, shrinks durations). Whoever was 3rd in line is
-still 3rd in line afterward.
+There are **two distinct orderings**:
+
+- **Priority order** (the *queue*): who is ahead of whom. Stable; determined by
+  booking order (future: max-priority slots jump to the front — §8.3). This is the
+  order the scheduler *processes* slots in.
+- **Execution order** (the *schedule*): the actual `actualStart` times across
+  benches. This **may differ** from priority order — a slot further back in line
+  may end up running *earlier* in clock time.
+
+**The rule (note 1): reordering in execution time is allowed, but never at the
+expense of anyone ahead in priority.** A lower-priority slot may be promoted to run
+earlier **only into capacity that no higher-priority slot can or will use** —
+filling a gap the higher-priority slot couldn't fit into, or a bench it wasn't
+going to take. This falls out *for free* from processing slots in priority order
+(§5): each higher-priority slot claims its place first; lower-priority slots can
+only take what's left; so no promotion can ever delay someone ahead.
+
+> Worked through: two fixed slots A and B on a bench with a 30-min gap between
+> them. C (1 hour, higher priority) can't fit the gap, so it's placed after B. D
+> (30 min, lower priority) *does* fit, so it slots into the gap — running before C
+> in clock time, but not at C's expense (C was always going to run after B). If A's
+> projected end grows so the gap shrinks below 30 min, the next reschedule no longer
+> fits D there and places D after C again. See §7.3.
+
+### 1.4 Benches and fan-out (note 3)
+
+A pool has **one or more interchangeable benches**. The queue is single-file, but
+**fans out across benches based on availability** — like one line feeding several
+identical machines. Consequences:
+
+- **The no-overlap invariant is *per bench*** (§4): two slots may overlap in clock
+  time **iff they're on different benches**.
+- A delay on one bench does **not** necessarily delay the next person — if another
+  bench is free within their window, they go there (§7.2). Free benches are a
+  primary absorber of delay (the other is idle gaps).
+- The engine assigns each slot to a specific bench as part of scheduling; the
+  assignment is provisional until the user clocks in.
 
 ---
 
 ## 2. The `window` — central modeling decision  ⚠️ REVIEW THIS
 
-`window` is "minutes of flexibility," but flexibility has a *direction*, and the
-primer's phrase **"each slot absorbs `min(delta, window)` then passes the rest"**
-forces a specific reading. This section states the chosen semantics explicitly
-because it determines everything downstream. **If you disagree with this, change
-it here first — not in code.**
+`window` is "minutes of flexibility." Per **note 2**, flexibility is **purely
+about *when a slot starts*, never about how long it runs**:
 
-### 2.1 On a delay (cascade): `window` = how much the slot will **compress**
+> **People always get exactly the duration they booked, starting whenever they
+> actually start. The engine never shortens a session.**
 
-For the delay to *dampen* as it travels down the queue (the literal "passes the
-rest" — i.e. the next slot receives a *smaller* delta), a slot must be able to
-give something up. The chosen mechanism: **the slot holds its end time and eats
-the delay out of its own duration**, up to `window` minutes.
+So a slot's `window` defines a **forward band of acceptable start times**,
+`[winStart, winStart + window]`, within which the scheduler may place `actualStart`.
 
-> Plain English: "The person before you ran 20 minutes over. You said you had 30
-> minutes of flexibility, so your session just got shortened by 20 minutes —
-> but it still **ends when you originally planned**, so the person after you is
-> unaffected."
+### 2.1 What "absorb `min(delta, window)`" means now (reinterpreted)
 
-Concretely, when a slot is pushed later by `push` minutes:
-- `absorbed = min(push, window)`
-- new duration `= duration − absorbed` (floored at `MIN_DURATION`, §6)
-- new end `= old end + (push − absorbed)`  → if fully absorbed, end is unchanged.
-- the slot passes `push − absorbed` to the next slot.
+The primer's phrase "each slot absorbs `min(delta, window)` then passes the rest"
+**no longer means compression.** With durations inviolable, bench *time* still
+propagates down a bench — what the window absorbs is **disruption / the need to
+re-commit**, not time:
 
-This is the *only* model consistent with "absorb `min(delta, window)` then pass
-the rest." A pure "shift everything later by the full amount" model never passes
-a *reduced* delta and so contradicts the primer.
+- If a delay pushes a slot's start to a later point **still inside its band**
+  (`≤ winStart + window`), the slot is silently accommodated: same `winStart`, no
+  re-commitment, no disruptive notification. It "absorbed" the delay.
+- If the push exceeds the band, the **band ratchets** (§2.2): the slot is
+  re-committed to a later time and **notified**. That's the part it "passes on."
 
-### 2.2 On a cancellation / early finish (pull-forward): `window` = how much **earlier** the slot will start
+The actual absorption of *clock time* — the thing that stops the next person being
+delayed at all — comes from **gaps and free benches** (§1.4), not from windows.
 
-When time frees up ahead of a slot, it may move **earlier**, keeping its full
-duration, by **at most `window` minutes** before its current start.
+### 2.2 Ratcheting (note 2): "move forward, but not back unless pushed again"
 
-> Plain English: "The hood freed up early. You said ±30 minutes was fine, so we
-> pulled your start up by 25 minutes to fill the gap. Same session length."
+- A slot may be **pulled forward** (earlier) within its band — down to `winStart` —
+  to fill freed time. It is never pulled earlier than `winStart` (the user isn't
+  available before then — §2.3).
+- A slot is **pushed back** (later) only when forced: a higher-priority slot or an
+  overrun leaves it no feasible start within `[winStart, winStart + window]`. When
+  that happens, **the whole band shifts later to follow the slot** — `winStart`
+  ratchets up to the new `actualStart`. Same width, later position.
+- After ratcheting, the slot can again move *forward* within the **new** band (down
+  to the new `winStart`) if a gap opens, but it will **not** drift back to its
+  original time on its own — only another forced push moves it later again.
 
-### 2.3 `window == 0` means **rigid**, not **anchored**  ⚠️ REVIEW THIS
+### 2.3 The availability contract & no-show grace (note 6)
 
-A zero-window slot has *no* flexibility:
-- On delay: it absorbs nothing, so it is **pushed by the full delta** (start and
-  end both move) and passes the full delta onward — **a pushed rigid slot pushes
-  the next slot, rigid or not.** ("Fixed pushes fixed," per the primer.)
-- On pull-forward: it **cannot move earlier**, so it stays put and **blocks**
-  pull-forward for everything behind it.
+The deal with users, which the engine relies on:
 
-> **Decision flagged:** `window == 0` here means *"this session's length and
-> relative position are non-negotiable, but it can still slide in absolute time
-> if the queue ahead of it slides."* It does **not** mean *"pinned to 14:00 on
-> the wall clock, immovable."* A true wall-clock **anchor** is a strictly stronger
-> constraint that introduces genuinely *infeasible* schedules (§5.2) and is
-> deferred to post-MVP. v1 has no hard anchors; every delay is representable
-> (it just may overflow past the queue tail).
+- **A user is available at any point within their current band** `[winStart,
+  winStart + window]`. So the scheduler may place them anywhere in it (including
+  pulling them forward) without asking.
+- **A user must clock in within `CLOCK_IN_GRACE` (= 15 min) of their placed
+  `actualStart`.** If they don't, the slot becomes `NO_SHOW`, frees its place, and
+  triggers a reschedule (the people behind flow forward). The user rebooks.
 
-### 2.4 Why the asymmetry is acceptable
+This is the ethos: **flexible usage tracking, not rigid reservation.** The system
+optimizes for benches being used; it does not police who deserves what.
 
-Delay consumes `window` as *compression* (shorter session, held end); pull-forward
-consumes `window` as *earliness* (same session, earlier start). Both are honoring
-the same promise the user made — "I have N minutes of give" — just in the
-direction the situation demands. The user never loses more than `window` minutes
-of session, and is never moved more than `window` minutes earlier than planned.
+### 2.4 `window == 0` means **rigid**, not **anchored**
 
----
+A zero-window slot has a zero-width band `[winStart, winStart]`:
 
-## 3. Invariants (must hold after every engine call)
+- It can start *only* exactly at `winStart`. Any disturbance that prevents that
+  immediately ratchets it (re-commit + notify) — it has **zero silent tolerance**.
+- It never opportunistically moves and can only fill a gap that begins exactly at
+  `winStart` and is at least `duration` long.
+- When it is itself pushed, it occupies its bench for the full duration and so
+  pushes whoever is behind it on that bench — "fixed pushes fixed."
 
-1. **No overlap:** for consecutive scheduled slots `i, i+1`: `start_{i+1} ≥ end_i`.
-2. **Order preserved:** the by-`start` ordering (with `id` tie-break) of the input
-   is the ordering of the output. No reordering.
-3. **Duration floor:** every slot's duration `≥ MIN_DURATION` (§6).
-4. **Window bounds:** `0 ≤ window`; and `window ≤ duration` is enforced at *slot
-   creation* (you can't agree to compress away more than your whole session).
-5. **History immutable:** `COMPLETE` / `CANCELLED` slots are unchanged.
-6. **Determinism:** identical input + event ⇒ identical output, every time.
-7. **No time travel:** the caller guarantees the propagation seed (active slot's
-   end, or the freed instant) is `≥ now`; the engine never produces a `start` in
-   the past *relative to the seed it was given*.
-
-The engine should **assert** these on its output in tests (and ideally cheaply in
-production) — a violated invariant is a bug, not a user-facing state.
+> It does **not** mean "pinned to 14:00 forever, immovable." Per **note 5** there
+> are **no wall-clock anchors, ever** — see §8.
 
 ---
 
-## 4. Algorithm 1 — Cascade on delay (overrun)
+## 3. Guiding principles (the engine's value function)
 
-**Trigger:** an `ACTIVE` slot's actual/projected end moves *later* than its
-scheduled end (someone is running over). Generalizes to any event that pushes one
-slot's end later (e.g. inserting a rigid slot into busy time — §7).
+In priority order of importance:
 
-**Inputs:** the equipment's slots ordered by start; the index of the trigger
-slot; the trigger's new end `seedEnd`.
+1. **Never interrupt an in-progress experiment.** `ACTIVE` slots are pinned. An
+   experiment cannot be stopped, full stop — this is the design ethos (note 5).
+2. **Never harm anyone ahead in priority** (note 1, §1.3).
+3. **Maximize bench usage** (note 4). A bench sitting idle while someone behind
+   could productively fill it is the failure mode to avoid — even at the cost of
+   adherence to the original schedule. If an optimistic gap-filler is wrong and
+   overruns, that pushes the people behind them; the system accepts this and stays
+   **agnostic about politeness** — the lab enforces its own norms socially.
+4. **Minimize disruption** to already-committed starts (don't ratchet a band you
+   didn't have to).
 
-```
-function cascadeDelay(slots, triggerIndex, seedEnd):
-    result = copy(slots)
-    prevEnd = seedEnd
-    for i from triggerIndex+1 to last:
-        if slots[i].status != SCHEDULED:
-            continue                         # skip COMPLETE/CANCELLED history
-        newStart = max(slots[i].start, prevEnd)   # can't start before equip is free;
-                                                   # never moves earlier on a delay
-        push = newStart - slots[i].start
-        if push == 0:
-            break                            # gap (or full upstream absorption)
-                                             # swallowed the delay → queue settles
-        absorbed = min(push, slots[i].window)
-        newDuration = slots[i].duration - absorbed
-        if newDuration < MIN_DURATION:       # duration floor (§6)
-            absorbed = slots[i].duration - MIN_DURATION
-            newDuration = MIN_DURATION
-        newEnd = newStart + newDuration
-        result[i].start = newStart
-        result[i].duration = newDuration
-        result[i].displaced = (newEnd > slots[i].end())   # its END moved late
-        prevEnd = newEnd
-
-    overflowMinutes = max(0, prevEnd - originalEndOfLastScheduledSlot)
-    return result, overflowMinutes
-```
-
-### 4.1 Why it dampens automatically
-
-If a slot fully absorbs (`absorbed == push`), then
-`newEnd = newStart + (duration − push) = oldStart + push + duration − push = oldEnd`
-— its end is unchanged, so `prevEnd` returns to the slot's original end, and the
-*next* slot sees `push == 0` and the loop breaks. **Full absorption stops the
-cascade.** Partial absorption (`window < push`) leaves `push − window` to
-propagate as a *smaller* delta. Gaps between slots are absorbed for free by the
-`max(start, prevEnd)`.
-
-### 4.2 Result classification
-
-- **`ABSORBED`** — `overflowMinutes == 0`. The delay was fully swallowed by gaps
-  and compression; the queue tail still ends on its original plan. (Some interior
-  slots may be shorter; that's expected and is what `window` is for.)
-- **`OVERFLOW`** — `overflowMinutes > 0`. The delay exceeded the queue's total
-  absorptive capacity; the tail now runs late by `overflowMinutes`. This is the
-  v1 reading of the primer's **"unresolvable"** flag (see §5). It is *not* an
-  error — it's a "humans need to know" signal: every slot with `displaced == true`
-  gets a notification (see `PLAN.md` Phase 11), and the affected users may choose
-  to cancel/rebook.
-
-### 4.3 Worked example — partial absorption, then settles (`ABSORBED`)
-
-```
-A  09:00  dur 60  ACTIVE      → overruns, actual end 10:30   (delta 30)
-B  10:00  dur 60  win 20  SCHEDULED
-C  11:00  dur 60  win 30  SCHEDULED
-D  12:00  dur 30  win 0   SCHEDULED (rigid)
-```
-| step | slot | newStart | push | absorbed | newDur | newEnd | note |
-|------|------|----------|------|----------|--------|--------|------|
-| seed |  A   |    —     |  —   |    —     |   —    | 10:30  | overran |
-|  1   |  B   |  10:30   |  30  |   20     |  40    | 11:10  | shortened, end +10 |
-|  2   |  C   |  11:10   |  10  |   10     |  50    | 12:00  | shortened, end back to plan |
-|  3   |  D   |  12:00   |   0  |    —     |  30    | 12:00→ | push 0 → **break** |
-
-Result: `ABSORBED` (overflow 0). B and C gave up time; **D and the tail are
-untouched.** This is the engine doing its job.
-
-### 4.4 Worked example — overflow, rigid pushed (`OVERFLOW`)
-
-```
-A  09:00  dur 60  ACTIVE      → actual end 11:00   (delta 60)
-B  10:00  dur 60  win 10  SCHEDULED
-C  11:00  dur 60  win 10  SCHEDULED
-D  12:00  dur 30  win 0   SCHEDULED (rigid)
-```
-| step | slot | newStart | push | absorbed | newDur | newEnd | note |
-|------|------|----------|------|----------|--------|--------|------|
-|  1   |  B   |  11:00   |  60  |   10     |  50    | 11:50  | displaced +50 |
-|  2   |  C   |  11:50   |  50  |   10     |  50    | 12:40  | displaced +40 |
-|  3   |  D   |  12:40   |  40  |    0     |  30    | 13:10  | rigid, pushed +40 |
-
-Result: `OVERFLOW`, `overflowMinutes = 40` (D's original end 12:30 → 13:10).
-A rigid slot was pushed by a non-rigid one, and would in turn push any rigid slot
-behind it. All three of B, C, D are `displaced` and notified.
+There is no notion of the schedule "failing." See §8.
 
 ---
 
-## 5. The "unresolvable" condition, made precise
+## 4. Invariants (must hold after every engine call)
 
-The primer says the engine may emit an **"unresolvable"** flag. v1 splits this
-into two distinct, separately-handled conditions:
+1. **No per-bench overlap:** on any single bench, no two slots' `[actualStart,
+   actualStart + duration]` intervals overlap. (Different benches may overlap
+   freely — §1.4.)
+2. **Priority respected:** no slot is placed in a way that delays a higher-priority
+   slot relative to the schedule that higher-priority slot would get on its own.
+3. **Durations inviolable:** every slot runs for exactly its booked `duration`.
+4. **Forward-only earliness:** `actualStart ≥ winStart` for every slot, and
+   `winStart` is monotonically non-decreasing across reschedules (it ratchets later,
+   never earlier).
+5. **ACTIVE/history immutable:** `ACTIVE`, `COMPLETE`, `CANCELLED`, `NO_SHOW` slots
+   are never moved.
+6. **Determinism:** identical input ⇒ identical output. Processing order is
+   `(priority, id)`; bench tie-breaks by bench id.
+7. **No time travel:** the caller supplies `now`; no `SCHEDULED` slot is placed to
+   start in the past.
 
-### 5.1 `OVERFLOW` (soft, exists in v1)
-
-Delay leaked past the queue's flexibility; the tail runs late. **Always
-representable** — the schedule is valid (no overlaps), just later than hoped.
-Handling: notify displaced users; let them cancel/rebook. No engine failure.
-
-### 5.2 `INFEASIBLE` (hard, **deferred to post-MVP**)
-
-Arises *only* if we introduce **wall-clock anchors** (§2.3) — a slot that *cannot*
-move in absolute time. Then a delay that would push an anchored slot has *no legal
-resolution*: the upstream slot can neither shrink enough nor push the anchor. That
-is a genuine conflict requiring a human decision (bump someone, split the booking,
-etc.).
-
-v1 deliberately has **no** anchors, so the engine **never** returns `INFEASIBLE`.
-The result type should still model it (so adding anchors later is additive, not a
-breaking change), but the v1 implementation can treat it as unreachable.
-
-> **Decision flagged:** confirm v1 ships with soft-`OVERFLOW` only and no hard
-> anchors. This keeps the engine total (always produces a valid schedule).
+The engine should **assert** these on its output in tests (and cheaply in prod) —
+a violation is a bug, not a user-facing state.
 
 ---
 
-## 6. Algorithm 2 — Pull-forward on cancel / early finish
+## 5. The scheduling algorithm — one operation
 
-**Trigger:**
-- **Early finish:** an `ACTIVE` slot completes before its scheduled end. The freed
-  instant `freeFrom` = its actual end.
-- **Cancellation:** a `SCHEDULED` (or `ACTIVE`) slot is removed. `freeFrom` = the
-  end of whatever now precedes the gap (the cancelled slot's predecessor's end, or
-  `now` if it was active).
+The corrected model **unifies cascade and pull-forward into a single reschedule**:
+given the current world state, recompute the placement of all `SCHEDULED` slots.
+It is run after every event (§6); the difference between "a delay cascaded" and "a
+gap pulled people forward" is just which inputs changed.
 
-Slots behind the gap may move **earlier**, keeping full duration, each by at most
-its own `window`.
+It is a **greedy, priority-ordered, multi-bench list scheduler with gap-fill.**
 
 ```
-function pullForward(slots, freeFrom, firstAffectedIndex):
-    result = copy(slots)
-    prevEnd = freeFrom
-    for i from firstAffectedIndex to last:
-        if slots[i].status != SCHEDULED:
-            continue
-        earliest = max(prevEnd, slots[i].start - slots[i].window)
-        if earliest >= slots[i].start:
-            break                      # this slot can't (or needn't) move earlier;
-                                        # if it's rigid it BLOCKS everything behind it
-        result[i].start = earliest      # duration unchanged on pull-forward
-        prevEnd = earliest + slots[i].duration
-    return result
+function reschedule(slots, benches, now):
+    # 1. Seed bench availability from pinned ACTIVE slots (and history on each bench).
+    #    free[b] = ordered list of free intervals [from, to) per bench b,
+    #    with ACTIVE/immutable occupancy carved out; to may be +infinity.
+    freeIntervals = buildFreeIntervals(benches, slots, now)
+
+    # 2. Place SCHEDULED slots in PRIORITY order. Higher priority claims first,
+    #    so a lower-priority slot can never displace it (invariant #2).
+    for slot in slots.filter(SCHEDULED).sortBy(priority, id):
+        earliest = max(slot.winStart, now)
+        # find the earliest feasible start across ALL benches, allowing backfill
+        # into earlier-but-short gaps the slot actually fits:
+        best = argmin over (b, interval in freeIntervals[b])
+                 of  t = max(interval.from, earliest)
+                 subject to  t + slot.duration <= interval.to
+                 tie-break: smaller t, then bench id
+        slot.actualStart = best.t
+        slot.bench = best.b
+        carve [best.t, best.t + slot.duration) out of freeIntervals[best.b]
+
+        # 3. Ratchet / notify bookkeeping (§2.2):
+        if slot.actualStart > slot.winStart + slot.window:   # forced past the band
+            slot.winStart = slot.actualStart                 # band travels with it
+            mark slot as RE-COMMITTED (notify: new start)
+        # else: silently accommodated within band; winStart unchanged
+
+    return slots
 ```
 
-### 6.1 Worked example — pull-forward chain, blocked by a rigid slot
+### 5.1 Why this satisfies the principles
 
-```
-A  09:00  dur 60  ACTIVE  → finishes early at 09:40    (freeFrom = 09:40)
-B  10:00  dur 60  win 20  SCHEDULED
-C  11:00  dur 30  win 0   SCHEDULED (rigid)
-D  11:30  dur 30  win 15  SCHEDULED
-```
-| step | slot | earliest                         | moves? | newStart | newEnd |
-|------|------|----------------------------------|--------|----------|--------|
-|  1   |  B   | max(09:40, 10:00−20=09:40)=09:40 |  yes   | 09:40    | 10:40  |
-|  2   |  C   | max(10:40, 11:00−0 =11:00)=11:00 |  no    |   —      |   —    |
-|  →   |      | `earliest ≥ start` → **break**; C is rigid and blocks D | | | |
+- **Priority order of processing** ⇒ invariant #2 and the §1.3 reordering rule come
+  for free: a slot only ever takes capacity left after everyone ahead is placed.
+- **`argmin t` with backfill into any interval the slot fits** ⇒ gap-fill and
+  fan-out (principle 3 in §3; §1.4): a short slot drops into a short gap; a slot
+  whose own bench is busy hops to a free one.
+- **`earliest = max(winStart, now)`** ⇒ forward-only earliness (invariant #4) and
+  the availability contract (§2.3): nobody is pulled before they're available.
+- Running it after *every* event ⇒ both "push back on overrun" and "pull forward on
+  early-finish/cancel" without two code paths.
 
-Result: B pulled up 20 min; C and D unchanged. A rigid slot in the queue is a
-wall the pull-forward can't move past — by design.
+### 5.2 Cost note
 
-### 6.2 Worked example — cancellation, chain pulls forward within windows
-
-```
-(A completed 10:00)   B is CANCELLED (was 10:00–11:00)   →  freeFrom = 10:00
-C  11:00  dur 60  win 30  SCHEDULED
-D  12:00  dur 30  win 10  SCHEDULED
-```
-| step | slot | earliest                         | newStart | newEnd |
-|------|------|----------------------------------|----------|--------|
-|  1   |  C   | max(10:00, 11:00−30=10:30)=10:30 | 10:30    | 11:30  |
-|  2   |  D   | max(11:30, 12:00−10=11:50)=11:50 | 11:50    | 12:20  |
-
-Result: C and D each pulled forward as far as their windows allow. Note a residual
-idle gap can remain (e.g. 10:00–10:30) when windows are too small to fully close
-it — that's correct, not a bug.
-
-### 6.3 Auto-apply vs. propose  ⚠️ REVIEW THIS
-
-> **Decision flagged:** does pull-forward *automatically* move users earlier, or
-> merely *propose* the earlier time? Being silently told "come 25 minutes earlier"
-> can be worse than a gap. The defensible default: **auto-apply, because the move
-> is bounded by `window`, which is exactly the flexibility the user consented to.**
-> Anyone who wants zero earliness sets `window`'s pull-forward behavior off (or
-> books rigid). Confirm this, or we split `window` into separate forward/back
-> budgets (more model, more UI).
+Naive `argmin` over all free intervals is `O(slots × benches × intervals)`. For a
+15-person lab with a handful of benches this is trivial. If a pool ever grows large,
+revisit with a per-bench earliest-fit index — flagged, not built.
 
 ---
 
-## 7. Booking / inserting a slot (lighter, v1)
+## 6. Events that trigger a reschedule
 
-Creating a slot is placement, not re-flow, but it can *seed* a cascade:
-- If the requested `[start, start+duration)` lands in free time → insert, done.
-- If it overlaps existing scheduled slots and the new slot is **flexible** →
-  reject with the nearest free suggestion (keep v1 simple; no auto-fit).
-- If the new slot is **rigid/anchored-intent** and the head explicitly forces it →
-  treat as a delay event seeded at the new slot's end and `cascadeDelay` the
-  overlapped slots forward. (This is the "fixed pushes fixed" booking path.)
+Each event mutates state, then calls `reschedule`:
 
-> **Decision flagged:** v1 booking policy = *reject flexible overlaps with a
-> suggestion; only forced/privileged inserts cascade.* Confirm, or we build
-> best-fit auto-placement (post-MVP).
+| Event | State change | Typical effect |
+|-------|--------------|----------------|
+| **Book / create** | insert a `SCHEDULED` slot at its priority | placed into the best gap/bench within its band |
+| **Clock in** | `SCHEDULED → ACTIVE`, pin to a bench | that bench's availability is fixed to its projected end |
+| **Overrun** (active past its scheduled end) | active slot's projected end moves later | people behind on that bench shift; some may hop benches; bands ratchet only when pushed past window |
+| **Clock out / early finish** | `ACTIVE → COMPLETE`; bench frees (possibly early) | people pull forward to fill the freed time, down to their `winStart` |
+| **Cancel** | `SCHEDULED/ACTIVE → CANCELLED`; place frees | pull-forward to fill |
+| **No-show** | grace lapsed → `SCHEDULED → NO_SHOW`; place frees | pull-forward to fill (note 5/6) |
+
+> **Overrun detection (⚠️ REVIEW):** recompute on a *live projection* (continuously,
+> as an active slot crosses its scheduled end, so downstream ETAs stay honest) vs.
+> only *settle on clock-out* (simpler). Recommend **settle on clock-out + one
+> projected recompute when the active slot crosses its scheduled end** (so people
+> behind get an early warning), and revisit.
 
 ---
 
-## 8. Edge cases the implementation must cover
+## 7. Worked examples
+
+Times are `HH:MM`; "band" is `[winStart, winStart+window]`.
+
+### 7.1 Single bench — delay within window (silent) vs. past it (ratchet+notify)
+
+```
+Bench1.  A  ACTIVE 09:00 dur 60  → overruns, projected end 10:20  (Δ20)
+         B  09:?? booked 10:00 dur 60  window 30  → band [10:00, 10:30]
+         C  booked 11:00 dur 30  window 0   → band [11:00, 11:00]  (rigid)
+```
+- Bench1 free from **10:20**.
+- **B:** earliest 10:00; earliest feasible on Bench1 is 10:20. `10:20 ≤ 10:30` →
+  **within band → silent**, `winStart` stays 10:00. B runs 10:20–11:20.
+- **C:** earliest 11:00; Bench1 free at 11:20 → `actualStart 11:20`. `11:20 >
+  11:00` (band width 0) → **ratchet**: `winStart := 11:20`, **notify**. C runs
+  11:20–11:50.
+
+Takeaway: time propagated to both (no compression), but B absorbed it silently
+within its window; only C (rigid) had to re-commit. No failure flag anywhere.
+
+### 7.2 Two benches — a free bench absorbs the delay entirely
+
+```
+Bench1.  A  ACTIVE 09:00 dur 60  → overruns to 10:20
+Bench2.  (free)
+         B  booked 10:00 dur 60  window 30
+```
+- **B:** earliest 10:00; Bench2 is free at/ before 10:00 → placed on **Bench2 at
+  10:00**. The overrun on Bench1 didn't touch B at all. Fan-out absorbed it.
+
+### 7.3 Gap-fill reorder, and its undo (note 1)
+
+```
+Bench1.  A  fixed 09:00 dur 60  (09:00–10:00)
+         B  fixed 10:30 dur 60  (10:30–11:30)
+         => idle gap on Bench1: 10:00–10:30  (30 min)
+Queue priority:  C (dur 60) ahead of  D (dur 30); both bands overlap the gap.
+```
+- Process in priority order: A, B pinned/placed. **C** (60 min): the 30-min gap
+  doesn't fit, so C is placed after B → **11:30**. **D** (30 min): the gap *fits* →
+  placed at **10:00–10:30**, running before C in clock time but not at C's expense.
+- **Now A's projected end grows to 10:15** (A overruns). Reschedule: gap is now
+  10:15–10:30 (15 min). C still → 11:30. **D** (30 min) no longer fits the 15-min
+  gap → placed after C → **12:30**. D moved back behind C, exactly as required.
+  (If D had already clocked in during the gap, it'd be `ACTIVE` and pinned — never
+  interrupted; this reasoning is pre-clock-in.)
+
+### 7.4 Pull-forward within the (possibly ratcheted) band
+
+```
+Bench1.  A  ACTIVE 09:00 dur 60  → finishes ON TIME at 10:00
+         B  currently placed at 10:25 (a prior projection had pushed it within band)
+            booked 10:00 dur 60  window 30  → band [10:00, 10:30], winStart 10:00
+```
+- A frees Bench1 at 10:00. Reschedule: **B** earliest = winStart 10:00 → placed at
+  **10:00** (pulled forward from 10:25, within its band). Full duration.
+- Contrast: if B had earlier been *ratcheted* to `winStart 10:30` (forced past its
+  band by a real overrun), it would pull forward only to **10:30**, never back to
+  10:00 — "forward, not back" (§2.2).
+
+### 7.5 No-show grace re-flows the queue (notes 5, 6)
+
+```
+Bench1.  B  placed 10:00 dur 60   — but B never clocks in
+         C  placed 11:00 dur 60  window 30
+```
+- At **10:15** (`CLOCK_IN_GRACE`), B is marked **`NO_SHOW`**; its place frees.
+  Reschedule: **C** earliest = winStart (say 10:30 if booked then) → pulled forward
+  to fill. B's owner must rebook. No flag, no human escalation required.
+
+---
+
+## 8. There is no "unresolvable" — resolution model (replaces failure flags)
+
+Per **note 5**, the schedule **never overflows and is never infeasible.** The engine
+always produces a valid placement by pushing slots later as needed. The old
+`OVERFLOW` / `INFEASIBLE` result states are **deleted**.
+
+### 8.1 "Pushed too far" is a human decision, not an engine error
+
+If cascading pushes someone's start to, say, midnight, the engine still schedules
+it. Resolution is entirely human/contractual:
+- the user **cancels** (frees the place → reschedule), or
+- the user **doesn't clock in** within grace → **`NO_SHOW`** (frees the place →
+  reschedule).
+
+Either way the queue re-flows and bench usage stays maximized. It is the user's job
+to reschedule an experiment that got pushed beyond what's useful to them.
+
+### 8.2 No wall-clock anchors — ever
+
+A pure wall-clock anchor ("this MUST start at 14:00, immovable") contradicts the
+founding premise that **experiments necessarily run over** — so it is permanently
+out of scope. `window == 0` (rigid) is as inflexible as a slot gets, and even a
+rigid slot slides when the queue ahead of it slides.
+
+### 8.3 Future: max-priority slots (the only thing that "jumps the line")
+
+A planned feature: a **max-priority** slot that, whenever created, goes to the
+**front of the priority queue** — so it's placed first on the next reschedule and
+pushes others back. It is *priority*, not a wall-clock anchor:
+- it still **never interrupts an `ACTIVE` slot** (can't stop a running experiment);
+- it integrates with zero new machinery — it's just the lowest `priority` key, so
+  §5 already handles it. Invariant #2 ("never harm those ahead") holds *by
+  definition of priority*: a max-priority slot **is** ahead.
+
+---
+
+## 9. Edge cases the implementation must cover
 
 | Case | Expected behavior |
 |------|-------------------|
-| Empty queue / single slot | No-op; return input unchanged. |
-| Delta ≤ 0 on a "delay" event | No-op (or reject); never a cascade. |
-| Gap larger than delta | `max(start, prevEnd)` settles it; cascade breaks early. |
-| One slot absorbs everything | Cascade stops at that slot; tail untouched. |
-| Every slot rigid (`window 0`) | Any overrun overflows by the full delta; whole tail shifts. |
-| Duration floor hit | Slot shrinks only to `MIN_DURATION`; remainder propagates as delta. |
-| Rigid slot blocks pull-forward | Pull-forward stops at it; downstream gap remains. |
-| Window > remaining duration | Impossible if invariant #4 enforced at creation; assert it. |
-| Cancel the active slot | Treat as early finish with `freeFrom = now`. |
-| Overrun detected mid-session | See §9 — projected vs. settled. |
-| Concurrent events | Serialized by the caller's transaction (§9). |
+| Empty queue / single slot | No-op placement. |
+| All benches busy with `ACTIVE` | `SCHEDULED` slots queue behind projected ends; nobody interrupted. |
+| Slot fits no current gap | Placed at the earliest open-ended interval (after the last occupant on the best bench). |
+| Delay within window | Silent placement, no ratchet, no notify (§7.1). |
+| Delay past window | Ratchet `winStart`, notify (§7.1). |
+| Early finish before everyone's `winStart` | Bench idles until the first available person — acceptable (nobody is available to pull forward). |
+| Gap-fill promotes a lower-priority slot | Allowed iff it doesn't delay anyone ahead (guaranteed by priority-order processing). |
+| Promotion undone when a gap shrinks | Next reschedule re-places it behind (§7.3). |
+| Active slot overruns repeatedly | Each event reschedules from current state; durations never shrink (no floor needed). |
+| No-show | `NO_SHOW`, free place, reschedule (§7.5). |
+| Cancel the active slot | `CANCELLED`, free its bench from `now`, reschedule. |
+| Multi-bench, uneven durations | Backfill `argmin` handles it; assert per-bench no-overlap. |
 
 ---
 
-## 9. Implementation contract (how Phase 6 / Phase 7 must use this)
+## 10. Implementation contract (how Phase 6 / Phase 7 must use this)
 
-- **Pure functions, no I/O.** The engine takes slices/structs in and returns
-  them out. No DB, no HTTP, no clock reads, no logging of business state inside
-  the core. The caller injects `now`, the seed end, and `MIN_DURATION`.
+- **One pure function: `reschedule(slots, benches, now) → slots`.** No DB, no HTTP,
+  no clock reads inside; the caller injects `now`, projected active-end times, and
+  `CLOCK_IN_GRACE`. Cascade and pull-forward are *the same call*.
 - **Convert at the edges.** proto ⇄ domain and DB-row ⇄ domain conversions live in
   the handler/repository, never inside the engine.
-- **One transaction per event.** A cascade touches many rows; the caller loads the
-  equipment's scheduled slots `FOR UPDATE`, runs the engine, and persists the whole
-  result atomically, so no observer ever sees a half-shifted queue (PLAN Phase 7).
-- **Re-cascade baseline (⚠️ REVIEW):** each event is resolved against the slots'
-  *current* persisted state; `window` is treated as per-event flexibility and is
-  **not "used up"** across successive events. This is the simplest correct model.
-  Risk: repeated overruns could compress a slot across multiple events down to the
-  `MIN_DURATION` floor. The floor bounds the damage; a fuller fix (track each
-  slot's *original* schedule and cap cumulative drift) is a flagged refinement.
-- **Overrun detection (⚠️ REVIEW):** decide whether the cascade runs on a *live
-  projection* (the active slot is past its scheduled end → recompute continuously
-  so downstream ETAs update in real time) or only *settles on clock-out*. Live
-  projection gives better notifications; settle-on-clock-out is simpler. Recommend
-  starting with settle-on-clock-out + a single "projected overrun" recompute when
-  the active slot crosses its scheduled end, and revisit.
+- **One transaction per event.** A reschedule touches many rows; the caller loads
+  the pool's open slots `FOR UPDATE`, runs the engine, and persists the whole result
+  atomically, so no observer sees a half-shifted queue (PLAN Phase 7).
+- **Re-cascade baseline (⚠️ REVIEW):** each event reschedules from the slots'
+  *current* persisted state. With durations inviolable and `winStart` ratcheting
+  monotonically, there is **no compounding-shrinkage risk** (the old `MIN_DURATION`
+  concern is gone). The thing to watch instead is **band thrash** — a slot silently
+  nudged within its window repeatedly; cap notifications, not placements.
+- **Bench-assignment data model (⚠️ REVIEW, §1.1/§1.4):** dynamic fan-out implies a
+  slot's *specific* bench is chosen by the engine (near clock-in), not fixed at
+  booking. The schema therefore needs an **equipment *pool*** concept and a nullable
+  assigned-bench, not a hard `equipment_id` at creation. This affects `PLAN.md`
+  Phase 4 — see the sync note when reviewing.
+- **v1 scope (⚠️ REVIEW):** full multi-bench gap-fill is specified above. If the
+  first lab has a **single** hood, the same algorithm degenerates correctly to one
+  bench — so v1 can ship the general engine with `benches == 1` and grow to N with
+  no rewrite. Recommend doing exactly that.
 
 ---
 
-## 10. Test matrix (drives the Phase 6 table-driven `testify` suite)
+## 11. Test matrix (drives the Phase 6 table-driven `testify` suite)
 
-Each row is one table-test case; expected output is the full resolved queue +
-result classification.
+Each row is one table-test case; expected output is the full resolved schedule
+(per-slot `actualStart`, `bench`, ratcheted `winStart`, notify-flag).
 
-**Cascade (delay):**
-1. Empty queue — no-op.
-2. Single active slot, nothing behind — no-op.
-3. Delta fully absorbed by a leading gap — cascade breaks immediately.
-4. Full absorption by the first downstream slot — tail untouched, `ABSORBED`.
-5. Partial absorption, settles mid-queue — `ABSORBED` (the §4.3 example).
-6. Overflow past the tail — `OVERFLOW` with exact `overflowMinutes` (the §4.4 ex).
-7. Rigid slot pushed by a flexible one — verify it shifts wholesale.
-8. Chain of rigid slots — each pushes the next by the full residual.
-9. Duration-floor hit — slot stops at `MIN_DURATION`, remainder propagates.
-10. All-rigid queue — entire tail shifts by the full delta.
-11. Delta ≤ 0 — rejected/no-op.
+**Single bench:**
+1. Empty queue / single active slot — no-op.
+2. Delay absorbed within a window — silent, no ratchet (§7.1 / B).
+3. Delay past a window — ratchet + notify (§7.1 / C).
+4. Rigid slot (`window 0`) — ratchets on any disturbance.
+5. Chain of slots, partial absorption then propagation — verify each band-shift.
+6. Early finish pulls a slot forward within its band (§7.4).
+7. Ratcheted slot pulls forward only to its new `winStart`, not the original.
 
-**Pull-forward:**
-12. Single slot pulled forward within window.
-13. Chain pulls forward (the §6.2 example).
-14. Blocked by a rigid slot (the §6.1 example).
-15. Window too small to close the gap — residual idle gap remains.
-16. Cancel the active slot — handled as early finish.
-17. Cancellation of a middle slot with `COMPLETE`/`CANCELLED` neighbors skipped.
+**Multi-bench:**
+8. Free bench absorbs a delay (slot hops benches, no delay) (§7.2).
+9. Gap-fill promotes a shorter lower-priority slot (§7.3 first half).
+10. Promotion undone when the gap shrinks (§7.3 second half).
+11. Uneven durations across benches — per-bench no-overlap holds.
 
-**Invariants (assert on every case above):** no overlap, order preserved,
-duration ≥ floor, history untouched, determinism (run twice, compare).
+**Lifecycle:**
+12. No-show after grace re-flows the queue (§7.5).
+13. Cancel a scheduled slot — pull-forward.
+14. Cancel/clock-out the active slot — bench frees, reschedule.
+15. Booking inserts into the best gap within its band.
+16. Max-priority insert (when built) — goes to front, never interrupts active.
+
+**Invariants (assert on every case):** per-bench no-overlap; priority respected;
+durations unchanged; `actualStart ≥ winStart` and `winStart` monotonic; ACTIVE/
+history untouched; determinism (run twice, compare).
 
 ---
 
-## 11. Open decisions for review (consolidated)
+## 12. Open decisions for review (consolidated)
 
-These are flagged inline above; collected here so you can sign off in one pass:
+Several earlier decisions are now **settled** by your notes (no compression; no
+overflow/infeasible; no wall-clock anchors; auto-apply within window via the
+availability contract; `CLOCK_IN_GRACE = 15 min`). Remaining items to confirm:
 
-1. **§2.1 / §2.2** — `window` = *compression on delay* + *earliness on
-   pull-forward*. Confirm, or split into two budgets.
-2. **§2.3 / §5.2** — `window == 0` = *rigid*, not *wall-clock anchored*; hard
-   anchors (and the resulting `INFEASIBLE` state) are post-MVP. Confirm.
-3. **§6.3** — pull-forward *auto-applies* within `window` rather than merely
-   proposing. Confirm.
-4. **§7** — v1 booking *rejects* flexible overlaps (with a suggestion); only
-   forced/privileged inserts cascade. Confirm.
-5. **§9** — re-cascade resolves against *current* state; `window` not consumed
-   across events; `MIN_DURATION` floor is the only guard against repeated
-   compression. Confirm or schedule the cumulative-drift refinement.
-6. **§9** — overrun handling = *settle on clock-out* + one projected recompute at
-   the scheduled-end crossing. Confirm.
-7. **§6** — value of `MIN_DURATION` (e.g. 5 min?). Set it.
+1. **§2 / §2.2** — `window` = *forward* band only (`[winStart, winStart+window]`),
+   earliness bounded by `winStart`, ratcheting later when forced. Confirm this is
+   forward-only (not symmetric around the booked start).
+2. **§1.1 / §10** — **dynamic bench assignment** ⇒ an *equipment pool* in the data
+   model and a bench chosen near clock-in (not a fixed `equipment_id` at booking).
+   Confirm; this drives a `PLAN.md` Phase 4 change.
+3. **§10** — ship the **general N-bench engine with `benches == 1`** for the first
+   lab rather than a single-bench special case. Confirm.
+4. **§6** — overrun handling = *settle on clock-out* + one projected recompute when
+   an active slot crosses its scheduled end. Confirm.
+5. **§2.3** — `CLOCK_IN_GRACE = 15 min` (note 6) and `NO_SHOW` as a distinct status.
+   Confirm the value and that no-show auto-frees + reschedules.
+6. **§8.3** — max-priority slots are a post-MVP feature implemented purely as the
+   lowest `priority` key (no new engine machinery, never interrupts active).
+   Confirm the deferral.
