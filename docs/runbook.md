@@ -45,7 +45,8 @@ same fields.
 | `mage migrate` | apply `goose` migrations (`backend/migrations/`) to local Postgres |
 | `mage seed` | load demo data (lands with the schema in Phase 4) |
 | `mage testUnit` | `go test -tags testunit ./backend/...` **and** `python3 scripts/test_check_yaak_secrets.py` |
-| `mage serviceLogs` | follow service logs (last 100 lines, then live) |
+| `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
+| `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
 | `mage genProto` | `buf generate` (Go + TS from `.proto`; buf config lands in Phase 5) |
 
 `migrate`/`seed`/`genProto` are wired to their real tools but skip cleanly until

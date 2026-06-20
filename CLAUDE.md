@@ -36,7 +36,7 @@ This project is built with Claude as the primary engine, with a hard boundary:
 
 - **Task runner:** `mage` (`magefile.go` at the repo root). Targets: `startStack`,
   `stopStack`, `resetStack`, `migrate`, `seed`, `testUnit`, `serviceLogs`,
-  `genProto`. See `docs/runbook.md`.
+  `postgresLogs`, `genProto`. See `docs/runbook.md`.
 - **Wire format:** Protobuf via Connect-RPC + buf. `.proto` is the contract of record;
   Go + TS types are generated — don't hand-write request/response shapes.
 - **Logging:** `slog` (structured, JSON in cloud). **Tracing:** OpenTelemetry → Cloud

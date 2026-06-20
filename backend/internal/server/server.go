@@ -1,11 +1,12 @@
 // Package server wires the HTTP router and middleware stack.
 //
-// Handlers are methods on Server so they share its dependencies (logger, store);
+// Handlers are methods on Server so they share its dependencies (logger, etc.);
 // cross-cutting concerns (request id, panic recovery, structured request
 // logging) live in middleware. Connect-RPC handlers mount here in a later phase.
 package server
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
-	"github.com/tallam99/qlab/backend/internal/store"
 )
 
 // Route paths, kept as consts so they have a single source of truth.
@@ -23,20 +23,22 @@ const (
 )
 
 // Options configures New. A struct (rather than positional params) so the server
-// can take new dependencies (engine, auth) in later phases without churning
-// call sites.
+// can take new dependencies (the data store, engine, auth) in later phases
+// without churning call sites.
 type Options struct {
 	// Logger is the base logger; middleware derives request-scoped loggers from it.
 	Logger *slog.Logger
-	// Store is the data store the handlers operate through (and the readiness
-	// probe pings). Required.
-	Store store.Store
+	// Ready reports whether the service's dependencies are reachable; the
+	// readiness probe calls it. It's a plain check rather than the data store
+	// because store holders may assume their store is already healthy (the data
+	// store itself is wired in Phase 4). Required.
+	Ready func(ctx context.Context) error
 }
 
 // Server holds the dependencies shared across handlers.
 type Server struct {
 	logger *slog.Logger
-	store  store.Store
+	ready  func(ctx context.Context) error
 }
 
 // New builds the HTTP handler with the middleware stack and routes wired in.
@@ -49,10 +51,10 @@ func New(opts Options) http.Handler {
 	if opts.Logger == nil {
 		panic("server: New requires a Logger")
 	}
-	if opts.Store == nil {
-		panic("server: New requires a Store")
+	if opts.Ready == nil {
+		panic("server: New requires a Ready check")
 	}
-	s := &Server{logger: opts.Logger, store: opts.Store}
+	s := &Server{logger: opts.Logger, ready: opts.Ready}
 
 	r := chi.NewRouter()
 
@@ -62,7 +64,7 @@ func New(opts Options) http.Handler {
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
 
 	r.Get(pathHealthz, s.healthz) // liveness: is the process up?
-	r.Get(pathReadyz, s.readyz)   // readiness: can it reach the store?
+	r.Get(pathReadyz, s.readyz)   // readiness: are its dependencies reachable?
 
 	return r
 }

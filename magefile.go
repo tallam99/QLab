@@ -15,12 +15,14 @@ import (
 )
 
 const (
-	composeFile    = "docker-compose.yml"
-	envFile        = ".env.json"
-	envExampleFile = ".env.example.json"
-	migrationsDir  = "backend/migrations"
-	bufConfigFile  = "proto/buf.gen.yaml"
-	// gooseVersion pins the migration tool. It's run via `go run …@version` rather
+	composeFile = "docker-compose.yml"
+	// postgresService is the Postgres service name in docker-compose.yml.
+	postgresService = "postgres"
+	envFile         = ".env.json"
+	envExampleFile  = ".env.example.json"
+	migrationsDir   = "backend/migrations"
+	bufConfigFile   = "proto/buf.gen.yaml"
+	// goosePackage pins the migration tool. It's run via `go run …@version` rather
 	// than a go.mod tool dependency so its many DB-driver deps don't bloat the
 	// module (we only use Postgres).
 	goosePackage = "github.com/pressly/goose/v3/cmd/goose@v3.27.1"
@@ -167,14 +169,23 @@ func TestUnit() error {
 	return run("python3", "scripts/test_check_yaak_secrets.py")
 }
 
-// ServiceLogs follows the running services' logs (last 100 lines, then live) —
-// like watching them in Docker Desktop.
+// ServiceLogs follows all services' logs (last 100 lines, then live).
 func ServiceLogs() error {
 	env, err := loadEnv()
 	if err != nil {
 		return err
 	}
 	return compose(env, "logs", "-f", "--tail=100")
+}
+
+// PostgresLogs dumps the Postgres container's full log, then streams it live —
+// useful for debugging database startup.
+func PostgresLogs() error {
+	env, err := loadEnv()
+	if err != nil {
+		return err
+	}
+	return compose(env, "logs", "-f", postgresService)
 }
 
 // GenProto regenerates Go + TS from the .proto contract via buf. The contract and

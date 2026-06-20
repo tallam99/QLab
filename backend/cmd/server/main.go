@@ -61,9 +61,10 @@ func main() {
 	logger := logging.New(logging.Options{Local: cfg.IsLocal(), Level: logLevel})
 	slog.SetDefault(logger)
 
-	// Build the pool and verify reachability before serving, so a misconfigured or
-	// unreachable database is a clear boot failure, not a stream of failing
-	// requests.
+	// Build the pool, then construct the store — which pings the database — before
+	// serving, so a misconfigured or unreachable database is a clear boot failure,
+	// not a stream of failing requests, and the store handed to the server is
+	// already health-checked.
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), databaseConnectTimeout)
 	pool, err := postgres.New(dbCtx, postgres.Options{DatabaseURL: cfg.DatabaseURL})
 	if err != nil {
@@ -73,18 +74,17 @@ func main() {
 	}
 	defer pool.Close()
 
-	dataStore := pgstore.New(pool)
-	if err := dataStore.Ping(dbCtx); err != nil {
-		dbCancel()
-		logger.Error("ping database", slog.Any(attrError, err))
+	dataStore, err := pgstore.New(dbCtx, pool)
+	dbCancel()
+	if err != nil {
+		logger.Error("connect database", slog.Any(attrError, err))
 		os.Exit(1)
 	}
-	dbCancel()
 	logger.Info("database connected")
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           server.New(server.Options{Logger: logger, Store: dataStore}),
+		Handler:           server.New(server.Options{Logger: logger, Ready: dataStore.Ready}),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 

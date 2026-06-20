@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -16,11 +17,11 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
-// testHandler builds a server with discarded logs and a reachable fake store.
+// testHandler builds a server with discarded logs and an always-ready check.
 func testHandler() http.Handler {
 	return New(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Store:  fakeStore{},
+		Ready:  func(context.Context) error { return nil },
 	})
 }
 

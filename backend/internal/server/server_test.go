@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -37,11 +38,12 @@ func TestNotFound(t *testing.T) {
 // loud, immediate failure (a wiring bug) rather than a nil-deref on first use.
 func TestNewRequiresDependencies(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ready := func(context.Context) error { return nil }
 
 	assert.PanicsWithValue(t, "server: New requires a Logger", func() {
-		New(Options{Store: fakeStore{}})
+		New(Options{Ready: ready})
 	})
-	assert.PanicsWithValue(t, "server: New requires a Store", func() {
+	assert.PanicsWithValue(t, "server: New requires a Ready check", func() {
 		New(Options{Logger: logger})
 	})
 }

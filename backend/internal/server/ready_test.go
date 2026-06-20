@@ -17,29 +17,24 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
-// fakeStore is a stand-in for the data store so the readiness wiring can be
-// tested without a real database.
-type fakeStore struct{ err error }
-
-func (f fakeStore) Ping(context.Context) error { return f.err }
-
-// TestReadyz verifies the readiness probe reflects store reachability: 200 when
-// the ping succeeds, 503 when it fails. This is an infrastructure check (is the
-// instance fit to receive traffic?), not endpoint functionality.
+// TestReadyz verifies the readiness probe reflects the readiness check: 200 when
+// it passes, 503 when it fails. This is an infrastructure check (is the instance
+// fit to receive traffic?), not endpoint functionality.
 func TestReadyz(t *testing.T) {
 	cases := []struct {
-		name string
-		ping error
-		want int
+		name  string
+		check error
+		want  int
 	}{
-		{name: "store reachable", ping: nil, want: http.StatusOK},
-		{name: "store unreachable", ping: errors.New("refused"), want: http.StatusServiceUnavailable},
+		{name: "dependencies reachable", check: nil, want: http.StatusOK},
+		{name: "dependency unreachable", check: errors.New("refused"), want: http.StatusServiceUnavailable},
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(New(Options{Logger: logger, Store: fakeStore{err: tc.ping}}))
+			ready := func(context.Context) error { return tc.check }
+			srv := httptest.NewServer(New(Options{Logger: logger, Ready: ready}))
 			defer srv.Close()
 
 			resp, err := srv.Client().Get(srv.URL + pathReadyz)
