@@ -52,6 +52,11 @@ below).
 
 **Key choices:**
 
+- **Homebrew is the package manager of choice** for CLI tooling (`brew install go buf
+  mage`, and future tools like `sqlc`/`goose`). Documented exceptions, where brew on
+  Linux can't or shouldn't own it: **Docker** (apt — the Engine daemon needs root +
+  systemd, which an unprivileged brew prefix can't provide), **Node** (`nvm`, for
+  per-project versions), and **`gcloud`** (Google's home-dir installer).
 - **Repo lives on the WSL filesystem** (`~/repos/qlab`), *not* `/mnt/c`. Native ext4
   is far faster for Go builds and `node_modules`; `/mnt/c` crosses a translation
   layer that is slow for many small files. Open it with `code .` from the WSL shell
@@ -70,20 +75,46 @@ below).
 
 ### One-time WSL setup
 
+Run these inside a fresh WSL2 Ubuntu shell, in order. (`systemd` must be on —
+`/etc/wsl.conf` → `[boot] systemd=true`; it is the default on recent Ubuntu/WSL.)
+
 ```bash
-# Docker Engine — native, auto-starting (systemd is already on in this distro)
+# 1. Homebrew — the package manager of choice. Bootstrap needs sudo once.
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+sudo apt-get install -y build-essential        # compiler brew expects for some formulae
+
+# 2. Docker Engine — native, auto-starting. apt, NOT brew: the daemon needs root +
+#    systemd, which an unprivileged brew prefix can't run.
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2
 sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER"        # then `wsl --shutdown` from Windows to apply group
+sudo usermod -aG docker "$USER"                # then `wsl --shutdown` from Windows to apply group
 
-# Go (current stable from https://go.dev/dl/), then buf + mage via `go install`
-GO_VER=<latest>   # e.g. go1.2x.y
-curl -fsSL "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz" | sudo tar -C /usr/local -xz
-# add to ~/.bashrc: export PATH="$PATH:/usr/local/go/bin:$HOME/go/bin"
-go install github.com/bufbuild/buf/cmd/buf@latest
-go install github.com/magefile/mage@latest
+# 3. Go toolchain + buf + mage — via brew (no sudo, no tarball).
+brew install go buf mage
+echo 'export PATH="$PATH:$HOME/go/bin"' >> ~/.bashrc   # so `go install`-ed tools (sqlc, goose, …) are on PATH
 
+# 4. Node via nvm (per-project versions), then the firebase CLI.
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+#    reload the shell, then:
+nvm install 24 && nvm alias default 24         # Node 24 (current LTS)
+npm i -g firebase-tools
+#    Node 19+ needs the firebase keep-alive workaround — see the troubleshooting log below.
+
+# 5. gcloud — native WSL install (home dir, no sudo). With --disable-prompts the
+#    installer does NOT edit ~/.bashrc, so add the PATH line yourself.
+curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="$HOME"
+echo '[ -f "$HOME/google-cloud-sdk/path.bash.inc" ] && . "$HOME/google-cloud-sdk/path.bash.inc"' >> ~/.bashrc
+#    Auth and all cloud use are user-only (see CLAUDE.md) — install only, never authenticate.
+
+# 6. Repo on the WSL filesystem, LF line endings.
 git config --global core.autocrlf false
+git clone https://github.com/tallam99/QLab.git ~/repos/qlab
+
+# 7. VS Code — install the WSL extension into the Windows VS Code, then open the repo.
+code --install-extension ms-vscode-remote.remote-wsl
+code ~/repos/qlab        # first run installs ~/.vscode-server; window badge should read "WSL: Ubuntu"
 ```
 
 ## Environment troubleshooting log
