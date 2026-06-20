@@ -105,11 +105,19 @@ Notes:
 
 ---
 
-## One-time GCP setup (you run these)
+## One-time GCP setup
 
-Do this **twice** — once per project (`staging`, then `production`). Set the
-variables at the top of each shell session. These are *templates*; substitute
-your real project IDs/regions (Claude does not know them and must not guess).
+> ✅ **Done (2026-06-20)** for both `qlab-staging` and `qlab-production`, by Claude
+> under a one-time exception to the local/cloud boundary. Region: **us-east1**.
+> Created in each project: Artifact Registry repo `qlab`; service accounts
+> `qlab-deployer` (CI, 4 roles) and `qlab-api` (runtime); WIF pool/provider
+> `github` scoped to `tallam99/QLab` + the deployer binding. The commands are kept
+> below for reference and recreation. **Still pending (yours):** Neon + Secret
+> Manager `DATABASE_URL` (step 4) and Firebase Hosting init — see "What's left"
+> below. Claude does **not** resume running cloud commands; this was a one-off.
+
+Done **twice** — once per project (`staging`, then `production`), with the
+variables below set per session.
 
 ```sh
 # --- per environment: fill these in ---
@@ -129,9 +137,13 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   secretmanager.googleapis.com \
   iamcredentials.googleapis.com \
+  iam.googleapis.com \
+  sts.googleapis.com \
   firebasehosting.googleapis.com \
   --project "$PROJECT_ID"
 ```
+
+(`iam` + `sts` back the Workload Identity Federation token exchange in step 5.)
 
 ### 2. Artifact Registry (Docker repo Cloud Run pulls from)
 
@@ -246,9 +258,13 @@ What's left for you is to add each Environment's **variables** (below).
 
 ### Environment variables
 
-Set these as **environment-scoped Variables** (Settings → Environments →
-*name* → Variables), once for `staging` and once for `production`. They are
-configuration, not secrets — WIF means none of them are credentials.
+> ✅ **Already set** for both environments (via `gh`, from the real values the GCP
+> setup produced). Listed here for reference; `gh variable list --env staging`
+> shows the current values. They are configuration, not secrets — WIF means none
+> are credentials.
+
+These are **environment-scoped Variables** (Settings → Environments → *name* →
+Variables), one set for `staging` and one for `production`.
 
 | Variable | Example (staging) | Notes |
 |----------|-------------------|-------|
@@ -266,9 +282,30 @@ configuration, not secrets — WIF means none of them are credentials.
 
 ### Branch protection
 
-On `main`: require the **CI** checks (`test`, `lint`, `yaak-secrets`) to pass,
+On `main`: require the **CI** checks (`test`, `security`, `lint`) to pass,
 squash-merge, auto-delete branches (Phase 0). This makes a green `ci.yml` the
 gate for every merge.
+
+---
+
+## What's left for you
+
+The GCP infra and all GitHub config (Environments, prod reviewer, variables) are
+done. To get the **first green deploy**, you still need:
+
+1. **Neon** — create the project + `staging`/`production` branches and copy each
+   branch's connection string (the "Database setup (Neon)" section above).
+2. **Secret Manager `DATABASE_URL`** — in **each** project, store that project's
+   Neon branch string and grant the runtime SA access (step 4 above). The backend
+   revision stays unhealthy until this resolves to a reachable DB (sequencing note
+   at the top). You can paste the connection strings to Claude to run step 4 under
+   the same exception, or run it yourself.
+3. **Firebase Hosting init** — in each Firebase project, enable Hosting (console →
+   Hosting → Get started, or `firebase init hosting` once) so the default
+   `https://<project>.web.app` site exists for the deploy to target.
+4. **Merge this PR**, then approve the production deploy when prompted.
+
+Then verify (below) and paste the URLs back.
 
 ---
 
