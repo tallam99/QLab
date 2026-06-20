@@ -1,8 +1,8 @@
 # CI gate — runs on every PR and on pushes to main.
 #
-# This mirrors the local checks (`mage testUnit` + the Yaak secret scan) so a green
-# PR means the same thing locally and in CI. Deploys live in separate workflows
-# (deploy-backend.yml, deploy-frontend.yml) and only run after merge.
+# Each job mirrors a `mage` test target so a green PR means the same thing locally
+# and in CI (`mage test` = testUnit + testSecurity). Deploys live in deploy.yml
+# and only run after merge.
 name: CI
 
 on:
@@ -19,8 +19,8 @@ permissions:
   contents: read
 
 jobs:
-  # Build, vet, and the unit + secret-check suite — exactly `mage testUnit`, plus a
-  # full build/vet so a compile error in non-test code is caught too.
+  # Build, vet, and the Go unit suite — `mage testUnit`, plus a full build/vet so a
+  # compile error in non-test code is caught too.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -31,11 +31,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # Python backs the Yaak secret-check tests that `mage testUnit` runs.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
       - name: Install mage
         run: go install github.com/magefile/mage@v1.17.2
 
@@ -45,20 +40,27 @@ jobs:
       - name: Vet
         run: go vet ./backend/...
 
-      - name: Unit tests (+ Yaak secret-check tests)
+      - name: Unit tests
         run: mage testUnit
 
-  # Guard against real credentials landing in the committed Yaak workspace. The
-  # same script runs in the lefthook pre-commit hook locally.
-  yaak-secrets:
+  # Security checks — `mage testSecurity`: the Yaak secret-scanner's tests and the
+  # scanner itself against the committed workspace (the same scan the lefthook
+  # pre-commit hook runs). Go is set up because mage compiles the magefile.
+  security:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - name: Scan committed Yaak workspace for secrets
-        run: python3 scripts/check-yaak-secrets.py
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Security tests
+        run: mage testSecurity
 
   lint:
     runs-on: ubuntu-latest

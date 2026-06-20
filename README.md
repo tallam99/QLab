@@ -45,7 +45,7 @@ clean checkout:
 mage startStack                      # build + start API + Postgres (creates .env.json on first run)
 curl localhost:8090/healthz          # -> {"status":"ok"}   (liveness)
 curl localhost:8090/readyz           # -> {"status":"ok"}   (readiness — 503 until deps init, then 200)
-mage testUnit                        # unit tests (-tags testunit) + Yaak secret-check tests
+mage test                            # all test tiers (Go unit tests + security/secret-scan checks)
 mage serviceLogs                     # follow service logs
 mage resetStack                      # wipe the DB volume and start fresh
 mage stopStack                       # stop (keeps the data volume)

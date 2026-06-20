@@ -83,8 +83,9 @@ land in Phase 4.
 - The **scheduling engine (`internal/scheduling`, Phase 6) is pure**: no DB, no
   HTTP, no clock reads. Read `docs/ALGORITHM.md` before touching it.
 - From the **repo root**, run `go build ./backend/...`, `go vet ./backend/...`, and
-  `mage testUnit` before presenting or committing; `gofmt` everything. Re-run
-  `go generate ./backend/...` after changing an enum.
+  `mage test` (all tiers; or `mage testUnit` for just the Go suite) before
+  presenting or committing; `gofmt` everything. Re-run `go generate ./backend/...`
+  after changing an enum.
 
 ## Testing
 

@@ -51,10 +51,16 @@ jobs:
       - name: Deploy to Cloud Run
         id: deploy
         run: |
-          # Cloud Run is invoked unauthenticated at the IAM layer: the app enforces
-          # its own Firebase JWT on every endpoint (Phase 8). DATABASE_URL is read
-          # from Secret Manager (never GitHub). The ^@^ prefix switches the
-          # --set-env-vars delimiter to '@' so a comma-separated CORS list is safe.
+          # --allow-unauthenticated turns OFF Cloud Run's *platform* IAM check
+          # (which would otherwise require every caller to present a Google IAM
+          # identity via run.invoker). Browsers have no such identity, so this must
+          # be off for the public PWA to reach the API at all. It does NOT make the
+          # API open: the app verifies a Firebase JWT on every endpoint itself
+          # (Phase 8). Two independent layers — platform invoker check (off) vs.
+          # app-level JWT auth (on); the security is the latter.
+          # DATABASE_URL is read from Secret Manager (never GitHub). The ^@^ prefix
+          # switches the --set-env-vars delimiter to '@' so a comma-separated CORS
+          # list is safe.
           gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
             --image "$IMAGE" \
             --project "${{ vars.GCP_PROJECT_ID }}" \

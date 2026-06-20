@@ -11,7 +11,7 @@
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `.github/workflows/ci.yml` | every PR + push to `main` | `go build`/`vet`, `mage testUnit` (Go + Python secret-check), `check-yaak-secrets.py`, `golangci-lint`. The merge gate. |
+| `.github/workflows/ci.yml` | every PR + push to `main` | `go build`/`vet` + `mage testUnit` (Go unit tests), `mage testSecurity` (Yaak secret scan + its tests), `golangci-lint`. The merge gate. |
 | `.github/workflows/deploy.yml` | push to `main` (i.e. after merge) | Deploy both surfaces to **staging** automatically, then to **production** behind a manual approval. Calls the reusable `_deploy.yml` once per environment. |
 
 `_deploy.yml` for one environment: build the backend image → push to Artifact
@@ -56,6 +56,52 @@ The schema/migrations (Phase 4) are **not** required for this — `/healthz` and
 
 This is the one place Phase 3 and Phase 4 overlap; flagging it so a red backend
 deploy isn't mistaken for a pipeline bug.
+
+---
+
+## Database setup (Neon) — you run these
+
+> **Boundary:** Neon stays **user-driven** — the GCP exception does not extend to
+> it. Claude drafts these steps; you run them in the Neon console.
+
+### What Neon "branches" are (the part that's confusing)
+
+Neon is **serverless Postgres**: a managed Postgres that scales to zero when idle
+(so it costs nothing while unused) and wakes on the next connection.
+
+A Neon **branch** is a **copy-on-write clone of your database** — think "a git
+branch, but for the data and schema." Creating one is near-instant and basically
+free: the new branch *shares* its parent's stored data until you write to it, and
+only the changes you make afterward take new space. Each branch is a fully
+isolated Postgres database with **its own connection string**, so two branches can
+hold different data and diverge without affecting each other.
+
+Why we use them: instead of running two separate database servers for staging and
+production (cost + ops), we keep **one Neon project with two branches** — one for
+production, one for staging — giving two isolated databases at ~$0. (Later you can
+also spin up a throwaway branch per PR to test a migration against real-shaped data,
+then delete it — that's the payoff of copy-on-write.)
+
+### Steps
+
+1. **Create a Neon project** (Neon console → New Project). Pick a region near your
+   Cloud Run region. It comes with one default branch (named `main` or
+   `production`) — treat that as **production**.
+2. **Create a second branch** named `staging` from it (console → Branches → New
+   branch, parent = the default branch). You now have two isolated databases.
+3. **Copy each branch's connection string** (console → Connection Details → pick
+   the branch → copy the **pooled** connection string; it ends with
+   `?sslmode=require`). One string per branch.
+4. **Store each string in the matching project's Secret Manager** `DATABASE_URL`
+   (next section): the **staging** branch's string → the **staging** GCP project's
+   secret; the **production** branch's string → the **production** project's secret.
+
+Notes:
+- The **schema/migrations land in Phase 4** — for Phase 3 a bare branch (no tables)
+  is enough for `/healthz` and `/readyz`, which only need a successful *connection*.
+- Neon scales to zero, so the first connection after an idle period has a cold
+  start; the service's boot retry rides it out, and the Phase 11 weekly cron
+  doubles as a keep-alive.
 
 ---
 
@@ -126,7 +172,8 @@ the service.)
 
 ### 4. Secret Manager — `DATABASE_URL`
 
-Store the database connection string (Neon for the cloud; see the sequencing note)
+Store the matching Neon **branch** connection string (from the Database setup
+section above — staging branch for the staging project, production branch for prod)
 and let the **runtime SA** read it.
 
 ```sh
