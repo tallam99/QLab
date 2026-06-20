@@ -44,11 +44,17 @@
           {
             "enabled": true,
             "name": "base_url",
-            "value": "http://localhost:8080",
+            "value": "http://localhost:8090",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "auth_token",
+            "value": "",
             "id": null
           }
         ],
-        "color": null,
+        "color": "#00C9A7",
         "sortPriority": 0.0
       },
       {
@@ -66,9 +72,61 @@
             "name": "base_url",
             "value": "https://REPLACE-WITH-CLOUD-RUN-STAGING-URL",
             "id": null
+          },
+          {
+            "enabled": true,
+            "name": "auth_token",
+            "value": "",
+            "id": null
           }
         ],
-        "color": null,
+        "color": "#F59E0B",
+        "sortPriority": 0.0
+      },
+      {
+        "model": "environment",
+        "id": "ev_v3xeNcU7ux",
+        "workspaceId": "wk_igZobFKXDr",
+        "name": "production",
+        "public": false,
+        "base": false,
+        "parentModel": "environment",
+        "parentId": null,
+        "variables": [
+          {
+            "enabled": true,
+            "name": "base_url",
+            "value": "https://REPLACE-WITH-CLOUD-RUN-PROD-URL",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "auth_token",
+            "value": "",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "confirm",
+            "value": "",
+            "id": null
+          }
+        ],
+        "color": "#F87171",
+        "sortPriority": 0.0
+      }
+    ],
+    "folders": [
+      {
+        "model": "folder",
+        "id": "fl_FVRufW7bBP",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": null,
+        "name": "Danger — mutates data",
+        "description": "Destructive / state-mutating requests only. Against production these require the `confirm` variable to be set deliberately (empty by default).",
+        "authentication": {},
+        "authenticationType": null,
+        "headers": [],
         "sortPriority": 0.0
       }
     ],
