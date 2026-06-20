@@ -263,7 +263,7 @@ engine is specified on paper** — nothing built yet.
   - **GCP project**, billing enabled; enable Cloud Run, Artifact Registry, Secret
     Manager, Cloud Build, **Cloud Trace** APIs.
   - **Neon** account.
-  - **Two Firebase projects** (`qlab-staging`, `qlab-prod`); enable **Firebase
+  - **Two Firebase projects** (`qlab-staging`, `qlab-production`); enable **Firebase
     Hosting** on each (for the static PWA) plus Auth.
   - **Resend or SendGrid** account (reserve; decide in Phase 11).
 - **Reserve the test inboxes** and the plus-addressing scheme (see conventions).
