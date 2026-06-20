@@ -75,19 +75,37 @@ them (and the versioned source of truth).
 
 ### Using the GUI on Windows (recommended for you)
 
-WSL does **not** break the GUI, because you never point the GUI at WSL files —
-you import the committed export instead:
+You don't point the GUI at WSL files — you **import the committed JSON** through
+Yaak's settings menu (this is *not* the "Open Folder" option; see the warning
+below).
 
-1. In Yaak: **Settings → Data → Import**, choose
-   `\\wsl.localhost\Ubuntu\home\<user>\repos\qlab\yaak\qlab.yaak.json`
-   (or copy it to Windows first). This recreates the workspace in the GUI's
-   Windows database.
-2. Pick the `local` or `staging` environment (top bar) and send requests.
-3. If you add/change requests in the GUI and want them committed, **export** the
-   workspace back over `qlab.yaak.json` and commit it.
+1. Copy the file out of WSL to somewhere the Windows file picker reads cleanly
+   (the `\\wsl.localhost\…` share can be flaky in native dialogs). From a WSL
+   shell:
 
-> Avoid Yaak's *Directory Sync* pointed at the `\\wsl.localhost\…` path — live
-> file-watching across the WSL 9P share is unreliable. Import/export is robust.
+       cp ~/repos/qlab/yaak/qlab.yaak.json /mnt/c/Users/<you>/Downloads/
+
+2. In Yaak, open the **settings dropdown** (the gear/`⋯` icon, top of the
+   window) → under **"Share Workspace(s)"** click **"Import Data"** → select the
+   `qlab.yaak.json` you just copied. This creates the QLab workspace in the GUI's
+   own (Windows) database.
+3. Pick the `local` / `staging` / `production` environment (top bar) and send
+   requests.
+4. To commit changes you make in the GUI: same settings dropdown → **"Export
+   Data"**, save the file, copy it back over `~/repos/qlab/yaak/qlab.yaak.json`
+   (e.g. `cp /mnt/c/Users/<you>/Downloads/qlab.yaak.json ~/repos/qlab/yaak/`),
+   then commit (the secret check runs on commit).
+
+> **Don't use "New Workspace → Open Folder".** That's Yaak's *Directory Sync*,
+> a different feature that turns a folder into a live-synced workspace. Pointed at
+> the WSL repo over the `\\wsl.localhost\…` 9P share it doesn't work reliably, and
+> it isn't how this workspace is stored (we commit a single JSON, not a sync
+> directory). Use **Import Data / Export Data** instead.
+
+> Re-importing later may create a *second* QLab workspace rather than updating the
+> first — so do a one-time Import to get started, then keep the GUI copy and use
+> Export to push changes back. If you must pull someone else's changes, re-import
+> and delete the stale duplicate.
 
 ### Using the CLI in WSL (Claude's path; also available to you)
 
