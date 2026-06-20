@@ -57,8 +57,19 @@ their own tags and targets as they land.
 ## Health checks
 
 - `curl localhost:8090/healthz` → `{"status":"ok"}` — **liveness** (process up).
-- `curl localhost:8090/readyz` → `{"status":"ok"}` (200) when the DB is reachable,
-  `{"status":"unavailable"}` (503) otherwise — **readiness** (fit for traffic).
+  Available the instant the listener binds, *before* dependencies initialize, so a
+  slow database never looks like a dead container.
+- `curl localhost:8090/readyz` → **readiness** (fit for traffic):
+  `{"status":"unavailable"}` (503) during startup until every dependency
+  initializes, then `{"status":"ok"}` (200). It's a one-way startup transition, not
+  a per-request re-check.
+
+> **Cloud Run probe mapping (Phase 3, configured by you — cloud-side):** point the
+> **startup probe at `/readyz`** (holds traffic until deps are ready; give it a
+> timeout generous enough for a Neon cold start) and the **liveness probe at
+> `/healthz`** (restarts only a genuinely wedged process). On boot the service
+> retries a transient DB failure a few times with backoff, then exits non-zero if
+> it can't connect.
 
 ## Debugging
 

@@ -2,10 +2,10 @@
 
 The Go service: the Connect-RPC API and the scheduling engine.
 
-> **Status:** Phase 2 — an HTTP service with `/healthz` (liveness) and `/readyz`
-> (readiness, pings Postgres), structured logging, a boot-time DB connection, and
-> a multi-stage Docker build. The Connect-RPC API, query layer, and engine land in
-> later phases (see `docs/PLAN.md`).
+> **Status:** Phase 2 — an HTTP service with `/healthz` (liveness, up immediately)
+> and `/readyz` (readiness, 503 until dependencies initialize), structured logging,
+> a boot-time DB connection with bounded retry, and a multi-stage Docker build. The
+> Connect-RPC API, query layer, and engine land in later phases (see `docs/PLAN.md`).
 
 ## Layout
 
@@ -39,7 +39,7 @@ is the Compose stack:
 
     mage startStack                     # from repo root: API + Postgres
     curl localhost:8090/healthz         # -> {"status":"ok"}  (liveness)
-    curl localhost:8090/readyz          # -> {"status":"ok"}  (readiness — DB reachable)
+    curl localhost:8090/readyz          # -> {"status":"ok"}  (readiness — 503 until deps init, then 200)
 
 To run the binary directly, supply a database:
 

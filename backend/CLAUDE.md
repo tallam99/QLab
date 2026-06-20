@@ -12,7 +12,8 @@ land in Phase 4.
 ## Key files
 
 - `cmd/server/main.go` — entrypoint. Keep it thin: load config → build logger →
-  build store → build handler → serve with graceful shutdown. No business logic here.
+  start serving (liveness up immediately) → initialize dependencies with bounded
+  retry → `MarkReady` → serve until a shutdown signal. No business logic here.
 - `internal/config/` — the *only* place env vars are read (envconfig). Holds the
   `Environment` enum (generated `String()`/parse via enumer).
 - `internal/logging/` — slog setup (text locally, JSON in cloud).
@@ -25,9 +26,11 @@ land in Phase 4.
   guaranteed ready and nothing re-checks it (no health methods on the interface).
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
   (`RequestLogger`, `LoggerFromContext`) and panic recovery (`Recoverer`).
-- `internal/server/` — chi router and handlers (methods on `Server`): `/healthz`
-  (liveness) and `/readyz` (readiness — static 200; the service serves only after
-  every dependency initializes successfully, so being reachable *is* readiness).
+- `internal/server/` — chi router and handlers (methods on `Server`). `New`
+  returns a `*Server` that serves immediately so `/healthz` (liveness) is 200 from
+  the start; `/readyz` (readiness) returns 503 until `MarkReady` runs — which
+  `main` calls once dependencies initialize — then 200. Runtime deps are injected
+  via `MarkReady` (not `Options`), because the server listens before they exist.
 
 ## Conventions
 
@@ -54,13 +57,17 @@ land in Phase 4.
 - **Programmer-error invariants panic** (e.g. `LoggerFromContext` with no logger,
   `server.New` with a nil required dependency); the `Recoverer` middleware turns
   request-time panics into a logged 500 rather than a crash.
-- **Constructors take dependencies as interfaces via an `Options` struct.** The
-  service's dependencies (store, and later cache/queue/bucket/…, plus the logger)
-  are passed in already constructed and *ready*; the service uses them through
-  their interfaces and never configures them. Interface-typed fields let tests and
-  infra swap implementations — including no-op/stub — freely, so behavior is chosen
-  by the caller's implementation, not by server-side defaulting. Required
-  dependencies are validated in `New`.
+- **Liveness up first, then readiness.** The server starts listening *before*
+  dependencies initialize, so `/healthz` is up immediately and the platform never
+  mistakes slow startup for a dead container. `main` then initializes dependencies
+  (their constructors verify health — e.g. `pgstore.New` pings — with bounded retry
+  to ride out transient failures) and calls `MarkReady`, flipping `/readyz` to 200.
+- **Dependencies are injected as interfaces, already constructed and ready.** The
+  service uses them through their interfaces and never configures or re-checks them.
+  Construction-time deps (the logger) go in `Options` (validated in `New`, panic on
+  nil); runtime deps that must be initialized first (the store, later
+  cache/queue/…) are injected via `MarkReady`. Interface types let tests and infra
+  swap implementations freely.
 - The **scheduling engine (`internal/scheduling`, Phase 6) is pure**: no DB, no
   HTTP, no clock reads. Read `docs/ALGORITHM.md` before touching it.
 - From the **repo root**, run `go build ./backend/...`, `go vet ./backend/...`, and

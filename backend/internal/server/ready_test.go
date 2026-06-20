@@ -19,19 +19,27 @@ import (
 // (and currently empty), so it needs no methods.
 type fakeStore struct{}
 
-// TestReadyz verifies the readiness probe returns 200 with the request-id header.
-// Readiness is established at startup — the service serves only after every
-// dependency initializes — so a reachable /readyz is always ready. This is an
-// infrastructure check, not endpoint functionality.
+// TestReadyz verifies the readiness probe gates on startup: 503 until MarkReady,
+// 200 afterward. Liveness (/healthz) is independent of this — see TestHealthz,
+// which gets 200 from the same un-readied server. Infrastructure check, not
+// endpoint functionality.
 func TestReadyz(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv := httptest.NewServer(New(Options{Logger: logger, Store: fakeStore{}}))
-	defer srv.Close()
+	s := New(Options{Logger: logger})
+	ts := httptest.NewServer(s)
+	defer ts.Close()
 
-	resp, err := srv.Client().Get(srv.URL + pathReadyz)
+	// Before dependencies initialize: not ready.
+	resp, err := ts.Client().Get(ts.URL + pathReadyz)
 	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))
+	require.NoError(t, resp.Body.Close())
+
+	// After MarkReady: ready.
+	s.MarkReady(fakeStore{})
+	resp, err = ts.Client().Get(ts.URL + pathReadyz)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 }

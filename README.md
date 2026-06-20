@@ -42,7 +42,7 @@ clean checkout:
 ```bash
 mage startStack                      # build + start API + Postgres (creates .env.json on first run)
 curl localhost:8090/healthz          # -> {"status":"ok"}   (liveness)
-curl localhost:8090/readyz           # -> {"status":"ok"}   (readiness — pings the DB)
+curl localhost:8090/readyz           # -> {"status":"ok"}   (readiness — 503 until deps init, then 200)
 mage testUnit                        # unit tests (-tags testunit) + Yaak secret-check tests
 mage serviceLogs                     # follow service logs
 mage resetStack                      # wipe the DB volume and start fresh

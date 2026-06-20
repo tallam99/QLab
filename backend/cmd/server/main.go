@@ -1,19 +1,23 @@
 // Command server is the QLab data API entrypoint.
 //
-// It stays thin by design: load config from the environment, build the logger,
-// wire the HTTP handler, and serve with graceful shutdown. All logic lives in
+// It stays thin by design: load config, build the logger, start serving (so
+// liveness is up immediately), initialize dependencies with bounded retry, mark
+// the service ready, and serve until a shutdown signal. All logic lives in
 // internal/.
 package main
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/tallam99/qlab/backend/internal/clients/postgres"
 	"github.com/tallam99/qlab/backend/internal/config"
@@ -28,13 +32,19 @@ const (
 	readHeaderTimeout = 5 * time.Second
 	// shutdownTimeout bounds graceful drain of in-flight requests on SIGTERM.
 	shutdownTimeout = 10 * time.Second
-	// databaseConnectTimeout bounds the boot-time connect + ping so a missing
-	// database fails the process fast instead of hanging startup.
-	databaseConnectTimeout = 10 * time.Second
+)
+
+// Dependency-init retry. The goal: ride out a transient failure (e.g. a Neon
+// database waking from scale-to-zero) without waiting long on a real outage.
+const (
+	dbInitAttempts  = 5
+	dbInitBaseDelay = 500 * time.Millisecond
+	dbInitMaxDelay  = 4 * time.Second
+	dbPingTimeout   = 5 * time.Second
 )
 
 // Log attribute keys (reused across log sites, so kept as consts for a single
-// spelling). One-off log *messages* stay inline below.
+// spelling). One-off log messages stay inline below.
 const (
 	attrError = "error"
 	attrAddr  = "addr"
@@ -42,15 +52,20 @@ const (
 )
 
 func main() {
-	// Bootstrap logger for the pre-config window: JSON so an early config-load
-	// failure is still structured in Cloud Logging (the environment isn't known
-	// yet, so we can't pick text-vs-JSON by it). Replaced below once config loads.
+	if err := run(); err != nil {
+		slog.Error("server exited", slog.Any(attrError, err))
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	// Bootstrap logger (JSON) so a failure before config is loaded is still
+	// structured in Cloud Logging; replaced once the environment is known.
 	slog.SetDefault(logging.New(logging.Options{Local: false, Level: slog.LevelInfo}))
 
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("load config", slog.Any(attrError, err))
-		os.Exit(1)
+		return fmt.Errorf("load config: %w", err)
 	}
 
 	// Verbose locally, info and above in the cloud.
@@ -61,35 +76,17 @@ func main() {
 	logger := logging.New(logging.Options{Local: cfg.IsLocal(), Level: logLevel})
 	slog.SetDefault(logger)
 
-	// Build the pool, then construct the store — which pings the database — before
-	// serving, so a misconfigured or unreachable database is a clear boot failure,
-	// not a stream of failing requests, and the store handed to the server is
-	// already health-checked.
-	dbCtx, dbCancel := context.WithTimeout(context.Background(), databaseConnectTimeout)
-	pool, err := postgres.New(dbCtx, postgres.Options{DatabaseURL: cfg.DatabaseURL})
-	if err != nil {
-		dbCancel()
-		logger.Error("open database pool", slog.Any(attrError, err))
-		os.Exit(1)
-	}
-	defer pool.Close()
-
-	dataStore, err := pgstore.New(dbCtx, pool)
-	dbCancel()
-	if err != nil {
-		logger.Error("connect database", slog.Any(attrError, err))
-		os.Exit(1)
-	}
-	logger.Info("database connected")
-
+	// Build the handler and start serving immediately, so liveness (/healthz) is
+	// up before dependencies initialize. /readyz stays not-ready until MarkReady.
+	srvHandler := server.New(server.Options{Logger: logger})
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           server.New(server.Options{Logger: logger, Store: dataStore}),
+		Handler:           srvHandler,
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
-	// Cloud Run sends SIGTERM to drain a container; also handle SIGINT for local
-	// Ctrl-C. NotifyContext cancels ctx on either signal.
+	// Cloud Run sends SIGTERM to drain; also handle SIGINT for local Ctrl-C. The
+	// context cancels on either signal, which also aborts dependency init mid-start.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
@@ -101,18 +98,67 @@ func main() {
 		}
 	}()
 
+	// Initialize dependencies with bounded retry; the listener (and /healthz) is
+	// already up, so a slow database doesn't look like a dead container.
+	pool, dataStore, err := initStore(ctx, logger, cfg.DatabaseURL)
+	if err != nil {
+		shutdownServer(srv, logger)
+		return fmt.Errorf("initialize dependencies: %w", err)
+	}
+	defer pool.Close()
+
+	srvHandler.MarkReady(dataStore)
+	logger.Info("database connected; serving")
+
 	select {
 	case err := <-errCh:
-		logger.Error("server failed", slog.Any(attrError, err))
-		os.Exit(1)
+		return fmt.Errorf("serve: %w", err)
 	case <-ctx.Done():
 		logger.Info("server shutting down")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownServer(srv, logger)
+	return nil
+}
+
+// initStore opens the Postgres pool and verifies it, retrying transient failures
+// with bounded exponential backoff. A returned store is ready to use; an error
+// means the database stayed unreachable, and the caller should give up.
+func initStore(ctx context.Context, logger *slog.Logger, databaseURL string) (*pgxpool.Pool, *pgstore.Store, error) {
+	pool, err := postgres.New(ctx, postgres.Options{DatabaseURL: databaseURL})
+	if err != nil {
+		return nil, nil, fmt.Errorf("open database pool: %w", err)
+	}
+
+	delay := dbInitBaseDelay
+	for attempt := 1; ; attempt++ {
+		pingCtx, cancel := context.WithTimeout(ctx, dbPingTimeout)
+		dataStore, err := pgstore.New(pingCtx, pool)
+		cancel()
+		if err == nil {
+			return pool, dataStore, nil
+		}
+		if attempt >= dbInitAttempts {
+			pool.Close()
+			return nil, nil, fmt.Errorf("database unreachable after %d attempts: %w", dbInitAttempts, err)
+		}
+		logger.Warn("database not ready; retrying",
+			slog.Any(attrError, err), slog.Int("attempt", attempt), slog.Duration("retry_in", delay))
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			pool.Close()
+			return nil, nil, ctx.Err()
+		}
+		delay = min(delay*2, dbInitMaxDelay)
+	}
+}
+
+// shutdownServer drains in-flight requests within shutdownTimeout.
+func shutdownServer(srv *http.Server, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("graceful shutdown failed", slog.Any(attrError, err))
-		os.Exit(1)
 	}
 }

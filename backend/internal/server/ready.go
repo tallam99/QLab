@@ -2,13 +2,20 @@ package server
 
 import "net/http"
 
-// readyz is the readiness probe. Every dependency is initialized — and verified —
-// before the service starts serving (see cmd/server), and a dependency that fails
-// to initialize stops startup entirely. So by the time this endpoint can answer,
-// the service is ready: a reachable /readyz is itself the signal, and there is
-// nothing to re-check per request.
+// readyBodyUnavailable is the response body while the service is still starting up.
+const readyBodyUnavailable = `{"status":"unavailable"}` + "\n"
+
+// readyz is the readiness probe: 503 until the service has initialized its
+// dependencies (MarkReady), 200 afterward. Liveness (/healthz) is up from the
+// start; readiness gates traffic only until startup completes. It's a one-way
+// transition established at startup, not a per-request re-check.
 func (s *Server) readyz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set(headerContentType, contentTypeJSON)
+	if !s.ready.Load() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(readyBodyUnavailable))
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(healthBody))
 }
