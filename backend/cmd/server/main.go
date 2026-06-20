@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/tallam99/qlab/backend/internal/config"
+	"github.com/tallam99/qlab/backend/internal/db"
 	"github.com/tallam99/qlab/backend/internal/logging"
 	"github.com/tallam99/qlab/backend/internal/server"
 )
@@ -26,6 +27,9 @@ const (
 	readHeaderTimeout = 5 * time.Second
 	// shutdownTimeout bounds graceful drain of in-flight requests on SIGTERM.
 	shutdownTimeout = 10 * time.Second
+	// databaseConnectTimeout bounds the boot-time connect + ping so a missing
+	// database fails the process fast instead of hanging startup.
+	databaseConnectTimeout = 10 * time.Second
 )
 
 // Log attribute keys (reused across log sites, so kept as consts for a single
@@ -56,9 +60,20 @@ func main() {
 	logger := logging.New(logging.Options{Local: cfg.IsLocal(), Level: logLevel})
 	slog.SetDefault(logger)
 
+	// Connect (and ping) Postgres before serving so a misconfigured or unreachable
+	// database is a clear boot failure, not a stream of failing requests.
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), databaseConnectTimeout)
+	pool, err := db.Connect(dbCtx, db.Options{DatabaseURL: cfg.DatabaseURL})
+	dbCancel()
+	if err != nil {
+		logger.Error("connect database", slog.Any(attrError, err))
+		os.Exit(1)
+	}
+	defer pool.Close()
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           server.New(server.Options{Logger: logger}),
+		Handler:           server.New(server.Options{Logger: logger, DB: pool}),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 

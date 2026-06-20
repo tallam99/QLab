@@ -16,14 +16,20 @@ import (
 )
 
 // Route paths, kept as consts so they have a single source of truth.
-const pathHealthz = "/healthz"
+const (
+	pathHealthz = "/healthz"
+	pathReadyz  = "/readyz"
+)
 
 // Options configures New. A struct (rather than positional params) so the server
-// can take new dependencies (DB, engine, auth) in later phases without churning
+// can take new dependencies (engine, auth) in later phases without churning
 // call sites.
 type Options struct {
 	// Logger is the base logger; middleware derives request-scoped loggers from it.
 	Logger *slog.Logger
+	// DB backs the readiness probe. May be nil (the probe then reports
+	// unavailable) so handler-only tests need not stand up a database.
+	DB Pinger
 }
 
 // New builds the HTTP handler with the middleware stack and routes wired in.
@@ -36,7 +42,8 @@ func New(opts Options) http.Handler {
 	r.Use(middleware.RealIP)                 // trust X-Forwarded-For/X-Real-IP so logs show the client ip
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
 
-	r.Get(pathHealthz, healthz)
+	r.Get(pathHealthz, healthz)        // liveness: is the process up?
+	r.Get(pathReadyz, readyz(opts.DB)) // readiness: can it reach the database?
 
 	return r
 }
