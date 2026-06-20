@@ -44,15 +44,20 @@ CI (Phase 3). Test the checker itself with
 You can drive `production`, but it's deliberately built to resist thoughtless
 mutations:
 
-- The `production` environment is **red** — if the env selector isn't green/amber,
+- The `production` environment is **red** — if the env selector isn't teal/amber,
   stop and think.
 - Destructive / state-mutating requests live in the **"Danger — mutates data"
   folder**, never mixed with reads.
-- Danger-folder requests against production must include a `confirm` variable
-  (empty by default, e.g. as `?confirm=${[ confirm ]}` or an `X-Confirm` header).
-  With `confirm` unset, the request is malformed/rejected — you have to *set it on
-  purpose* to fire it. (Server-side enforcement of `confirm` lands with the
-  mutating endpoints in Phase 7.)
+- The Danger folder carries an `X-Yaak-Confirm` header set to
+  `${[ prompt.text(...) ]}`, which **every request in the folder inherits**. On each
+  send, Yaak pops a confirmation dialog; **cancelling aborts the send**. This is
+  entirely client-side (a Yaak template function) — no server cooperation, and the
+  header is ignored by the API. To add a destructive request, just drop it in the
+  folder; it inherits the prompt automatically.
+
+> The prompt fires for danger-folder requests in **every** environment, not just
+> production — destructive calls always warrant a confirm. If you're iterating
+> locally and the dialog is in the way, temporarily disable the folder header.
 
 ## Two ways to use it: GUI (Windows) vs CLI (WSL)
 
@@ -106,8 +111,8 @@ import format: `yaakSchema` + `resources`). So: **GUI ↔ file** via import/expo
 - **Never** store credentials (any environment) in the committed workspace — keep
   them in your local Yaak env and reference them as `${[ auth_token ]}`. The
   pre-commit check enforces this.
-- New mutating requests go in the **Danger** folder and wire up the `confirm`
-  variable; reads can live at the top level.
+- New mutating requests go in the **Danger** folder (they inherit its confirmation
+  prompt); reads can live at the top level.
 - These requests double as living docs and a manual-regression checklist before pushing.
 
 Yaak: https://yaak.app/ · convention detail in `docs/PLAN.md` ("Yaak as the API

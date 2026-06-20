@@ -104,12 +104,6 @@
             "name": "auth_token",
             "value": "",
             "id": null
-          },
-          {
-            "enabled": true,
-            "name": "confirm",
-            "value": "",
-            "id": null
           }
         ],
         "color": "#F87171",
@@ -123,10 +117,17 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": null,
         "name": "Danger — mutates data",
-        "description": "Destructive / state-mutating requests only. Against production these require the `confirm` variable to be set deliberately (empty by default).",
+        "description": "Destructive / state-mutating requests only. Every request here inherits the folder's X-Yaak-Confirm header, whose prompt.text() forces a confirmation dialog on each send — cancel aborts the send. Entirely client-side (Yaak); the header is ignored by the server.",
         "authentication": {},
         "authenticationType": null,
-        "headers": [],
+        "headers": [
+          {
+            "enabled": true,
+            "name": "X-Yaak-Confirm",
+            "value": "${[ prompt.text(title='Run this destructive request?', label='Type the target resource id to confirm', placeholder='e.g. lab id') ]}",
+            "id": null
+          }
+        ],
         "sortPriority": 0.0
       }
     ],
