@@ -37,9 +37,9 @@ land in Phase 4.
   Firebase Hosting origin).
 - `internal/server/` — the server: router, handlers (methods on `Server`), and the
   lifecycle. `New` returns a `*Server`; `Run(ctx)` serves immediately (so
-  `/healthz` liveness is 200 at once), runs the registered dependency injectors
+  `/healthq` liveness is 200 at once), runs the registered dependency injectors
   (`InjectDependency` / `WithPostgres`, private `initPgStore`), calls `Ready()` to
-  flip `/readyz` to 200, then drains and closes deps on shutdown. `/readyz` is 503
+  flip `/readyq` to 200, then drains and closes deps on shutdown. `/readyq` is 503
   until ready.
 
 ## Conventions
@@ -69,10 +69,10 @@ land in Phase 4.
   `server.New` with a nil required dependency); the `Recoverer` middleware turns
   request-time panics into a logged 500 rather than a crash.
 - **The server owns its lifecycle** (`Run(ctx)`): it starts listening *before*
-  dependencies initialize, so `/healthz` is up immediately and the platform never
+  dependencies initialize, so `/healthq` is up immediately and the platform never
   mistakes slow startup for a dead container. `Run` then runs the registered
   injectors (their constructors verify health — e.g. `pgstore.New` pings — with
-  bounded retry to ride out transient failures), calls `Ready()` to flip `/readyz`
+  bounded retry to ride out transient failures), calls `Ready()` to flip `/readyq`
   to 200, and on shutdown drains the HTTP server then closes dependencies.
 - **Add dependencies via `InjectDependency`, not new setter methods.** A dependency
   is a `func(ctx, *Server) error` that initializes it (its constructor verifies
@@ -93,7 +93,7 @@ land in Phase 4.
   and server lifecycle/wiring only. Endpoint *functionality* belongs in dedicated
   integration suites that exercise the full stack (DB + engine + API), not here.
 - One focused, table-driven test per behavior, in a file mirroring its source
-  (`health_test.go` covers the `/healthz` liveness probe).
+  (`health_test.go` covers the `/healthq` liveness probe).
 - **Tag tests by the infrastructure they need.** Unit tests (no infra) carry
   `//go:build testunit` and run via `mage testUnit`. Integration/database suites
   get their own tags (e.g. `integration`, `database`) as they land, so each tier
@@ -105,8 +105,8 @@ The service now requires `DATABASE_URL` and pings Postgres on boot, so run it
 through the Compose stack rather than bare:
 
     mage startStack                        # from repo root: API + Postgres
-    curl localhost:8090/healthz            # {"status":"ok"}  (liveness)
-    curl localhost:8090/readyz             # {"status":"ok"}  (readiness — DB reachable)
+    curl localhost:8090/healthq            # {"status":"ok"}  (liveness)
+    curl localhost:8090/readyq             # {"status":"ok"}  (readiness — DB reachable)
 
 To run the binary directly, point it at a Postgres instance:
 

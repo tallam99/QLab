@@ -26,10 +26,14 @@ import (
 	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
 
-// Route paths, kept as consts so they have a single source of truth.
+// Route paths, kept as consts so they have a single source of truth. The "q"
+// suffix is for QLab and deliberately avoids "/healthz": Google Cloud Run's front
+// end intercepts /healthz and answers it itself, so a request to /healthz never
+// reaches this service (it returns a Google 404). /healthq and /readyq are not
+// reserved, so they reach our handlers.
 const (
-	pathHealthz = "/healthz"
-	pathReadyz  = "/readyz"
+	pathHealthq = "/healthq"
+	pathReadyq  = "/readyq"
 )
 
 const (
@@ -76,7 +80,7 @@ type Server struct {
 	handler    http.Handler
 	httpServer *http.Server
 	// ready flips false->true once (Ready) when dependencies are initialized;
-	// /readyz reflects it. Atomic because request goroutines read it.
+	// /readyq reflects it. Atomic because request goroutines read it.
 	ready atomic.Bool
 	// injectors initialize and attach runtime dependencies; Run executes them
 	// after the listener is up.
@@ -106,8 +110,8 @@ func New(opts Options) *Server {
 	r.Use(httpmw.Recoverer(opts.Logger))     // turn downstream panics into a logged 500, never a crash
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
 
-	r.Get(pathHealthz, s.healthz) // liveness: is the process up? (always 200)
-	r.Get(pathReadyz, s.readyz)   // readiness: have dependencies initialized?
+	r.Get(pathHealthq, s.healthq) // liveness: is the process up? (always 200)
+	r.Get(pathReadyq, s.readyq)   // readiness: have dependencies initialized?
 
 	s.handler = r
 	s.httpServer = &http.Server{
@@ -131,7 +135,7 @@ func (s *Server) InjectDependency(inject func(context.Context, *Server) error) {
 }
 
 // Ready reports whether every dependency needed to serve traffic is in place,
-// latching the result so /readyz flips on. It short-circuits once latched.
+// latching the result so /readyq flips on. It short-circuits once latched.
 func (s *Server) Ready() bool {
 	if s.ready.Load() {
 		return true

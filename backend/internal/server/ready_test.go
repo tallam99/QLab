@@ -18,16 +18,16 @@ import (
 // (and currently empty), so it needs no methods.
 type fakeStore struct{}
 
-// TestReadyz verifies the readiness probe gates on startup: 503 until the server
-// is marked ready, 200 afterward. Liveness (/healthz) is independent — see
-// TestHealthz, which gets 200 from the same un-readied server.
-func TestReadyz(t *testing.T) {
+// TestReadyq verifies the readiness probe gates on startup: 503 until the server
+// is marked ready, 200 afterward. Liveness (/healthq) is independent — see
+// TestHealthq, which gets 200 from the same un-readied server.
+func TestReadyq(t *testing.T) {
 	s := New(Options{Logger: logging.Noop()})
 	ts := httptest.NewServer(s)
 	defer ts.Close()
 
 	// Before dependencies are in place: not ready.
-	resp, err := ts.Client().Get(ts.URL + pathReadyz)
+	resp, err := ts.Client().Get(ts.URL + pathReadyq)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))
@@ -37,7 +37,7 @@ func TestReadyz(t *testing.T) {
 	s.store = fakeStore{}
 	require.True(t, s.Ready())
 
-	resp, err = ts.Client().Get(ts.URL + pathReadyz)
+	resp, err = ts.Client().Get(ts.URL + pathReadyq)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())

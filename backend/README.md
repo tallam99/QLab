@@ -2,8 +2,8 @@
 
 The Go service: the Connect-RPC API and the scheduling engine.
 
-> **Status:** Phase 2 — an HTTP service with `/healthz` (liveness, up immediately)
-> and `/readyz` (readiness, 503 until dependencies initialize), structured logging,
+> **Status:** Phase 2 — an HTTP service with `/healthq` (liveness, up immediately)
+> and `/readyq` (readiness, 503 until dependencies initialize), structured logging,
 > a boot-time DB connection with bounded retry, and a multi-stage Docker build. The
 > Connect-RPC API, query layer, and engine land in later phases (see `docs/PLAN.md`).
 
@@ -20,7 +20,7 @@ The Go service: the Connect-RPC API and the scheduling engine.
       store/           data store: business interface (interface.go) …
         pgstore/       …and its Postgres-backed implementation (io.Closer)
       httpmw/          HTTP middleware: request-id logging, panic recovery, CORS
-      server/          router, handlers, and lifecycle (New + Run; /healthz, /readyz)
+      server/          router, handlers, and lifecycle (New + Run; /healthq, /readyq)
     migrations/        goose migrations (empty until Phase 4)
     Dockerfile         multi-stage build → distroless/static
 
@@ -39,8 +39,8 @@ The service requires `DATABASE_URL` and pings Postgres on boot, so the normal pa
 is the Compose stack:
 
     mage startStack                     # from repo root: API + Postgres
-    curl localhost:8090/healthz         # -> {"status":"ok"}  (liveness)
-    curl localhost:8090/readyz          # -> {"status":"ok"}  (readiness — 503 until deps init, then 200)
+    curl localhost:8090/healthq         # -> {"status":"ok"}  (liveness)
+    curl localhost:8090/readyq          # -> {"status":"ok"}  (readiness — 503 until deps init, then 200)
 
 To run the binary directly, supply a database:
 
