@@ -63,8 +63,10 @@ below).
   Docker Desktop). The daemon auto-starts on every WSL launch — nothing to start by
   hand — and the user is in the `docker` group so `docker` needs no `sudo`. systemd
   is already enabled in the distro (`/etc/wsl.conf` → `[boot] systemd=true`).
-- **Node** via `nvm` (Node 22); **`firebase`** via the keep-alive workaround in the
-  troubleshooting log.
+- **Node** via `nvm` (Node 24, current LTS); **`firebase`** via the keep-alive
+  workaround in the troubleshooting log.
+- **`gcloud`** installed natively in WSL (not the `/mnt/c` passthrough) — but auth
+  and all cloud use are **user-only** (see `CLAUDE.md`).
 
 ### One-time WSL setup
 

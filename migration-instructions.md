@@ -18,9 +18,10 @@ the prior conversation's context, so it should read this file (and `CLAUDE.md`,
   `neonctl`, Firebase staging/prod) — Claude never authenticates to or touches cloud
   infra, even read-only. Claude operates **local** infra (docker, postgres,
   migrations, tests) autonomously. See `CLAUDE.md`.
-- **Already set up in WSL home (persists — do NOT redo):** `nvm` + Node 22; the
-  `firebase` CLI with the keep-alive workaround (`~/.firebase-no-keepalive.js` +
-  the `firebase()` wrapper in `~/.bashrc`); firebase is logged in.
+- **Already set up in WSL home (persists — do NOT redo):** `nvm` + Node 24 (default);
+  the `firebase` CLI with the keep-alive workaround (`~/.firebase-no-keepalive.js` +
+  the `firebase()` wrapper in `~/.bashrc`); firebase is logged in (`projects:list`
+  shows `qlab-staging` + `qlab-production`).
 
 ## Who does what
 
@@ -32,25 +33,20 @@ the prior conversation's context, so it should read this file (and `CLAUDE.md`,
 
 ## Steps
 
-### 1. Get the repo into WSL (latest commits are LOCAL/unpushed)
+### 1. Get the repo into WSL
 
-The recent docs commits exist only on the Windows clone. Pick one:
+The branch `tallam/init-plans-docs` is **pushed to GitHub** before migration, so
+clone fresh for a clean LF checkout:
 
-- **A — copy the local clone (no push needed):**
-  ```bash
-  git config --global core.autocrlf false
-  cp -a "/mnt/c/Users/thfif/repos/qlab" ~/repos/qlab
-  cd ~/repos/qlab
-  git add --renormalize .     # normalize any CRLF from the Windows checkout to LF
-  git status                   # confirm branch + clean history
-  ```
-- **B — push then clone fresh (cleanest LF checkout; needs approval to push):**
-  from the Windows session: `git push -u origin tallam/init-plans-docs`, then:
-  ```bash
-  git config --global core.autocrlf false
-  git clone https://github.com/tallam99/QLab.git ~/repos/qlab
-  cd ~/repos/qlab && git checkout tallam/init-plans-docs
-  ```
+```bash
+git config --global core.autocrlf false
+git clone https://github.com/tallam99/QLab.git ~/repos/qlab
+cd ~/repos/qlab && git checkout tallam/init-plans-docs
+```
+
+(Fallback if something local wasn't pushed: `cp -a "/mnt/c/Users/thfif/repos/qlab"
+~/repos/qlab`, then `cd ~/repos/qlab && git config core.autocrlf false && git add
+--renormalize .`.)
 
 ### 2. Docker Engine — native + auto-starting  (USER, sudo)
 
@@ -80,12 +76,29 @@ go version && buf --version && mage --version
 ### 4. Verify Node + firebase (already configured)
 
 ```bash
-node -v          # v22.x
+node -v          # v24.x (current LTS)
 which firebase   # must be the nvm path, NOT /mnt/c/...
 firebase --version
+firebase projects:list   # via the ~/.bashrc wrapper; should list qlab-staging + qlab-production
 ```
 
-### 5. Claude Code in WSL  (USER)
+### 5. Google Cloud SDK (gcloud) — native WSL install  (Claude or user; no sudo)
+
+All terminal tooling lives in WSL, so install gcloud in Linux rather than relying on
+the `/mnt/c` Windows passthrough. Home-dir install, no sudo:
+
+```bash
+curl -fsSL https://sdk.cloud.google.com > /tmp/gcloud-install.sh
+bash /tmp/gcloud-install.sh --disable-prompts --install-dir="$HOME"
+# adds ~/google-cloud-sdk/bin to PATH via ~/.bashrc; reload the shell, then:
+gcloud --version
+```
+
+**Auth and all cloud use are USER-only** (boundary): the user runs `gcloud auth
+login` and any project/billing/API/Neon commands. Claude installs the SDK but never
+authenticates to or runs commands against cloud infra.
+
+### 6. Claude Code in WSL  (USER)
 
 ```bash
 npm i -g @anthropic-ai/claude-code
@@ -93,7 +106,7 @@ cd ~/repos/qlab
 claude           # launch; resume Phase 0 / start Phase 1 from here
 ```
 
-### 6. VS Code
+### 7. VS Code
 
 Install the **Remote – WSL** extension (in Windows VS Code), then from the WSL
 shell: `code ~/repos/qlab`. The window renders on Windows; the filesystem,
