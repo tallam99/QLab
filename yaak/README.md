@@ -77,24 +77,32 @@ them (and the versioned source of truth).
 
 You don't point the GUI at WSL files — you **import the committed JSON** through
 Yaak's settings menu (this is *not* the "Open Folder" option; see the warning
-below).
+below). Two `~/.bashrc` aliases shuttle the file across the WSL↔Windows boundary
+(the `\\wsl.localhost\…` share is flaky in native file dialogs, so we stage
+through the Windows Downloads folder):
 
-1. Copy the file out of WSL to somewhere the Windows file picker reads cleanly
-   (the `\\wsl.localhost\…` share can be flaky in native dialogs). From a WSL
-   shell:
+```bash
+# one-time, in ~/.bashrc (paths are for this machine's Windows user):
+alias copyyaak='cp ~/repos/qlab/yaak/qlab.yaak.json /mnt/c/Users/thfif/Downloads/'
+alias pasteyaak='cp /mnt/c/Users/thfif/Downloads/qlab.yaak.json ~/repos/qlab/yaak/qlab.yaak.json'
+```
 
-       cp ~/repos/qlab/yaak/qlab.yaak.json /mnt/c/Users/<you>/Downloads/
+**Import (repo → GUI):**
 
+1. In a WSL shell: `copyyaak`.
 2. In Yaak, open the **settings dropdown** (the gear/`⋯` icon, top of the
-   window) → under **"Share Workspace(s)"** click **"Import Data"** → select the
-   `qlab.yaak.json` you just copied. This creates the QLab workspace in the GUI's
-   own (Windows) database.
+   window) → under **"Share Workspace(s)"** click **"Import Data"** → select
+   `Downloads\qlab.yaak.json`. This creates the QLab workspace in the GUI's own
+   (Windows) database.
 3. Pick the `local` / `staging` / `production` environment (top bar) and send
    requests.
-4. To commit changes you make in the GUI: same settings dropdown → **"Export
-   Data"**, save the file, copy it back over `~/repos/qlab/yaak/qlab.yaak.json`
-   (e.g. `cp /mnt/c/Users/<you>/Downloads/qlab.yaak.json ~/repos/qlab/yaak/`),
-   then commit (the secret check runs on commit).
+
+**Export (GUI → repo), to commit changes you made in the GUI:**
+
+1. Settings dropdown → **"Export Data"**, and **save it as `qlab.yaak.json` in
+   Downloads** (so `pasteyaak` finds it).
+2. In a WSL shell: `pasteyaak`, then review (`git -C ~/repos/qlab diff yaak/`) and
+   commit (the secret check runs on commit).
 
 > **Don't use "New Workspace → Open Folder".** That's Yaak's *Directory Sync*,
 > a different feature that turns a folder into a live-synced workspace. Pointed at
