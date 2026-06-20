@@ -11,8 +11,7 @@ import (
 )
 
 // Options configures New. It is a struct (rather than positional params) so the
-// logger's construction can grow new knobs without churning call sites — the
-// project convention for constructors.
+// logger's construction can grow new knobs without churning call sites.
 type Options struct {
 	// Local selects a human-readable text handler; otherwise a JSON handler for
 	// machine ingestion (Cloud Logging).

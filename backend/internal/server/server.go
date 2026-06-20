@@ -20,7 +20,7 @@ const pathHealthz = "/healthz"
 
 // Options configures New. A struct (rather than positional params) so the server
 // can take new dependencies (DB, engine, auth) in later phases without churning
-// call sites — the project convention for constructors.
+// call sites.
 type Options struct {
 	// Logger is the base logger; middleware derives request-scoped loggers from it.
 	Logger *slog.Logger

@@ -4,12 +4,9 @@ import "fmt"
 
 //go:generate go tool enumer -type=Environment -trimprefix=Env -transform=lower -output=environment_enumer.go
 
-// Environment is the deployment environment the service runs in.
-//
-// Project convention for enums: values are named EnumName<Value> (e.g.
-// EnvLocal), and the zero value is EnumNameUnknown, which is never valid —
-// encountering it in a logical flow means a value was never set, i.e. a
-// programmer error. String()/parse methods are generated (see go:generate).
+// Environment is the deployment environment the service runs in. The zero value,
+// EnvUnknown, is never valid; Decode rejects it. String()/parse methods are
+// generated (see go:generate).
 type Environment int
 
 const (
