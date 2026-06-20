@@ -69,7 +69,8 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # v7+ is required for golangci-lint v2 (the config schema this repo uses).
+        uses: golangci/golangci-lint-action@v7
         with:
           # Pinned to the version validated locally; bump deliberately.
           version: v2.12.2
