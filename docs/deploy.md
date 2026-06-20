@@ -78,17 +78,38 @@ hold different data and diverge without affecting each other.
 
 Why we use them: instead of running two separate database servers for staging and
 production (cost + ops), we keep **one Neon project with two branches** — one for
-production, one for staging — giving two isolated databases at ~$0. (Later you can
-also spin up a throwaway branch per PR to test a migration against real-shaped data,
-then delete it — that's the payoff of copy-on-write.)
+production, one for staging — giving two isolated databases at ~$0.
+
+### Topology: `production` (the default branch) + a `staging` child
+
+Keep the project's **default branch as `production`** and create **one `staging`
+branch off it**. Two branches total — *don't* rename the default to `base` or add a
+third root branch.
+
+This is safe even though `staging` is nominally a "child" of `production`, because
+**a branch is only a copy of its parent at the instant it's created — after that the
+two are completely independent.** There's no ongoing sync; the parent link is used
+by exactly one operation ("reset a branch from its parent"), which we never run. So:
+
+- Right now `production` is empty (no schema yet), so `staging` is born empty too —
+  nothing real is ever copied between them.
+- `staging` then diverges on its own: its own schema (Phase 4 migrations) + seeded
+  demo data, while `production` holds real data. They never cross.
+
+(The symmetric "`base` root + two children" layout is also valid but buys no extra
+isolation — branches are independent regardless — so it's not worth the extra idle
+branch. A data-free `base` only becomes useful *later* if you add per-PR preview
+branches and want to fork them from a schema-only source; you can create it then.)
 
 ### Steps
 
 1. **Create a Neon project** (Neon console → New Project). Pick a region near your
-   Cloud Run region. It comes with one default branch (named `main` or
-   `production`) — treat that as **production**.
-2. **Create a second branch** named `staging` from it (console → Branches → New
-   branch, parent = the default branch). You now have two isolated databases.
+   Cloud Run region (us-east1). It comes with one default branch (often named
+   `main` or `production`) — **this is your production branch** (rename it to
+   `production` if it isn't already).
+2. **Create the `staging` branch** off it (console → Branches → New branch,
+   parent = the default `production` branch, name = `staging`). You now have two
+   independent databases.
 3. **Copy each branch's connection string** (console → Connection Details → pick
    the branch → copy the **pooled** connection string; it ends with
    `?sslmode=require`). One string per branch.
