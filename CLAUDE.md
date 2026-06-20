@@ -26,6 +26,10 @@ This project is built with Claude as the primary engine, with a hard boundary:
 - **Staging / Production** (Cloud Run, Neon branches, Firebase): **the user drives.**
   Claude prepares commands/PRs and reads artifacts the user provides, but never
   deploys, migrates, or mutates staging/prod.
+- **Cloud-provider CLIs/consoles** (`gcloud`, `neonctl`, Firebase staging/prod):
+  Claude must **not authenticate to or invoke them at all — not even read-only
+  listing/verification.** The user runs all cloud auth and commands; Claude only
+  drafts them. (Installing a cloud SDK binary locally is fine; *using* it is not.)
 
 ## Conventions
 
