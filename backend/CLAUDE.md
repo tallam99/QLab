@@ -4,18 +4,23 @@ The Go service: the Connect-RPC API and the scheduling engine. Module path is
 `github.com/tallam99/qlab/backend`.
 
 Read the root `CLAUDE.md` and `docs/PLAN.md` first for the phase boundary and the
-local-vs-cloud rule. **Current status: Phase 1** — a hello-world HTTP service.
+local-vs-cloud rule. **Current status: Phase 2** — the HTTP service plus a local
+Docker Compose stack (Postgres) driven by `mage`. The data model and query layer
+land in Phase 4.
 
 ## Key files
 
 - `cmd/server/main.go` — entrypoint. Keep it thin: load config → build logger →
-  build handler → serve with graceful shutdown. No business logic here.
+  connect DB → build handler → serve with graceful shutdown. No business logic here.
 - `internal/config/` — the *only* place env vars are read (envconfig). Holds the
   `Environment` enum (generated `String()`/parse via enumer).
 - `internal/logging/` — slog setup (text locally, JSON in cloud).
+- `internal/db/` — the Postgres connection pool (pgx). Phase 2 only connects +
+  pings on boot; the query layer (sqlc/squirrel) and migrations land in Phase 4.
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
   (`RequestLogger`, `FromContext`) and panic recovery (`Recoverer`).
-- `internal/server/` — chi router and handlers (currently `/healthz`).
+- `internal/server/` — chi router and handlers: `/healthz` (liveness) and
+  `/readyz` (readiness — pings the DB via the narrow `Pinger` interface).
 
 ## Conventions
 
@@ -57,5 +62,13 @@ local-vs-cloud rule. **Current status: Phase 1** — a hello-world HTTP service.
 
 ## Verify the service
 
-    go run ./cmd/server && curl localhost:8090/healthz   # {"status":"ok"}
-    docker build -t qlab-api . && docker run -p 8090:8090 -e QLAB_ENV=staging qlab-api
+The service now requires `DATABASE_URL` and pings Postgres on boot, so run it
+through the Compose stack rather than bare:
+
+    mage up                                # from repo root: API + Postgres
+    curl localhost:8090/healthz            # {"status":"ok"}  (liveness)
+    curl localhost:8090/readyz             # {"status":"ok"}  (readiness — DB reachable)
+
+To run the binary directly, point it at a Postgres instance:
+
+    DATABASE_URL=postgres://qlab:qlab@localhost:5432/qlab?sslmode=disable go run ./cmd/server

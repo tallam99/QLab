@@ -4,8 +4,9 @@ QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-bench
 scheduling engine** that continuously re-flows a priority queue across
 interchangeable benches as experiments overrun, finish early, or get cancelled.
 
-**Current status:** Phase 0 (foundations). The codebase is mostly not built yet;
-work proceeds through the phases in `docs/PLAN.md`.
+**Current status:** Phase 2 (local dev stack). The Go service and a one-command
+local stack (Docker Compose + Postgres, `mage` targets) are in place; the data
+model, API, and engine are next. Work proceeds through the phases in `docs/PLAN.md`.
 
 ## Read these first
 
@@ -33,8 +34,8 @@ This project is built with Claude as the primary engine, with a hard boundary:
 
 ## Conventions
 
-- **Task runner:** `mage` (`magefile.go`). Targets: `up`, `down`, `reset`, `migrate`,
-  `seed`, `test`, `logs`, `proto`. (Land in Phase 2.)
+- **Task runner:** `mage` (`magefile.go` at the repo root). Targets: `up`, `down`,
+  `reset`, `migrate`, `seed`, `test`, `logs`, `proto`. See `docs/runbook.md`.
 - **Wire format:** Protobuf via Connect-RPC + buf. `.proto` is the contract of record;
   Go + TS types are generated — don't hand-write request/response shapes.
 - **Logging:** `slog` (structured, JSON in cloud). **Tracing:** OpenTelemetry → Cloud

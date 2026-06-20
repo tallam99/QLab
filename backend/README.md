@@ -2,19 +2,22 @@
 
 The Go service: the Connect-RPC API and the scheduling engine.
 
-> **Status:** Phase 1 — a hello-world HTTP service with `/healthz`, structured
-> logging, and a multi-stage Docker build. The API, DB, and engine land in later
-> phases (see `docs/PLAN.md`).
+> **Status:** Phase 2 — an HTTP service with `/healthz` (liveness) and `/readyz`
+> (readiness, pings Postgres), structured logging, a boot-time DB connection, and
+> a multi-stage Docker build. The Connect-RPC API, query layer, and engine land in
+> later phases (see `docs/PLAN.md`).
 
 ## Layout
 
-    cmd/server/        entrypoint (thin: config, logger, wiring, start)
+    cmd/server/        entrypoint (thin: config, logger, DB connect, wiring, start)
     internal/
-      config/          env-driven config (envconfig): PORT, QLAB_ENV;
+      config/          env-driven config (envconfig): PORT, QLAB_ENV, DATABASE_URL;
                        Environment enum (String()/parse generated via enumer)
       logging/         slog logger (text locally, JSON in cloud)
+      db/              Postgres connection pool (pgx); Phase 2 connects + pings only
       httpmw/          HTTP middleware: request-id logging + panic recovery
-      server/          chi router + handlers (currently /healthz)
+      server/          chi router + handlers (/healthz, /readyz)
+    migrations/        goose migrations (empty until Phase 4)
     Dockerfile         multi-stage build → distroless/static
 
 Planned additions (later phases):
@@ -22,16 +25,22 @@ Planned additions (later phases):
     internal/
       scheduling/      the scheduling engine — PURE functions, no DB/HTTP/clock
                        (implements docs/ALGORITHM.md)
-      db/              persistence (pgx, sqlc, squirrel; goose migrations)
+      db/              query layer (sqlc, squirrel) on top of the pool
       gen/             generated Connect/proto Go code (from proto/)
 
 ## Run it
 
-    go run ./cmd/server                 # listens on :8090 (override with PORT)
-    curl localhost:8090/healthz         # -> {"status":"ok"}
+The service requires `DATABASE_URL` and pings Postgres on boot, so the normal path
+is the Compose stack:
 
-    docker build -t qlab-api .          # multi-stage build
-    docker run -p 8090:8090 -e QLAB_ENV=staging qlab-api
+    mage up                             # from repo root: API + Postgres
+    curl localhost:8090/healthz         # -> {"status":"ok"}  (liveness)
+    curl localhost:8090/readyz          # -> {"status":"ok"}  (readiness — DB reachable)
+
+To run the binary directly, supply a database:
+
+    DATABASE_URL=postgres://qlab:qlab@localhost:5432/qlab?sslmode=disable \
+      go run ./cmd/server               # listens on :8090 (override with PORT)
 
 `QLAB_ENV` must be one of `local` / `staging` / `production` (invalid values fail at
 startup). `local` (the default) uses text logs; the others use JSON. The local

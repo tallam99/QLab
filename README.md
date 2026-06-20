@@ -5,8 +5,9 @@ engine** that continuously re-flows the queue when experiments run over, finish
 early, or get cancelled. Built initially for a ~15-person biology lab sharing
 ventilation hoods.
 
-> **Status:** early development — Phase 0 (foundations). Most of the system isn't
-> built yet; see the roadmap below.
+> **Status:** early development. The Go service and a one-command local stack
+> (Docker Compose + Postgres) are up; the data model, API, and engine are next.
+> See the roadmap in [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Documentation
 
@@ -35,9 +36,21 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detail and
 
 ## Local development
 
-The local stack (Docker Compose + Postgres, driven by `mage` targets) lands in
-Phase 2 — see [`docs/runbook.md`](docs/runbook.md). Until then there is nothing to
-run locally.
+The local stack (Go API + Postgres in Docker Compose) is driven by `mage`. From a
+clean checkout:
+
+```bash
+mage up                              # build + start API + Postgres (creates .env on first run)
+curl localhost:8090/healthz          # -> {"status":"ok"}   (liveness)
+curl localhost:8090/readyz           # -> {"status":"ok"}   (readiness — pings the DB)
+mage test                            # Go suite + Yaak secret-check tests
+mage logs                            # follow logs
+mage reset                           # wipe the DB volume and start fresh
+mage down                            # stop (keeps the data volume)
+```
+
+Run `mage` with no args for the full target list. See
+[`docs/runbook.md`](docs/runbook.md) for details.
 
 ## Development environment
 
