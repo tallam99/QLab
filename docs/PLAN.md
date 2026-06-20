@@ -46,7 +46,7 @@ The practical implication: **local infra must be fully scriptable and
 self-contained** (a **[mage](https://magefile.org/)** target set Claude can invoke
 — `up`, `down`, `migrate`, `seed`, `reset`, `test`, `logs`, `proto`), so Claude can
 reproduce and debug any behavior without you in the loop. This is a hard
-requirement on Phase 2 and Phase 4, not a nicety.
+requirement on Phase 2 and Phase 5, not a nicety.
 
 ### 3. Documentation-first, for fast Claude bootstrap
 You must be able to open a fresh Claude session *anywhere* in the codebase and get
@@ -196,7 +196,7 @@ message silently.
 - **Idempotency:** each outbox row has a dedup key so retries don't double-send.
 
 This is detailed in Phase 11 but the **interface + outbox table** should be
-designed early (the table lands in Phase 4's schema) so it's not bolted on.
+designed early (the table lands in Phase 5's schema) so it's not bolted on.
 
 ### Observability & debugging-for-Claude
 
@@ -380,7 +380,45 @@ prod; the PWA can reach the API cross-origin (CORS works).
 
 ---
 
-## Phase 4 — Database: Neon + schema + migrations + seed
+## Phase 4 — Core domain: queue + scheduling engine
+
+**Goal:** Implement the engine **exactly as specified in `docs/ALGORITHM.md`**, as pure,
+exhaustively-tested Go.
+
+**Work:**
+- Implement `internal/scheduling` as **pure functions** over slot slices — *no DB,
+  no HTTP, no clock reads* (the engine contract, `docs/ALGORITHM.md` §10). The corrected
+  model is **a single `reschedule(slots, benches, now)`** (a greedy, priority-
+  ordered, multi-bench list scheduler with gap-fill — `docs/ALGORITHM.md` §5); cascade
+  and pull-forward are the *same* call. No compression, no `MIN_DURATION`, no
+  overflow/infeasible result.
+- **Table-driven `testify` suite** covering the **full §11 test matrix** (16 cases:
+  single-bench, multi-bench, lifecycle) plus invariant assertions (per-bench
+  no-overlap, priority respected, durations unchanged, `actual_start ≥ win_start`
+  and `win_start` monotonic, ACTIVE/history untouched, determinism).
+- Add a **Yaak request per behavior variation** once the API wraps this (Phase 7),
+  mirroring the matrix.
+
+**Exit criteria:** Every §11 case passes; the engine has zero dependencies on
+DB/HTTP/proto (conversions happen at the edges); `mage test` runs it fast.
+
+**Notes:**
+- This is the heart of the product and the easiest thing to get subtly wrong —
+  which is exactly why it was specified up front and is built in isolation before
+  wiring. Resist writing it inside an HTTP handler.
+- **Why this precedes the schema and contract:** the engine's pure domain types
+  (slot, bench, reschedule result) are the canonical shapes that the DB rows
+  (Phase 5) and proto messages (Phase 6) are mapped *from* — so the domain layer is
+  validated by working, tested code before either edge commits to it, rather than
+  the reverse. The engine depends on neither (conversions live at the edges,
+  `docs/ALGORITHM.md` §10), so it can be built first with no infra.
+- The §12 decisions in `docs/ALGORITHM.md` must be signed off (Phase 0) before this
+  starts — the implementation encodes them (notably: window forward-only, and the
+  bench-pool model).
+
+---
+
+## Phase 5 — Database: Neon + schema + migrations + seed
 
 **Goal:** The real data model exists, versioned via migrations, on Neon's staging
 and prod branches, with **seedable demo data for staging/local.**
@@ -392,8 +430,8 @@ and prod branches, with **seedable demo data for staging/local.**
   **equipment as a *pool* of interchangeable benches** (see the data-model note),
   `slots` (id, user_id, lab_id, **pool_id**, **assigned_bench_id** (nullable),
   **priority**, **win_start**, window, duration, **actual_start**, status, note —
-  per `docs/ALGORITHM.md` §1.1), **and `outbox`** (for notifications — designed now per
-  the notifications convention).
+  per `docs/ALGORITHM.md` §1.1; mirror the Phase 4 domain types), **and `outbox`** (for
+  notifications — designed now per the notifications convention).
 - Run migrations against local Postgres and both Neon branches (locally + via
   `mage migrate`; staging/prod runs are triggered by **you**).
 - **Seed scripts** (`mage seed`) that build demo labs/users/bench-pools/queues —
@@ -436,7 +474,7 @@ staging branch.
 
 ---
 
-## Phase 5 — Contract layer (protobuf + codegen)
+## Phase 6 — Contract layer (protobuf + codegen)
 
 **Goal:** `.proto` schemas defined; Go and TypeScript types generated; an empty
 Connect service compiles and serves.
@@ -469,50 +507,18 @@ request hits one Connect endpoint and gets `Unimplemented`.
 
 ---
 
-## Phase 6 — Core domain: queue + scheduling engine
-
-**Goal:** Implement the engine **exactly as specified in `docs/ALGORITHM.md`**, as pure,
-exhaustively-tested Go.
-
-**Work:**
-- Implement `internal/scheduling` as **pure functions** over slot slices — *no DB,
-  no HTTP, no clock reads* (the engine contract, `docs/ALGORITHM.md` §10). The corrected
-  model is **a single `reschedule(slots, benches, now)`** (a greedy, priority-
-  ordered, multi-bench list scheduler with gap-fill — `docs/ALGORITHM.md` §5); cascade
-  and pull-forward are the *same* call. No compression, no `MIN_DURATION`, no
-  overflow/infeasible result.
-- **Table-driven `testify` suite** covering the **full §11 test matrix** (16 cases:
-  single-bench, multi-bench, lifecycle) plus invariant assertions (per-bench
-  no-overlap, priority respected, durations unchanged, `actual_start ≥ win_start`
-  and `win_start` monotonic, ACTIVE/history untouched, determinism).
-- Add a **Yaak request per behavior variation** once the API wraps this (Phase 7),
-  mirroring the matrix.
-
-**Exit criteria:** Every §11 case passes; the engine has zero dependencies on
-DB/HTTP/proto (conversions happen at the edges); `mage test` runs it fast.
-
-**Notes:**
-- This is the heart of the product and the easiest thing to get subtly wrong —
-  which is exactly why it was specified up front and is built in isolation before
-  wiring. Resist writing it inside an HTTP handler.
-- The §12 decisions in `docs/ALGORITHM.md` must be signed off (Phase 0) before this
-  starts — the implementation encodes them (notably: window forward-only, and the
-  bench-pool model).
-
----
-
 ## Phase 7 — API endpoints (wire engine ⇄ DB ⇄ Connect)
 
 **Goal:** Real, persisted operations exposed over the Connect/proto API.
 
 **Work:**
-- Implement the Phase 5 stubs as the engine **events** (`docs/ALGORITHM.md` §6): book/
+- Implement the Phase 6 stubs as the engine **events** (`docs/ALGORITHM.md` §6): book/
   create, clock-in (→ `ACTIVE`, pin to a bench), clock-out / early-finish (→
   `COMPLETE`), cancel (→ `CANCELLED`), overrun (active past scheduled end), and the
   **no-show sweep** (grace lapsed → `NO_SHOW`). Every event mutates state then calls
   the one `reschedule`.
 - Each mutating call: load the pool's open slots **`FOR UPDATE`** → run the pure
-  engine (Phase 6) → persist the recomputed schedule **in one transaction** → write
+  engine (Phase 4) → persist the recomputed schedule **in one transaction** → write
   any resulting notifications to the **outbox** (same tx) → return the updated
   schedule.
 - Enforce **`lab_id` scoping in every query** (defense in depth; pairs with Phase 8).
@@ -611,7 +617,7 @@ test drives login → list.
   Go API is a separate origin.
 - **Vite dev server** runs locally on its own port and proxies API calls to your
   local Go service; in prod the built static files live on Hosting.
-- **You already have typed API access** from Phase 5 codegen — you call generated
+- **You already have typed API access** from Phase 6 codegen — you call generated
   functions, not raw `fetch`. Deliberate, to shield you from contract drift.
 - **PWA = an installable website** (home-screen icon, offline-ish, app-like). The
   manifest describes the installable app; the service worker caches/works offline.
@@ -633,7 +639,7 @@ updates.
   and make execution-order-≠-priority-order legible when gap-fill reorders.
 - **Clock in / out / cancel** actions calling Phase 7 endpoints.
 - **Live updates via SSE:** backend pushes queue-changed events (proto envelope,
-  Phase 5); frontend subscribes via `EventSource` and re-renders (CORS applies to
+  Phase 6); frontend subscribes via `EventSource` and re-renders (CORS applies to
   the stream). On Cloud Run, SSE works over HTTP/1.1 — configure the request
   timeout for long-lived streams.
 - Apply branding: dark `#0F1117`, teal `#00C9A7`, amber `#F59E0B`, red `#F87171`,
@@ -740,7 +746,7 @@ features.
 ## Suggested PR slicing
 
 Each phase is roughly one or a few PRs; keep PRs deployable. `docs/ALGORITHM.md` sign-off
-(Phase 0) and the pure engine (Phase 6) are their own reviewable units. Recommended
+(Phase 0) and the pure engine (Phase 4) are their own reviewable units. Recommended
 order of *first* deploys to prod: Phase 3 (hello world, both surfaces), then auth
-(8) + DB (4) before any real feature, so prod always has working auth + persistence
+(8) + DB (5) before any real feature, so prod always has working auth + persistence
 under whatever ships next.

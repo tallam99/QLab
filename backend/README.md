@@ -21,7 +21,7 @@ The Go service: the Connect-RPC API and the scheduling engine.
         pgstore/       …and its Postgres-backed implementation (io.Closer)
       httpmw/          HTTP middleware: request-id logging, panic recovery, CORS
       server/          router, handlers, and lifecycle (New + Run; /healthq, /readyq)
-    migrations/        goose migrations (empty until Phase 4)
+    migrations/        goose migrations (empty until Phase 5)
     Dockerfile         multi-stage build → distroless/static
 
 Planned additions (later phases):

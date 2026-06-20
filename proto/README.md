@@ -3,7 +3,7 @@
 The protobuf contract — the schema-of-record for the API and SSE events. Go server
 stubs and TypeScript client types are generated from here via `buf`.
 
-> **Status:** not yet populated — created in Phase 5 (see `docs/PLAN.md`).
+> **Status:** not yet populated — created in Phase 6 (see `docs/PLAN.md`).
 
 ## Layout (planned)
 
@@ -18,4 +18,4 @@ stubs and TypeScript client types are generated from here via `buf`.
 - `buf lint` + `buf breaking` gate changes in CI.
 - Validation rules via `protovalidate` (e.g. `window ≥ 0`).
 
-See `docs/PLAN.md` (Phase 5, and the "Wire format" cross-cutting decision).
+See `docs/PLAN.md` (Phase 6, and the "Wire format" cross-cutting decision).

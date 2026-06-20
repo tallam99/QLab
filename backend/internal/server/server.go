@@ -88,7 +88,7 @@ type Server struct {
 	// closers are the injected dependencies that own resources; Run closes them on
 	// shutdown (in registration order, after the HTTP server drains).
 	closers []io.Closer
-	// store is the data store, attached by an injector. Business handlers (Phase 4)
+	// store is the data store, attached by an injector. Business handlers (Phase 5)
 	// must read it only after loading ready, so the atomic acquire pairs with
 	// Ready's release and they observe the write.
 	store store.Store

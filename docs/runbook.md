@@ -43,16 +43,16 @@ same fields.
 | `mage stopStack` | stop and remove containers; **keeps** the data volume |
 | `mage resetStack` | wipe the data volume **and** recreate (fresh DB) |
 | `mage migrate` | apply `goose` migrations (`backend/migrations/`) to local Postgres |
-| `mage seed` | load demo data (lands with the schema in Phase 4) |
+| `mage seed` | load demo data (lands with the schema in Phase 5) |
 | `mage test` | run all test tiers (currently `testUnit` + `testSecurity`; integration/database tiers added later) |
 | `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
 | `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
-| `mage genProto` | `buf generate` (Go + TS from `.proto`; buf config lands in Phase 5) |
+| `mage genProto` | `buf generate` (Go + TS from `.proto`; buf config lands in Phase 6) |
 
 `migrate`/`seed`/`genProto` are wired to their real tools but skip cleanly until
-the content they drive exists (migrations in Phase 4, proto in Phase 5). Unit tests
+the content they drive exists (migrations in Phase 5, proto in Phase 6). Unit tests
 carry a `//go:build testunit` tag; other test tiers (integration, database) get
 their own tags and `mage` targets as they land, each folded into `mage test`.
 

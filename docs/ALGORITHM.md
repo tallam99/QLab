@@ -1,7 +1,7 @@
 # QLab — Scheduling Engine Specification
 
 > This is the **schema-of-record for the core scheduling logic**. It is written
-> *before* any engine code (see `docs/PLAN.md`, Phase 6, which only *implements* this
+> *before* any engine code (see `docs/PLAN.md`, Phase 4, which only *implements* this
 > document). The goal is to surface and settle the hard problems on paper, where
 > they're cheap to change, rather than discovering them in a half-built handler.
 >
@@ -426,7 +426,7 @@ pushes others back. It is *priority*, not a wall-clock anchor:
 
 ---
 
-## 10. Implementation contract (how Phase 6 / Phase 7 must use this)
+## 10. Implementation contract (how Phase 4 / Phase 7 must use this)
 
 - **One pure function: `reschedule(slots, benches, now) → slots`.** No DB, no HTTP,
   no clock reads inside; the caller injects `now`, projected active-end times, and
@@ -445,7 +445,7 @@ pushes others back. It is *priority*, not a wall-clock anchor:
   slot's *specific* bench is chosen by the engine (near clock-in), not fixed at
   booking. The schema therefore needs an **equipment *pool*** concept and a nullable
   assigned-bench, not a hard `equipment_id` at creation. This affects `docs/PLAN.md`
-  Phase 4 — see the sync note when reviewing.
+  Phase 5 — see the sync note when reviewing.
 - **v1 scope (⚠️ REVIEW):** full multi-bench gap-fill is specified above. If the
   first lab has a **single** hood, the same algorithm degenerates correctly to one
   bench — so v1 can ship the general engine with `benches == 1` and grow to N with
@@ -453,7 +453,7 @@ pushes others back. It is *priority*, not a wall-clock anchor:
 
 ---
 
-## 11. Test matrix (drives the Phase 6 table-driven `testify` suite)
+## 11. Test matrix (drives the Phase 4 table-driven `testify` suite)
 
 Each row is one table-test case; expected output is the full resolved schedule
 (per-slot `actualStart`, `bench`, ratcheted `winStart`, notify-flag).
@@ -497,7 +497,7 @@ availability contract; `CLOCK_IN_GRACE = 15 min`). The remaining six are now
    earliness bounded by `winStart`; ratchets later when forced — not symmetric
    around the booked start. ✓
 2. **§1.1 / §10 — dynamic bench assignment.** Equipment is modelled as a *pool*;
-   a bench is chosen near clock-in, not fixed at booking. Drives the Phase 4
+   a bench is chosen near clock-in, not fixed at booking. Drives the Phase 5
    schema. ✓
 3. **§10 — one general N-bench engine.** Ship it with `benches == 1` for the first
    lab rather than a single-bench special case. ✓

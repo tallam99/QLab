@@ -25,7 +25,7 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 	}
 	return cors.Handler(cors.Options{
 		AllowedOrigins: allowedOrigins,
-		// GET/POST cover liveness checks and (Phase 5) Connect-RPC, which is POST
+		// GET/POST cover liveness checks and (Phase 6) Connect-RPC, which is POST
 		// over HTTP. When the Connect API lands, widen the header list for its
 		// protocol headers (Connect-Protocol-Version, Connect-Timeout-Ms, …) or
 		// adopt connectrpc.com/cors.

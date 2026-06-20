@@ -134,7 +134,7 @@ func ResetStack() error {
 }
 
 // Migrate applies goose migrations to local Postgres. Migrations live in
-// backend/migrations (added in Phase 4). goose errors on an empty directory, so
+// backend/migrations (added in Phase 5). goose errors on an empty directory, so
 // until the first migration exists this skips cleanly.
 func Migrate() error {
 	env, err := loadEnv()
@@ -146,16 +146,16 @@ func Migrate() error {
 		return err
 	}
 	if len(sqlFiles) == 0 {
-		fmt.Println("migrate: no migrations yet (added with the schema in Phase 4)")
+		fmt.Println("migrate: no migrations yet (added with the schema in Phase 5)")
 		return nil
 	}
 	return run("go", "run", goosePackage, "-dir", migrationsDir, "postgres", env.hostDatabaseURL(), "up")
 }
 
 // Seed loads demo data into local Postgres. The seed lands with the schema in
-// Phase 4; this placeholder keeps the target in the contract until then.
+// Phase 5; this placeholder keeps the target in the contract until then.
 func Seed() error {
-	fmt.Println("seed: no seed data yet (lands with the schema in Phase 4)")
+	fmt.Println("seed: no seed data yet (lands with the schema in Phase 5)")
 	return nil
 }
 
@@ -204,10 +204,10 @@ func PostgresLogs() error {
 }
 
 // GenProto regenerates Go + TS from the .proto contract via buf. The contract and
-// buf config land in Phase 5; until then this reports there's nothing to do.
+// buf config land in Phase 6; until then this reports there's nothing to do.
 func GenProto() error {
 	if _, err := os.Stat(bufConfigFile); err != nil {
-		fmt.Printf("genproto: no buf config yet (%s lands in Phase 5)\n", bufConfigFile)
+		fmt.Printf("genproto: no buf config yet (%s lands in Phase 6)\n", bufConfigFile)
 		return nil
 	}
 	return run("buf", "generate")

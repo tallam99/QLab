@@ -7,7 +7,7 @@ interchangeable benches as experiments overrun, finish early, or get cancelled.
 **Current status:** Phase 3 (CI/CD). The Go service, a one-command local stack
 (Docker Compose + Postgres, `mage` targets), and the GitHub Actions pipeline
 (CI gate + deploy to Cloud Run + Firebase Hosting, both environments — see
-`docs/deploy.md`) are in place; the data model, API, and engine are next. Work
+`docs/deploy.md`) are in place; the scheduling engine, data model, and API are next. Work
 proceeds through the phases in `docs/PLAN.md`.
 
 ## Read these first
@@ -63,7 +63,7 @@ the `magefile.go` shares it, and `backend/` is a subtree, not a separate module.
 
     backend/    Go API + scheduling engine (internal/scheduling is pure: no DB/HTTP/clock)
     frontend/   React PWA (scaffolded in a later phase)
-    proto/      .proto contract (buf; lands Phase 5)
+    proto/      .proto contract (buf; lands Phase 6)
     docs/       project docs
 
 Per-area `CLAUDE.md` files live with their directories.
