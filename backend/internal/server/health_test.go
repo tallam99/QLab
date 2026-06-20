@@ -16,9 +16,12 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
-// testHandler builds a server with discarded logs; readiness defaults to ready.
+// testHandler builds a server with discarded logs and an always-ready fake store.
 func testHandler() http.Handler {
-	return New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	return New(Options{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Store:  fakeStore{},
+	})
 }
 
 // TestHealthz verifies the liveness probe: it must return 200 with the ok body

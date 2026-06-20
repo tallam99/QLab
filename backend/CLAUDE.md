@@ -21,14 +21,13 @@ land in Phase 4.
   siblings later.
 - `internal/store/` — the data store: the business `Store` interface
   (`interface.go`), implemented by `store/pgstore` over the pool. `pgstore.New`
-  health-checks at construction (so a Store handed onward is trusted live); health
-  is **not** on the interface. Query methods grow here in Phase 4.
+  health-checks at construction (so a Store handed onward is already verified); the
+  store also reports ongoing readiness via `Ready`. Query methods grow here in
+  Phase 4.
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
   (`RequestLogger`, `LoggerFromContext`) and panic recovery (`Recoverer`).
 - `internal/server/` — chi router and handlers (methods on `Server`): `/healthz`
-  (liveness) and `/readyz` (readiness — calls a `ReadinessChecker`, which the
-  store satisfies; defaults to always-ready when unset). `New` resolves each
-  `Options` field to a concrete dependency, defaulting any left unset.
+  (liveness) and `/readyz` (readiness — asks the store via `store.Ready`).
 
 ## Conventions
 
@@ -52,14 +51,16 @@ land in Phase 4.
   and slog attribute keys are package-level consts so they're grep-able and
   changeable in one place. **Log messages are the exception: keep them inline
   unless the same message is emitted from more than one site.**
-- **Programmer-error invariants panic** (e.g. `LoggerFromContext` with no logger);
-  the `Recoverer` middleware turns request-time panics into a logged 500 rather
-  than a crash.
-- **Constructors own their dependencies.** An `Options` struct carries dependencies
-  (or instructions to build them) and `New` resolves each to a concrete value,
-  defaulting any left unset to sensible behavior — rather than requiring callers to
-  supply everything. (`server.New` defaults the logger to `slog.Default()` and
-  readiness to always-ready.)
+- **Programmer-error invariants panic** (e.g. `LoggerFromContext` with no logger,
+  `server.New` with a nil required dependency); the `Recoverer` middleware turns
+  request-time panics into a logged 500 rather than a crash.
+- **Constructors take dependencies as interfaces via an `Options` struct.** The
+  service's dependencies (store, and later cache/queue/bucket/…, plus the logger)
+  are passed in already constructed and *ready*; the service uses them through
+  their interfaces and never configures them. Interface-typed fields let tests and
+  infra swap implementations — including no-op/stub — freely, so behavior is chosen
+  by the caller's implementation, not by server-side defaulting. Required
+  dependencies are validated in `New`.
 - The **scheduling engine (`internal/scheduling`, Phase 6) is pure**: no DB, no
   HTTP, no clock reads. Read `docs/ALGORITHM.md` before touching it.
 - From the **repo root**, run `go build ./backend/...`, `go vet ./backend/...`, and

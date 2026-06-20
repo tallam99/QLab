@@ -17,28 +17,29 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
-// stubReadiness is a ReadinessChecker whose result the test controls.
-type stubReadiness struct{ err error }
+// fakeStore is a store.Store stub whose readiness the test controls. It stands in
+// for any implementation a caller might inject (real, no-op, or failing).
+type fakeStore struct{ ready error }
 
-func (s stubReadiness) Ready(context.Context) error { return s.err }
+func (f fakeStore) Ready(context.Context) error { return f.ready }
 
-// TestReadyz verifies the readiness probe reflects the readiness check: 200 when
-// it passes, 503 when it fails. This is an infrastructure check (is the instance
-// fit to receive traffic?), not endpoint functionality.
+// TestReadyz verifies the readiness probe reflects the store's readiness: 200 when
+// the store reports ready, 503 when it doesn't. This is an infrastructure check
+// (is the instance fit to receive traffic?), not endpoint functionality.
 func TestReadyz(t *testing.T) {
 	cases := []struct {
 		name  string
-		check error
+		ready error
 		want  int
 	}{
-		{name: "dependencies reachable", check: nil, want: http.StatusOK},
-		{name: "dependency unreachable", check: errors.New("refused"), want: http.StatusServiceUnavailable},
+		{name: "store reachable", ready: nil, want: http.StatusOK},
+		{name: "store unreachable", ready: errors.New("refused"), want: http.StatusServiceUnavailable},
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(New(Options{Logger: logger, Readiness: stubReadiness{err: tc.check}}))
+			srv := httptest.NewServer(New(Options{Logger: logger, Store: fakeStore{ready: tc.ready}}))
 			defer srv.Close()
 
 			resp, err := srv.Client().Get(srv.URL + pathReadyz)
