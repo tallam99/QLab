@@ -21,6 +21,11 @@ type Config struct {
 	// points at the Compose Postgres; on Cloud Run it's the Neon string. Required:
 	// the service pings the database on boot, so there is no DB-less mode.
 	DatabaseURL string `envconfig:"DATABASE_URL" required:"true"`
+	// AllowedOrigins is the CORS allow-list — the Firebase Hosting origin(s) the
+	// PWA is served from (the PWA and API are separate origins, decision 0001).
+	// Comma-separated; set per environment to the Hosting URL(s). The local
+	// default is the Vite dev server. Empty means same-origin only (fail closed).
+	AllowedOrigins []string `envconfig:"CORS_ALLOWED_ORIGINS" default:"http://localhost:5173"`
 }
 
 // Load reads and validates configuration from the environment.

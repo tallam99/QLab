@@ -43,7 +43,11 @@ func run() error {
 	logger := slogging.New(slogging.Options{Local: cfg.IsLocal(), Level: logLevel}).
 		With("env", cfg.Env.String())
 
-	s := server.New(server.Options{Logger: logger, Addr: ":" + cfg.Port})
+	s := server.New(server.Options{
+		Logger:         logger,
+		Addr:           ":" + cfg.Port,
+		AllowedOrigins: cfg.AllowedOrigins,
+	})
 	s.InjectDependency(server.WithPostgres(cfg.DatabaseURL))
 
 	// Cloud Run sends SIGTERM to drain a container; also handle SIGINT for local
