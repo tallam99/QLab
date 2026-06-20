@@ -19,7 +19,9 @@ import (
 // Response header and slog attribute keys, kept as consts so they're spelled
 // identically across log sites and grep-able. (One-off log messages stay inline.)
 const (
-	headerRequestID = "X-Request-Id"
+	// HeaderRequestID is the response header carrying the per-request id; exported
+	// so tests and clients can reference the canonical spelling.
+	HeaderRequestID = "X-Request-Id"
 
 	attrRequestID = "request_id"
 	attrMethod    = "method"
@@ -54,7 +56,7 @@ func RequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 
 			// Echo the id on the response so a client (or Claude) can correlate a
 			// response with its log line. Must be set before the handler writes.
-			ww.Header().Set(headerRequestID, reqID)
+			ww.Header().Set(HeaderRequestID, reqID)
 
 			r = r.WithContext(context.WithValue(r.Context(), loggerKey, l))
 			next.ServeHTTP(ww, r)

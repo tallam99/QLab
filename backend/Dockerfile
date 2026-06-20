@@ -18,6 +18,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./cmd/serv
 # Hosting (see docs/decisions/0001).
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/server /server
-EXPOSE 8080
+# Documents the server's default listen port (config default, used locally).
+# Cloud Run ignores EXPOSE and injects its own PORT, which the server respects.
+EXPOSE 8090
 USER nonroot:nonroot
 ENTRYPOINT ["/server"]

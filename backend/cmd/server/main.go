@@ -37,6 +37,11 @@ const (
 )
 
 func main() {
+	// Bootstrap logger for the pre-config window: JSON so an early config-load
+	// failure is still structured in Cloud Logging (the environment isn't known
+	// yet, so we can't pick text-vs-JSON by it). Replaced below once config loads.
+	slog.SetDefault(logging.New(logging.Options{Local: false, Level: slog.LevelInfo}))
+
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("load config", slog.Any(attrError, err))

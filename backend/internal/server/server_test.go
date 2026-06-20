@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
 // Server-package tests are strictly infrastructural — server wiring, lifecycle,
@@ -24,5 +26,5 @@ func TestNotFound(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-	assert.NotEmpty(t, resp.Header.Get("X-Request-Id"))
+	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))
 }

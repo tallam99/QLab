@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
 func testHandler() http.Handler {
@@ -29,7 +31,7 @@ func TestHealthz(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.NotEmpty(t, resp.Header.Get("X-Request-Id"))
+	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))
 
 	var got map[string]string
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
