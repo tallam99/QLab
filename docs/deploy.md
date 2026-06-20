@@ -45,8 +45,8 @@ unreachable, and Cloud Run then marks the revision unhealthy). So:
 - The **backend** Cloud Run deploy will only go green once a **reachable
   database** exists and `DATABASE_URL` resolves to it.
 
-The schema/migrations (Phase 4) are **not** required for this — `/healthz` and
-`/readyz` only need a successful connection, not tables. Two options:
+The schema/migrations (Phase 4) are **not** required for this — `/healthq` and
+`/readyq` only need a successful connection, not tables. Two options:
 
 1. **Recommended:** create a bare **Neon** project/branch now (a few minutes;
    pull just the *creation* part of Phase 4 forward), put its connection string
@@ -119,7 +119,7 @@ branches and want to fork them from a schema-only source; you can create it then
 
 Notes:
 - The **schema/migrations land in Phase 4** — for Phase 3 a bare branch (no tables)
-  is enough for `/healthz` and `/readyz`, which only need a successful *connection*.
+  is enough for `/healthq` and `/readyq`, which only need a successful *connection*.
 - Neon scales to zero, so the first connection after an idle period has a cold
   start; the service's boot retry rides it out, and the Phase 11 weekly cron
   doubles as a keep-alive.
@@ -347,9 +347,9 @@ Then verify (below) and paste the URLs back.
 The service is built to listen *before* dependencies initialize, so map the
 probes accordingly (see `docs/runbook.md` → Health checks):
 
-- **Startup probe → `/readyz`** — holds traffic until the DB connects; give it a
+- **Startup probe → `/readyq`** — holds traffic until the DB connects; give it a
   timeout generous enough for a Neon cold start.
-- **Liveness probe → `/healthz`** — restarts only a genuinely wedged process.
+- **Liveness probe → `/healthq`** — restarts only a genuinely wedged process.
 
 Cloud Run's default startup probe is a TCP check on the port, which our
 listen-early server passes immediately; that's acceptable for Phase 3. To apply
@@ -357,18 +357,18 @@ the HTTP probes explicitly, set them in the console or via a service YAML
 (`gcloud run services replace`):
 
 ```yaml
-# api.run.yaml (excerpt) — startup gated on /readyz, liveness on /healthz
+# api.run.yaml (excerpt) — startup gated on /readyq, liveness on /healthq
 spec:
   template:
     spec:
       containers:
         - image: REGION-docker.pkg.dev/PROJECT/qlab/api:TAG
           startupProbe:
-            httpGet: { path: /readyz }
+            httpGet: { path: /readyq }
             failureThreshold: 30
             periodSeconds: 2
           livenessProbe:
-            httpGet: { path: /healthz }
+            httpGet: { path: /healthq }
             periodSeconds: 10
 ```
 
@@ -380,8 +380,8 @@ After a merge deploys staging (and after you approve prod):
 
 ```sh
 # API up (liveness), and ready (DB reachable):
-curl https://<cloud-run-url>/healthz   # {"status":"ok"}
-curl https://<cloud-run-url>/readyz    # {"status":"ok"} once the DB connects
+curl https://<cloud-run-url>/healthq   # {"status":"ok"}
+curl https://<cloud-run-url>/readyq    # {"status":"ok"} once the DB connects
 
 # PWA served, and reaching the API cross-origin (CORS):
 open https://<PROJECT_ID>.web.app      # hello-world; status line turns teal on success

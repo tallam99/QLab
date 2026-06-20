@@ -53,10 +53,10 @@
         el.textContent = "API base URL not configured at build time";
         el.className = "err";
       } else {
-        fetch(apiBase.replace(/\/$/, "") + "/healthz")
+        fetch(apiBase.replace(/\/$/, "") + "/healthq")
           .then((r) => r.json())
           .then((d) => {
-            el.textContent = "API /healthz → " + JSON.stringify(d);
+            el.textContent = "API /healthq → " + JSON.stringify(d);
             el.className = "ok";
           })
           .catch((e) => {

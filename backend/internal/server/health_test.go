@@ -16,20 +16,20 @@ import (
 )
 
 // testHandler builds a server with discarded logs. It is not marked ready, so it
-// also exercises that liveness (/healthz) is up independent of readiness.
+// also exercises that liveness (/healthq) is up independent of readiness.
 func testHandler() http.Handler {
 	return New(Options{Logger: logging.Noop()})
 }
 
-// TestHealthz verifies the liveness probe: it must return 200 with the ok body
+// TestHealthq verifies the liveness probe: it must return 200 with the ok body
 // and the request-id response header. This is an infrastructure check (is the
 // server up and wired?), not endpoint functionality — that lives in integration
 // suites once real endpoints exist.
-func TestHealthz(t *testing.T) {
+func TestHealthq(t *testing.T) {
 	srv := httptest.NewServer(testHandler())
 	defer srv.Close()
 
-	resp, err := srv.Client().Get(srv.URL + pathHealthz)
+	resp, err := srv.Client().Get(srv.URL + pathHealthq)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {

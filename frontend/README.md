@@ -4,7 +4,7 @@ The React + TypeScript PWA, deployed to Firebase Hosting.
 
 > **Status:** Phase 3 placeholder. A minimal static **hello-world** page lives in
 > `public/`; the CD pipeline deploys it to Firebase Hosting to prove the
-> two-surface topology end-to-end (it fetches the API `/healthz` cross-origin, so
+> two-surface topology end-to-end (it fetches the API `/healthq` cross-origin, so
 > a green status confirms CORS works). The real Vite/React/Tailwind PWA replaces
 > it in Phase 9.
 

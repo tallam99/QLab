@@ -292,7 +292,7 @@ structured logging from the very first line.
 **Work:**
 - Lay out the repo (`backend/`, `frontend/`, `proto/`, `docker-compose.yml`,
   `.github/workflows/`, `docs/`, root `README.md`).
-- `backend/cmd/server/main.go`: minimal HTTP server with a `/healthz` endpoint.
+- `backend/cmd/server/main.go`: minimal HTTP server with a `/healthq` endpoint.
 - `backend/internal/` for everything not meant to be imported externally.
 - **Wire `slog` from the start** (JSON handler, request-id middleware) — don't add
   logging later. A request id on every line is the foundation of the observability
@@ -302,8 +302,8 @@ structured logging from the very first line.
   separately via Firebase Hosting (see topology decision).
 
 **Exit criteria:** `docker build` produces an image; running it, `curl
-localhost:PORT/healthz` returns 200 and emits a structured log line with a request
-id. A Yaak request for `/healthz` exists.
+localhost:PORT/healthq` returns 200 and emits a structured log line with a request
+id. A Yaak request for `/healthq` exists.
 
 **Notes:**
 - Keep `main.go` thin: parse config from env, wire dependencies, start server. All

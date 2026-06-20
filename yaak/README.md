@@ -4,7 +4,7 @@ The committed **Yaak** workspace — our living, runnable catalogue of API behav
 The rule: every time we introduce a new behavior variation worth reproducing, add a
 Yaak request for it (each reschedule scenario, each auth state, each error case).
 
-> **Status:** workspace seeded in Phase 1 with the `/healthz` request and
+> **Status:** workspace seeded in Phase 1 with the `/healthq` request and
 > `local` / `staging` / `production` environments. It grows as the API does
 > (Phases 5/7). See `docs/PLAN.md`.
 
@@ -12,7 +12,7 @@ Yaak request for it (each reschedule scenario, each auth state, each error case)
 
     qlab.yaak.json   exported workspace (versioned, shared)
 
-Requests use a `base_url` environment variable (`${[ base_url ]}/healthz`) so the
+Requests use a `base_url` environment variable (`${[ base_url ]}/healthq`) so the
 same request runs against any environment. `staging` / `production` `base_url`s
 are placeholders until the Cloud Run URLs exist (Phase 3).
 
