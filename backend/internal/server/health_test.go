@@ -16,7 +16,7 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
-// testHandler builds a server with discarded logs and an always-ready fake store.
+// testHandler builds a server with discarded logs and a stub store.
 func testHandler() http.Handler {
 	return New(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),

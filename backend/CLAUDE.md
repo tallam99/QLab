@@ -20,14 +20,14 @@ land in Phase 4.
   access). `clients/postgres` builds the pgx pool; Firebase/storage clients become
   siblings later.
 - `internal/store/` — the data store: the business `Store` interface
-  (`interface.go`), implemented by `store/pgstore` over the pool. `pgstore.New`
-  health-checks at construction (so a Store handed onward is already verified); the
-  store also reports ongoing readiness via `Ready`. Query methods grow here in
-  Phase 4.
+  (`interface.go`, business-domain methods only — empty until Phase 4), implemented
+  by `store/pgstore`. `pgstore.New` pings on construction, so a returned store is
+  guaranteed ready and nothing re-checks it (no health methods on the interface).
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
   (`RequestLogger`, `LoggerFromContext`) and panic recovery (`Recoverer`).
 - `internal/server/` — chi router and handlers (methods on `Server`): `/healthz`
-  (liveness) and `/readyz` (readiness — asks the store via `store.Ready`).
+  (liveness) and `/readyz` (readiness — static 200; the service serves only after
+  every dependency initializes successfully, so being reachable *is* readiness).
 
 ## Conventions
 

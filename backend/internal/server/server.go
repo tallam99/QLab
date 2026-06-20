@@ -62,7 +62,7 @@ func New(opts Options) http.Handler {
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
 
 	r.Get(pathHealthz, s.healthz) // liveness: is the process up?
-	r.Get(pathReadyz, s.readyz)   // readiness: are its dependencies reachable?
+	r.Get(pathReadyz, s.readyz)   // readiness: did every dependency initialize? (static once serving)
 
 	return r
 }
