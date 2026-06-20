@@ -40,6 +40,7 @@ clone fresh for a clean LF checkout:
 
 ```bash
 git config --global core.autocrlf false
+mkdir -p ~/repos
 git clone https://github.com/tallam99/QLab.git ~/repos/qlab
 cd ~/repos/qlab && git checkout tallam/init-plans-docs
 ```
