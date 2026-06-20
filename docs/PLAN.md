@@ -325,7 +325,10 @@ drive the whole local environment unattended.**
 - `.env.example` documenting required vars; real `.env` gitignored.
 - **mage targets Claude needs** (Go-based task runner — `magefile.go`): `up`,
   `down`, `reset` (wipe + recreate), `migrate`, `seed`, `test`, `logs`, `proto`.
-  These are the contract for "Claude operates local infra."
+  These are the contract for "Claude operates local infra." `test` runs the Go
+  suite **and** the Yaak secret-check tests (`python3
+  scripts/test_check_yaak_secrets.py`) so that standalone tooling isn't orphaned;
+  CI (Phase 3) runs the same set, including `scripts/check-yaak-secrets.py`.
 - Write `docs/runbook.md` covering exactly these commands.
 
 **Exit criteria:** `mage up` brings up both; the Go service connects to Postgres on
