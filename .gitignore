@@ -5,6 +5,15 @@ backend/bin/
 frontend/node_modules/
 frontend/.env.local
 
+# Python (scripts/ tooling)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
 # Claude
 .claude/settings.local.json
 

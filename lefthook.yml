@@ -1,0 +1,12 @@
+# Git hooks (lefthook). One-time setup after cloning:
+#   brew install lefthook   # or: go install github.com/evilmartians/lefthook@latest
+#   lefthook install
+#
+# Hooks are intentionally minimal; CI (Phase 3) re-runs the same checks.
+pre-commit:
+  parallel: true
+  commands:
+    # Block committing real credentials in the shared Yaak workspace.
+    yaak-secrets:
+      glob: "yaak/*.yaak.json"
+      run: python3 scripts/check-yaak-secrets.py {staged_files}
