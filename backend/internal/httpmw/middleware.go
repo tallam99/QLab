@@ -27,6 +27,10 @@ const (
 	HeaderRequestID = "X-Request-Id"
 	// headerForwardedFor is the proxy-supplied client address chain.
 	headerForwardedFor = "X-Forwarded-For"
+	// CORS request-header names the API permits cross-origin (see CORS).
+	headerAccept        = "Accept"
+	headerContentType   = "Content-Type"
+	headerAuthorization = "Authorization"
 
 	attrRequestID    = "request_id"
 	attrMethod       = "method"
