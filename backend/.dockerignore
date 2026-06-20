@@ -1,0 +1,9 @@
+# Keep the build context lean and reproducible.
+bin/
+*.test
+*.out
+coverage.*
+*.coverprofile
+README.md
+Dockerfile
+.dockerignore
