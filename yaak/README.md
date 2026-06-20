@@ -29,7 +29,8 @@ Yaak environment, which is not committed. A pre-commit check
 (`scripts/check-yaak-secrets.py`, wired via `lefthook.yml`) fails the commit if the
 workspace contains a literal token/key/JWT or a non-empty secret-named field — so a
 filled secret can't be exported and committed by accident. The same check runs in
-CI (Phase 3).
+CI (Phase 3). Test the checker itself with
+`python3 scripts/test_check_yaak_secrets.py`.
 
 > **Convention — name secrets so the guard catches them.** The check only knows a
 > variable/header holds a secret if its *name* matches the `SECRET_NAME` regex in
