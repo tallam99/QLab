@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
+	"github.com/tallam99/qlab/backend/internal/logging"
 )
 
 // fakeStore is a store.Store stub for tests. The interface is business-domain only
@@ -21,7 +22,7 @@ type fakeStore struct{}
 // is marked ready, 200 afterward. Liveness (/healthz) is independent — see
 // TestHealthz, which gets 200 from the same un-readied server.
 func TestReadyz(t *testing.T) {
-	s := New(Options{Logger: noopLogger{}})
+	s := New(Options{Logger: logging.Nop()})
 	ts := httptest.NewServer(s)
 	defer ts.Close()
 
@@ -45,7 +46,7 @@ func TestReadyz(t *testing.T) {
 // TestReady verifies the readiness gate: false until every required dependency is
 // present, then latched true.
 func TestReady(t *testing.T) {
-	s := New(Options{Logger: noopLogger{}})
+	s := New(Options{Logger: logging.Nop()})
 	assert.False(t, s.Ready(), "no store yet")
 
 	s.store = fakeStore{}

@@ -12,12 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
+	"github.com/tallam99/qlab/backend/internal/logging"
 )
 
 // testHandler builds a server with discarded logs. It is not marked ready, so it
 // also exercises that liveness (/healthz) is up independent of readiness.
 func testHandler() http.Handler {
-	return New(Options{Logger: noopLogger{}})
+	return New(Options{Logger: logging.Nop()})
 }
 
 // TestHealthz verifies the liveness probe: it must return 200 with the ok body
