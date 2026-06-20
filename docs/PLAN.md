@@ -240,7 +240,7 @@ Make demo/test data **trivial for devs to reach in staging** and **difficult in 
   **dev-login / impersonation path** lets you (and Claude-prepared requests) act as
   any seeded demo user without the full Google OAuth dance; the state-export
   endpoint (above) is enabled. All of this is gated behind an env flag
-  (`QLAB_ENV=staging`) and **compiled/guarded off when `QLAB_ENV=prod`.**
+  (`QLAB_ENV=staging`) and **compiled/guarded off when `QLAB_ENV=production`.**
 - **Prod:** no seed data, no dev-login, no impersonation, no state-export. The only
   way in is real Google sign-in + a real invite. The guard is enforced at startup
   (refuse to enable dev-only routes if `prod`) and asserted in a test.
@@ -550,7 +550,7 @@ an easy demo-login path in staging and none in prod.
   flow to the **plus-addressed test inboxes**.
 - **Staging-only dev-login / impersonation** path (act as any seeded demo user
   without the OAuth dance), and the **`lab_id`-scoped state-export endpoint** —
-  both **guarded by `QLAB_ENV`** and **refused at startup when `prod`**. Add a
+  both **guarded by `QLAB_ENV`** and **refused at startup when `production`**. Add a
   test asserting they're off in prod.
 
 **Exit criteria:** Unauthenticated calls rejected; a valid Firebase token lets you

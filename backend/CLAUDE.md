@@ -28,6 +28,9 @@ local-vs-cloud rule. **Current status: Phase 1** — a hello-world HTTP service.
 - **Constructors take an `Options` (or `Config`) struct, not loose params** — so
   signatures don't churn as dependencies grow (`logging.New(Options)`,
   `server.New(Options)`).
+- **Avoid abbreviations** in names (identifiers, enum values, config keys) for
+  clarity — e.g. `EnvProduction`, not `EnvProd`. The exception is a well-known
+  acronym that's documented (e.g. `HTTP`, `JWT`, `id`).
 - **Enums**: integer type with generated `String()`/parse (enumer,
   `//go:generate`). Name values `EnumName<Value>` (e.g. `EnvLocal`). The zero
   value is `EnumNameUnknown` and is **never valid** — seeing it in a logical flow

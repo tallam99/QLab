@@ -33,7 +33,7 @@ Planned additions (later phases):
     docker build -t qlab-api .          # multi-stage build
     docker run -p 8090:8090 -e QLAB_ENV=staging qlab-api
 
-`QLAB_ENV` must be one of `local` / `staging` / `prod` (invalid values fail at
+`QLAB_ENV` must be one of `local` / `staging` / `production` (invalid values fail at
 startup). `local` (the default) uses text logs; the others use JSON. The local
 default port is `8090` to dodge other tooling (Firebase emulators, Postgres,
 cloud-sql-proxy, Vite); Cloud Run overrides it via `PORT`.

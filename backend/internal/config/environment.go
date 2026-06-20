@@ -13,7 +13,7 @@ const (
 	EnvUnknown Environment = iota // zero value; never valid
 	EnvLocal
 	EnvStaging
-	EnvProd
+	EnvProduction
 )
 
 // Decode implements envconfig.Decoder so QLAB_ENV is parsed straight into the
@@ -21,7 +21,7 @@ const (
 func (e *Environment) Decode(value string) error {
 	parsed, err := EnvironmentString(value)
 	if err != nil || parsed == EnvUnknown {
-		return fmt.Errorf("invalid environment %q: must be one of local, staging, prod", value)
+		return fmt.Errorf("invalid environment %q: must be one of local, staging, production", value)
 	}
 	*e = parsed
 	return nil
