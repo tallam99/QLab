@@ -134,9 +134,10 @@ Notes:
 > `qlab-deployer` (CI, 4 roles) and `qlab-api` (runtime); WIF pool/provider
 > `github` scoped to `tallam99/QLab` + the deployer binding. The DB secrets
 > (`db-url-staging`/`db-url-production`) and runtime-SA access are also done
-> (step 4). The commands are kept below for reference and recreation. **Still
-> pending (yours):** Firebase Hosting init — see "What's left" below. Claude does
-> **not** resume running cloud commands; this was a one-off.
+> (step 4), and the Firebase Hosting default sites already exist. The commands are
+> kept below for reference and recreation. All cloud setup is complete; what's left
+> is to merge + approve (see "What's left" below). Claude does **not** resume
+> running cloud commands; this was a one-off.
 
 Done **twice** — once per project (`staging`, then `production`), with the
 variables below set per session.
@@ -324,22 +325,20 @@ gate for every merge.
 
 ## What's left for you
 
-The GCP infra, the database secrets (+ runtime-SA access), and all GitHub config
-(Environments, prod reviewer, variables) are **done**. To get the **first green
-deploy**, you still need:
+All setup is **done**: GCP infra, the database secrets (+ runtime-SA access), the
+Firebase Hosting default sites (`https://qlab-staging.web.app`,
+`https://qlab-production.web.app`), and all GitHub config (Environments, prod
+reviewer, variables). To ship:
 
-1. **Firebase Hosting init** — in each Firebase project, enable Hosting (console →
-   Hosting → Get started, or `firebase init hosting` once) so the default
-   `https://<project>.web.app` site exists for the deploy to target.
-2. **Merge this PR**, then approve the production deploy when prompted.
+1. **Merge this PR.** Staging deploys automatically.
+2. **Approve the production deploy** when the `production` Environment prompts you.
 
 Then verify (below) and paste the URLs back.
 
-> ✅ Already done: Neon `db-url-staging`/`db-url-production` secrets exist in their
-> respective projects with the runtime SAs granted `secretAccessor`, and the
-> `DATABASE_SECRET` variable points the deploy at each. (Assuming the Neon branches
-> are reachable; if a connection string is wrong the backend revision will stay
-> unhealthy — see the sequencing note up top.)
+> Caveat: the only thing not verifiable until deploy is whether each Neon
+> connection string is correct/reachable. If one is wrong, its backend Cloud Run
+> revision will fail its health check (see the sequencing note up top) — the fix is
+> a corrected secret value, not a pipeline change.
 
 ---
 
