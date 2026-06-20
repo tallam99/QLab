@@ -18,3 +18,4 @@ One file per decision, numbered `NNNN-short-title.md`. Each records:
 ## Index
 
 - [0001 — Public site vs. data API are separate surfaces](0001-topology-public-site-vs-data-api.md)
+- [0002 — CI/CD via GitHub Actions + Workload Identity Federation](0002-cicd-and-workload-identity.md)

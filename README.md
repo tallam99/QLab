@@ -5,9 +5,10 @@ engine** that continuously re-flows the queue when experiments run over, finish
 early, or get cancelled. Built initially for a ~15-person biology lab sharing
 ventilation hoods.
 
-> **Status:** early development. The Go service and a one-command local stack
-> (Docker Compose + Postgres) are up; the data model, API, and engine are next.
-> See the roadmap in [`docs/PLAN.md`](docs/PLAN.md).
+> **Status:** early development. The Go service, a one-command local stack
+> (Docker Compose + Postgres), and the CI/CD pipeline (GitHub Actions → Cloud Run
+> + Firebase Hosting) are in place; the data model, API, and engine are next. See
+> the roadmap in [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Documentation
 
@@ -19,6 +20,7 @@ All project docs live in [`docs/`](docs/):
 | [`docs/ALGORITHM.md`](docs/ALGORITHM.md) | The scheduling-engine spec — **read before touching scheduling logic.** |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The system map — components, surfaces, environments. |
 | [`docs/runbook.md`](docs/runbook.md) | How to run and debug the local stack. |
+| [`docs/deploy.md`](docs/deploy.md) | CI/CD + cloud deploy setup (Cloud Run + Firebase Hosting, both environments). |
 | [`docs/decisions/`](docs/decisions/) | Decision log (ADRs) for cross-cutting choices. |
 | [`CLAUDE.md`](CLAUDE.md) | Orientation for a fresh Claude Code session. |
 

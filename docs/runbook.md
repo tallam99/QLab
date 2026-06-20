@@ -78,4 +78,6 @@ their own tags and targets as they land.
   so a single request's full story can be filtered out and handed to Claude as a
   self-contained slice. Follow with `mage serviceLogs`.
 - Inspect the DB directly: `docker exec -it qlab-postgres-1 psql -U qlab -d qlab`.
-- Staging log queries (`gcloud logging read …`) will live here once Phase 3 lands.
+- **Staging/prod** is the user's domain (Claude drafts, never runs cloud
+  commands). Deploy setup, the CI/CD pipeline, and the `gcloud logging read`
+  incantations for pulling a request's log slice live in `docs/deploy.md`.

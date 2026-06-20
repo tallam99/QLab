@@ -14,8 +14,9 @@ land in Phase 4.
 - `cmd/server/main.go` — entrypoint. Keep it thin: load config → build logger →
   build the server → register dependencies (`s.InjectDependency`) → `s.Run(ctx)`.
   The server owns the lifecycle; no business logic here.
-- `internal/config/` — the *only* place env vars are read (envconfig). Holds the
-  `Environment` enum (generated `String()`/parse via enumer).
+- `internal/config/` — the *only* place env vars are read (envconfig): `PORT`,
+  `QLAB_ENV`, `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`. Holds the `Environment` enum
+  (generated `String()`/parse via enumer).
 - `internal/logging/` — the `Logger` interface (`interface.go`) and a `Noop()`
   logger; the slog-backed implementation is in `logging/slog` (mirrors
   `store`/`store/pgstore`). The server and middleware depend on the interface, so a
@@ -29,7 +30,11 @@ land in Phase 4.
   guaranteed ready and nothing re-checks it (no health methods on the interface);
   `pgstore.Store` is an `io.Closer` so the server can drain its pool on shutdown.
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
-  (`RequestLogger`, `LoggerFromContext`) and panic recovery (`Recoverer`).
+  (`RequestLogger`, `LoggerFromContext`), panic recovery (`Recoverer`), and CORS
+  (`CORS`) for the cross-origin PWA. `CORS` fails closed on an empty allow-list
+  (same-origin only) rather than the underlying library's "allow all" default;
+  origins come from config (`CORS_ALLOWED_ORIGINS`, set per environment to the
+  Firebase Hosting origin).
 - `internal/server/` — the server: router, handlers (methods on `Server`), and the
   lifecycle. `New` returns a `*Server`; `Run(ctx)` serves immediately (so
   `/healthz` liveness is 200 at once), runs the registered dependency injectors
