@@ -1,0 +1,49 @@
+# Local development stack: the Go API + Postgres. Driven via `mage` (see
+# docs/runbook.md); Claude operates it autonomously (see CLAUDE.md).
+#
+# This is local-only. In staging/prod the API runs on Cloud Run and the database
+# on Neon — there is no Compose there.
+name: qlab
+
+services:
+  postgres:
+    # Pinned to Postgres 18 to match the Neon major version, so local dev mirrors
+    # prod and migrations behave identically.
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      # Exposed on the host so host-run tooling (goose via `mage migrate`) can
+      # reach it at localhost:${POSTGRES_PORT}.
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      # Postgres 18+ expects the mount at /var/lib/postgresql (it stores data in a
+      # major-version subdirectory beneath it), not /var/lib/postgresql/data.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      # Gates the api service's startup (depends_on: service_healthy below).
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      QLAB_ENV: local
+      PORT: "8090"
+      # In-container the database is reachable at the compose service name
+      # "postgres", not localhost — distinct from the host-facing DATABASE_URL
+      # in .env that host tooling uses.
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    ports:
+      - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
