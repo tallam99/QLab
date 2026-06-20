@@ -183,17 +183,19 @@ hosting` locally once). The default site serves at `https://<PROJECT_ID>.web.app
 
 ### Environments + the prod gate
 
-Create two Environments and protect production:
+**Already created** (Phase 3): the `staging` and `production` Environments exist,
+and `production` has a **required-reviewers** rule (the manual approval gate) with
+`tallam99` as the reviewer. Staging auto-deploys; production waits for approval.
+
+If you ever need to recreate them:
 
 ```sh
-# Repo Settings -> Environments, or via the API:
 gh api -X PUT repos/tallam99/QLab/environments/staging
-gh api -X PUT repos/tallam99/QLab/environments/production \
-  -f 'reviewers[][type]=User' -F "reviewers[][id]=$(gh api user -q .id)"
+printf '{"reviewers":[{"type":"User","id":%s}]}' "$(gh api user -q .id)" \
+  | gh api -X PUT repos/tallam99/QLab/environments/production --input -
 ```
 
-The `reviewers` rule on `production` is the manual approval gate. (Claude can set
-these up for you with your go-ahead; see "GitHub config" in the session.)
+What's left for you is to add each Environment's **variables** (below).
 
 ### Environment variables
 
