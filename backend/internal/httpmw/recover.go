@@ -32,8 +32,10 @@ func Recoverer(base logging.Logger) func(http.Handler) http.Handler {
 					return
 				}
 				// ErrAbortHandler is a sentinel for intentionally aborting a
-				// handler; the stdlib expects it to propagate, not be logged.
-				if rec == http.ErrAbortHandler {
+				// handler; the stdlib expects it to propagate, not be logged. The
+				// panic value is the exact sentinel (net/http re-panics it as-is,
+				// never wrapped), so an identity compare is correct here.
+				if rec == http.ErrAbortHandler { //nolint:errorlint // identity compare matches net/http; sentinel is never wrapped
 					panic(rec)
 				}
 

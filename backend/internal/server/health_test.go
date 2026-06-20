@@ -31,7 +31,7 @@ func TestHealthz(t *testing.T) {
 
 	resp, err := srv.Client().Get(srv.URL + pathHealthz)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))

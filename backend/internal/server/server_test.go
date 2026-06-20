@@ -25,7 +25,7 @@ func TestNotFound(t *testing.T) {
 
 	resp, err := srv.Client().Get(srv.URL + "/does-not-exist")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))
