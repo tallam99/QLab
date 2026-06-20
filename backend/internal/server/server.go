@@ -64,6 +64,9 @@ type Options struct {
 	Logger logging.Logger
 	// Addr is the TCP listen address (e.g. ":8090").
 	Addr string
+	// AllowedOrigins is the CORS allow-list for the browser PWA (a separate origin
+	// from the API; decision 0001). Empty means same-origin only.
+	AllowedOrigins []string
 }
 
 // Server is the service: its HTTP handler plus the lifecycle that initializes
@@ -98,6 +101,7 @@ func New(opts Options) *Server {
 	r := chi.NewRouter()
 
 	// Order matters — each line wraps everything below it:
+	r.Use(httpmw.CORS(opts.AllowedOrigins))  // answer browser preflights / add CORS headers (outermost: skip logging OPTIONS noise)
 	r.Use(middleware.RequestID)              // generate/propagate a per-request id (in ctx + response header)
 	r.Use(httpmw.Recoverer(opts.Logger))     // turn downstream panics into a logged 500, never a crash
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx

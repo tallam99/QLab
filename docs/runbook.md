@@ -44,7 +44,9 @@ same fields.
 | `mage resetStack` | wipe the data volume **and** recreate (fresh DB) |
 | `mage migrate` | apply `goose` migrations (`backend/migrations/`) to local Postgres |
 | `mage seed` | load demo data (lands with the schema in Phase 4) |
-| `mage testUnit` | `go test -tags testunit ./backend/...` **and** `python3 scripts/test_check_yaak_secrets.py` |
+| `mage test` | run all test tiers (currently `testUnit` + `testSecurity`; integration/database tiers added later) |
+| `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
+| `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
 | `mage genProto` | `buf generate` (Go + TS from `.proto`; buf config lands in Phase 5) |
@@ -52,7 +54,7 @@ same fields.
 `migrate`/`seed`/`genProto` are wired to their real tools but skip cleanly until
 the content they drive exists (migrations in Phase 4, proto in Phase 5). Unit tests
 carry a `//go:build testunit` tag; other test tiers (integration, database) get
-their own tags and targets as they land.
+their own tags and `mage` targets as they land, each folded into `mage test`.
 
 ## Health checks
 
@@ -78,4 +80,6 @@ their own tags and targets as they land.
   so a single request's full story can be filtered out and handed to Claude as a
   self-contained slice. Follow with `mage serviceLogs`.
 - Inspect the DB directly: `docker exec -it qlab-postgres-1 psql -U qlab -d qlab`.
-- Staging log queries (`gcloud logging read …`) will live here once Phase 3 lands.
+- **Staging/prod** is the user's domain (Claude drafts, never runs cloud
+  commands). Deploy setup, the CI/CD pipeline, and the `gcloud logging read`
+  incantations for pulling a request's log slice live in `docs/deploy.md`.

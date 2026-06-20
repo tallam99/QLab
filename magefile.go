@@ -159,14 +159,29 @@ func Seed() error {
 	return nil
 }
 
-// TestUnit runs the unit tests (build tag `testunit`) plus the Yaak secret-check
-// tests. Unit tests need no infrastructure; integration/database suites get their
-// own tags and targets as they land.
-func TestUnit() error {
-	if err := run("go", "test", "-tags", "testunit", "./backend/..."); err != nil {
+// Test runs every test tier. Integration and database tiers (testIntegration,
+// testDatabase) get their own targets and are added here as they land.
+func Test() error {
+	if err := TestUnit(); err != nil {
 		return err
 	}
-	return run("python3", "scripts/test_check_yaak_secrets.py")
+	return TestSecurity()
+}
+
+// TestUnit runs the Go unit tests (build tag `testunit`). They need no
+// infrastructure; integration/database suites get their own tags and targets.
+func TestUnit() error {
+	return run("go", "test", "-tags", "testunit", "./backend/...")
+}
+
+// TestSecurity runs the security checks: the Yaak secret-scanner's own tests, and
+// the scanner itself against the committed workspace (no real credentials may be
+// committed). Mirrors the CI security job and the lefthook pre-commit hook.
+func TestSecurity() error {
+	if err := run("python3", "scripts/test_check_yaak_secrets.py"); err != nil {
+		return err
+	}
+	return run("python3", "scripts/check-yaak-secrets.py")
 }
 
 // ServiceLogs follows all services' logs (last 100 lines, then live).

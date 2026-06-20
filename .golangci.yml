@@ -1,0 +1,25 @@
+# golangci-lint configuration (schema v2).
+#
+# Kept intentionally close to the default set — a small codebase doesn't need an
+# aggressive linter wall, and noisy linters cost more than they catch this early.
+# CI runs this via .github/workflows/ci.yml; run it locally with `golangci-lint run`.
+version: "2"
+
+run:
+  # Lint the tagged unit tests too (they carry //go:build testunit). The magefile
+  # (//go:build mage) stays out of scope — it's stdlib-only build glue.
+  build-tags:
+    - testunit
+
+linters:
+  # `standard` = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - misspell    # common spelling mistakes in comments/strings
+    - errorlint   # error wrapping/comparison bugs (%w, errors.Is/As)
+    - unconvert   # redundant type conversions
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

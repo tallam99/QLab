@@ -1,0 +1,78 @@
+# CI gate — runs on every PR and on pushes to main.
+#
+# Each job mirrors a `mage` test target so a green PR means the same thing locally
+# and in CI (`mage test` = testUnit + testSecurity). Deploys live in deploy.yml
+# and only run after merge.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One in-flight run per ref; a new push cancels the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Build, vet, and the Go unit suite — `mage testUnit`, plus a full build/vet so a
+  # compile error in non-test code is caught too.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./backend/...
+
+      - name: Unit tests
+        run: mage testUnit
+
+  # Security checks — `mage testSecurity`: the Yaak secret-scanner's tests and the
+  # scanner itself against the committed workspace (the same scan the lefthook
+  # pre-commit hook runs). Go is set up because mage compiles the magefile.
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Security tests
+        run: mage testSecurity
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: golangci-lint
+        # v7+ is required for golangci-lint v2 (the config schema this repo uses).
+        uses: golangci/golangci-lint-action@v7
+        with:
+          # Pinned to the version validated locally; bump deliberately.
+          version: v2.12.2

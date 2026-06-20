@@ -1,0 +1,82 @@
+//go:build testunit
+
+package httpmw
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// TestCORS checks the CORS middleware: an allowed origin gets the
+// Access-Control-Allow-Origin header (and preflights are answered with the
+// permitted methods), a disallowed origin gets nothing, and — critically — an
+// empty allow-list fails closed (no cross-origin access) instead of the
+// underlying library's "allow every origin" default.
+func TestCORS(t *testing.T) {
+	const allowed = "https://qlab.web.app"
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	tests := []struct {
+		name            string
+		origins         []string
+		method          string
+		origin          string
+		preflightMethod string // non-empty marks an OPTIONS preflight (Access-Control-Request-Method)
+		wantAllowOrigin string
+	}{
+		{
+			name:            "allowed origin, simple request",
+			origins:         []string{allowed},
+			method:          http.MethodGet,
+			origin:          allowed,
+			wantAllowOrigin: allowed,
+		},
+		{
+			name:            "disallowed origin gets no CORS headers",
+			origins:         []string{allowed},
+			method:          http.MethodGet,
+			origin:          "https://evil.example",
+			wantAllowOrigin: "",
+		},
+		{
+			name:            "preflight from allowed origin is answered",
+			origins:         []string{allowed},
+			method:          http.MethodOptions,
+			origin:          allowed,
+			preflightMethod: http.MethodPost,
+			wantAllowOrigin: allowed,
+		},
+		{
+			name:            "empty allow-list fails closed",
+			origins:         nil,
+			method:          http.MethodGet,
+			origin:          allowed,
+			wantAllowOrigin: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := CORS(tt.origins)(ok)
+			req := httptest.NewRequest(tt.method, "/", nil)
+			req.Header.Set("Origin", tt.origin)
+			if tt.preflightMethod != "" {
+				req.Header.Set("Access-Control-Request-Method", tt.preflightMethod)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			assert.Equal(t, tt.wantAllowOrigin, rec.Header().Get("Access-Control-Allow-Origin"))
+			if tt.preflightMethod != "" {
+				// A preflight response must advertise the permitted methods.
+				assert.NotEmpty(t, rec.Header().Get("Access-Control-Allow-Methods"))
+			}
+		})
+	}
+}

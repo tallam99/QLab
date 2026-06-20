@@ -1,0 +1,34 @@
+# Continuous deployment. On merge to main: deploy both surfaces to staging
+# automatically, then deploy to production gated by a manual approval.
+#
+# The gate is the `production` GitHub Environment's required-reviewers rule (set up
+# in docs/deploy.md): the production job waits for staging to succeed, then pauses
+# for an approver before it runs. Per the project's local/cloud boundary, *you*
+# are the approver — Claude never triggers a prod deploy.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# Never cancel an in-flight deploy (especially a half-applied prod rollout); let
+# it finish and queue the next.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  staging:
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: staging
+
+  production:
+    needs: staging
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: production
