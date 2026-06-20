@@ -16,12 +16,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// Response/log field names, kept as consts so they can be changed in one place
-// and grepped across the codebase.
+// Response header and slog attribute keys, kept as consts so they're spelled
+// identically across log sites and grep-able. (One-off log messages stay inline.)
 const (
 	headerRequestID = "X-Request-Id"
-
-	msgRequest = "http request"
 
 	attrRequestID = "request_id"
 	attrMethod    = "method"
@@ -61,7 +59,7 @@ func RequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 			r = r.WithContext(context.WithValue(r.Context(), loggerKey, l))
 			next.ServeHTTP(ww, r)
 
-			l.LogAttrs(r.Context(), slog.LevelInfo, msgRequest,
+			l.LogAttrs(r.Context(), slog.LevelInfo, "http request",
 				slog.String(attrMethod, r.Method),
 				slog.String(attrPath, r.URL.Path),
 				slog.Int(attrStatus, ww.Status()),

@@ -28,16 +28,8 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
-// Operational log messages, as consts for a single source of truth.
-const (
-	msgLoadConfig    = "load config"
-	msgStarting      = "server starting"
-	msgServeFailed   = "server failed"
-	msgShuttingDown  = "server shutting down"
-	msgShutdownError = "graceful shutdown failed"
-)
-
-// Log attribute keys.
+// Log attribute keys (reused across log sites, so kept as consts for a single
+// spelling). One-off log *messages* stay inline below.
 const (
 	attrError = "error"
 	attrAddr  = "addr"
@@ -47,7 +39,7 @@ const (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error(msgLoadConfig, slog.Any(attrError, err))
+		slog.Error("load config", slog.Any(attrError, err))
 		os.Exit(1)
 	}
 
@@ -67,7 +59,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info(msgStarting, slog.String(attrAddr, srv.Addr), slog.String(attrEnv, cfg.Env.String()))
+		logger.Info("server starting", slog.String(attrAddr, srv.Addr), slog.String(attrEnv, cfg.Env.String()))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -75,16 +67,16 @@ func main() {
 
 	select {
 	case err := <-errCh:
-		logger.Error(msgServeFailed, slog.Any(attrError, err))
+		logger.Error("server failed", slog.Any(attrError, err))
 		os.Exit(1)
 	case <-ctx.Done():
-		logger.Info(msgShuttingDown)
+		logger.Info("server shutting down")
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error(msgShutdownError, slog.Any(attrError, err))
+		logger.Error("graceful shutdown failed", slog.Any(attrError, err))
 		os.Exit(1)
 	}
 }

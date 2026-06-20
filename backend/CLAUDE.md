@@ -33,8 +33,9 @@ local-vs-cloud rule. **Current status: Phase 1** — a hello-world HTTP service.
   value is `EnumNameUnknown` and is **never valid** — seeing it in a logical flow
   is a programmer error. Reject it when decoding external input.
 - **Don't hardcode strings in logic** — route paths, header names, content types,
-  log messages, and slog attribute keys are package-level consts so they're
-  grep-able and changeable in one place.
+  and slog attribute keys are package-level consts so they're grep-able and
+  changeable in one place. **Log messages are the exception: keep them inline
+  unless the same message is emitted from more than one site.**
 - **Programmer-error invariants panic** (e.g. `FromContext` with no logger); the
   `Recoverer` middleware turns panics into a logged 500 rather than a crash.
 - The **scheduling engine (`internal/scheduling`, Phase 6) is pure**: no DB, no

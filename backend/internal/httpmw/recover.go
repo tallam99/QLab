@@ -8,9 +8,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// slog attribute keys; the one-off log message stays inline below.
 const (
-	msgPanic = "recovered from panic"
-
 	attrPanic = "panic"
 	attrStack = "stack"
 )
@@ -37,7 +36,7 @@ func Recoverer(base *slog.Logger) func(http.Handler) http.Handler {
 					panic(rec)
 				}
 
-				base.LogAttrs(r.Context(), slog.LevelError, msgPanic,
+				base.LogAttrs(r.Context(), slog.LevelError, "recovered from panic",
 					slog.String(attrRequestID, middleware.GetReqID(r.Context())),
 					slog.Any(attrPanic, rec),
 					slog.String(attrStack, string(debug.Stack())),
