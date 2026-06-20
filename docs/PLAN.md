@@ -1,4 +1,4 @@
-# Quelab — Build Plan
+# QLab — Build Plan
 
 > Lab equipment scheduling PWA with a live queue + multi-bench scheduling engine.
 > See **`docs/ALGORITHM.md`** for the
@@ -110,8 +110,8 @@ the internet — true network isolation would break the app. So "not public" mea
 API**, achieved by *physically* separating the two surfaces:
 
 ```
-Firebase Hosting   →  quelab.app (or *.web.app)   static React PWA — public
-Cloud Run          →  api.quelab.app              Connect API — JWT required on every call
+Firebase Hosting   →  qlab.app (or *.web.app)   static React PWA — public
+Cloud Run          →  api.qlab.app              Connect API — JWT required on every call
 ```
 
 **Why this split (and not one embedded container):**
@@ -172,7 +172,7 @@ introduce a new behavior variation we want to reproduce, add a Yaak request for
 it.** That makes Yaak a living, runnable catalogue of the system's behaviors —
 each reschedule scenario from `docs/ALGORITHM.md`'s test matrix, each auth
 state (no token / valid / wrong-lab / member-vs-head), each error case.
-- Commit the **exported Yaak workspace** to the repo (e.g. `yaak/quelab.yaak.json`)
+- Commit the **exported Yaak workspace** to the repo (e.g. `yaak/qlab.yaak.json`)
   so the request collection is versioned and shared.
 - Use Yaak environments for `local` / `staging` (never store prod data-access
   creds in the committed workspace).
@@ -240,7 +240,7 @@ Make demo/test data **trivial for devs to reach in staging** and **difficult in 
   **dev-login / impersonation path** lets you (and Claude-prepared requests) act as
   any seeded demo user without the full Google OAuth dance; the state-export
   endpoint (above) is enabled. All of this is gated behind an env flag
-  (`QUELAB_ENV=staging`) and **compiled/guarded off when `QUELAB_ENV=prod`.**
+  (`QLAB_ENV=staging`) and **compiled/guarded off when `QLAB_ENV=prod`.**
 - **Prod:** no seed data, no dev-login, no impersonation, no state-export. The only
   way in is real Google sign-in + a real invite. The guard is enforced at startup
   (refuse to enable dev-only routes if `prod`) and asserted in a test.
@@ -263,7 +263,7 @@ engine is specified on paper** — nothing built yet.
   - **GCP project**, billing enabled; enable Cloud Run, Artifact Registry, Secret
     Manager, Cloud Build, **Cloud Trace** APIs.
   - **Neon** account.
-  - **Two Firebase projects** (`quelab-staging`, `quelab-prod`); enable **Firebase
+  - **Two Firebase projects** (`qlab-staging`, `qlab-prod`); enable **Firebase
     Hosting** on each (for the static PWA) plus Auth.
   - **Resend or SendGrid** account (reserve; decide in Phase 11).
 - **Reserve the test inboxes** and the plus-addressing scheme (see conventions).
@@ -308,7 +308,7 @@ id. A Yaak request for `/healthz` exists.
 **Notes:**
 - Keep `main.go` thin: parse config from env, wire dependencies, start server. All
   logic lives in `internal/`.
-- Read config from env now (PORT, `QUELAB_ENV`, …) — Cloud Run injects `PORT` and
+- Read config from env now (PORT, `QLAB_ENV`, …) — Cloud Run injects `PORT` and
   you must respect it.
 
 ---
@@ -396,7 +396,7 @@ and prod branches, with **seedable demo data for staging/local.**
 - **Seed scripts** (`mage seed`) that build demo labs/users/bench-pools/queues —
   the same scenarios as `docs/ALGORITHM.md`'s test matrix (single- and multi-bench, gap-
   fill, no-show), so the UI and API have realistic situations to show. **Seeding is
-  staging/local only** (guarded by `QUELAB_ENV`).
+  staging/local only** (guarded by `QLAB_ENV`).
 
 **Exit criteria:** Schema applied to local + both Neon branches; a Go DB layer
 (`internal/db`) connects and runs a trivial query against Neon; `mage seed`
@@ -435,7 +435,7 @@ branch.
 Connect service compiles and serves.
 
 **Work:**
-- Create `proto/quelab/v1/*.proto`. Messages for Lab, User, BenchPool + Bench,
+- Create `proto/qlab/v1/*.proto`. Messages for Lab, User, BenchPool + Bench,
   Slot, Membership; a `Slot.Status` enum (incl. `NO_SHOW`); the SSE **event
   envelope** message; a **reschedule result** message (the recomputed schedule —
   per-slot `actual_start`, `assigned_bench`, ratcheted `win_start`, and a
@@ -550,7 +550,7 @@ an easy demo-login path in staging and none in prod.
   flow to the **plus-addressed test inboxes**.
 - **Staging-only dev-login / impersonation** path (act as any seeded demo user
   without the OAuth dance), and the **`lab_id`-scoped state-export endpoint** —
-  both **guarded by `QUELAB_ENV`** and **refused at startup when `prod`**. Add a
+  both **guarded by `QLAB_ENV`** and **refused at startup when `prod`**. Add a
   test asserting they're off in prod.
 
 **Exit criteria:** Unauthenticated calls rejected; a valid Firebase token lets you

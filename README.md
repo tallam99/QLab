@@ -1,4 +1,4 @@
-# Quelab
+# QLab
 
 Lab equipment scheduling PWA with a live queue and a **multi-bench scheduling
 engine** that continuously re-flows the queue when experiments run over, finish
@@ -41,7 +41,7 @@ run locally.
 
 ## Development environment
 
-Quelab is developed on **Windows + WSL2 (Ubuntu)**. GUI apps stay on Windows; all
+QLab is developed on **Windows + WSL2 (Ubuntu)**. GUI apps stay on Windows; all
 terminal, IDE, and toolchain work runs inside Linux — matching production (Linux
 containers) and sidestepping Windows-only tooling bugs (see the troubleshooting log
 below).

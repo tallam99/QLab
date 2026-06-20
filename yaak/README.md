@@ -8,7 +8,7 @@ Yaak request for it (each reschedule scenario, each auth state, each error case)
 
 ## Contents (planned)
 
-    quelab.yaak.json   exported workspace (versioned, shared)
+    qlab.yaak.json   exported workspace (versioned, shared)
 
 ## Conventions
 

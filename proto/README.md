@@ -7,7 +7,7 @@ stubs and TypeScript client types are generated from here via `buf`.
 
 ## Layout (planned)
 
-    quelab/v1/         versioned package: Lab, User, BenchPool, Slot, Membership,
+    qlab/v1/         versioned package: Lab, User, BenchPool, Slot, Membership,
                        Slot.Status enum, SSE event envelope, reschedule result
     buf.yaml           module config
     buf.gen.yaml       codegen targets (Go → backend/internal/gen, TS → frontend/src/gen)

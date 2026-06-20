@@ -4,7 +4,7 @@
 
 ## Context
 
-The data API should not be a publicly-browsable surface. But Quelab is a PWA used on
+The data API should not be a publicly-browsable surface. But QLab is a PWA used on
 phones, so the API host is necessarily reachable over the internet — true network
 isolation (internal-only ingress) would break the app. "Not public," then, means
 *auth on every data endpoint + no public/marketing content co-mingled with the API.*
@@ -16,9 +16,9 @@ cost ceiling.
 
 Split the two surfaces physically:
 
-- **Public PWA** — static React build on **Firebase Hosting** (`quelab.app`): CDN,
+- **Public PWA** — static React build on **Firebase Hosting** (`qlab.app`): CDN,
   free HTTPS, atomic deploys, one-command rollback. No data, no secrets.
-- **Data API** — Go **Connect-RPC on Cloud Run** (`api.quelab.app`): every endpoint
+- **Data API** — Go **Connect-RPC on Cloud Run** (`api.qlab.app`): every endpoint
   requires a verified Firebase JWT, scoped to the caller's lab. No HTML/marketing.
 
 The two are different origins; the API is configured for **CORS** from the Hosting

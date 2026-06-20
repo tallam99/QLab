@@ -1,6 +1,6 @@
-# Quelab — orientation for Claude
+# QLab — orientation for Claude
 
-Quelab is a lab-equipment scheduling PWA. Its differentiator is a **multi-bench
+QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-bench
 scheduling engine** that continuously re-flows a priority queue across
 interchangeable benches as experiments overrun, finish early, or get cancelled.
 

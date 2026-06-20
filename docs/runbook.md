@@ -1,4 +1,4 @@
-# Quelab — Local Runbook
+# QLab — Local Runbook
 
 > How to run and debug the **local** stack. Claude operates this environment
 > autonomously (see `CLAUDE.md`); the user drives staging/prod.

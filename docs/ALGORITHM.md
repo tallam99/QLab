@@ -1,4 +1,4 @@
-# Quelab — Scheduling Engine Specification
+# QLab — Scheduling Engine Specification
 
 > This is the **schema-of-record for the core scheduling logic**. It is written
 > *before* any engine code (see `docs/PLAN.md`, Phase 6, which only *implements* this
@@ -15,7 +15,7 @@
 
 A booking calendar is a solved problem. The differentiator is what happens when
 reality diverges from the plan: someone runs 20 minutes over, someone cancels,
-someone finishes early, a bench frees up. Quelab's job is to **continuously
+someone finishes early, a bench frees up. QLab's job is to **continuously
 re-flow the queue across the available benches to keep them maximally used**,
 within the flexibility each person declared, while never harming anyone ahead of
 them in line and never interrupting an experiment already in progress.

@@ -1,20 +1,20 @@
-# Quelab — Architecture
+# QLab — Architecture
 
 > The system map. High-level and evolving; fleshed out as phases land. For the build
 > order see `docs/PLAN.md`; for the scheduling engine see `docs/ALGORITHM.md`.
 
 ## Overview
 
-Quelab is two separate surfaces plus managed backing services:
+QLab is two separate surfaces plus managed backing services:
 
     ┌─────────────────────────┐
     │  React PWA (static)     │   public surface
-    │  Firebase Hosting       │   quelab.app
+    │  Firebase Hosting       │   qlab.app
     └───────────┬─────────────┘
                 │  HTTPS + Firebase JWT (CORS)
     ┌───────────▼─────────────┐
     │  Connect-RPC API (Go)   │   data surface — auth on every call
-    │  Google Cloud Run       │   api.quelab.app
+    │  Google Cloud Run       │   api.qlab.app
     └───┬─────────┬───────┬───┘
         │         │       │
     ┌───▼────┐ ┌──▼─────┐ ┌▼────────────┐
