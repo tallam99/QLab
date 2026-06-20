@@ -43,7 +43,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := logging.New(logging.Options{Local: cfg.IsLocal()})
+	// Verbose locally, info and above in the cloud.
+	logLevel := slog.LevelInfo
+	if cfg.IsLocal() {
+		logLevel = slog.LevelDebug
+	}
+	logger := logging.New(logging.Options{Local: cfg.IsLocal(), Level: logLevel})
 	slog.SetDefault(logger)
 
 	srv := &http.Server{
