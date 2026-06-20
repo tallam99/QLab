@@ -15,10 +15,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tallam99/qlab/backend/internal/clients/postgres"
 	"github.com/tallam99/qlab/backend/internal/config"
-	"github.com/tallam99/qlab/backend/internal/db"
 	"github.com/tallam99/qlab/backend/internal/logging"
 	"github.com/tallam99/qlab/backend/internal/server"
+	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
 
 const (
@@ -60,20 +61,30 @@ func main() {
 	logger := logging.New(logging.Options{Local: cfg.IsLocal(), Level: logLevel})
 	slog.SetDefault(logger)
 
-	// Connect (and ping) Postgres before serving so a misconfigured or unreachable
-	// database is a clear boot failure, not a stream of failing requests.
+	// Build the pool and verify reachability before serving, so a misconfigured or
+	// unreachable database is a clear boot failure, not a stream of failing
+	// requests.
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), databaseConnectTimeout)
-	pool, err := db.Connect(dbCtx, db.Options{DatabaseURL: cfg.DatabaseURL})
-	dbCancel()
+	pool, err := postgres.New(dbCtx, postgres.Options{DatabaseURL: cfg.DatabaseURL})
 	if err != nil {
-		logger.Error("connect database", slog.Any(attrError, err))
+		dbCancel()
+		logger.Error("open database pool", slog.Any(attrError, err))
 		os.Exit(1)
 	}
 	defer pool.Close()
 
+	dataStore := pgstore.New(pool)
+	if err := dataStore.Ping(dbCtx); err != nil {
+		dbCancel()
+		logger.Error("ping database", slog.Any(attrError, err))
+		os.Exit(1)
+	}
+	dbCancel()
+	logger.Info("database connected")
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           server.New(server.Options{Logger: logger, DB: pool}),
+		Handler:           server.New(server.Options{Logger: logger, Store: dataStore}),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 

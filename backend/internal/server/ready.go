@@ -8,43 +8,29 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
-// readyTimeout bounds the database ping behind the readiness probe so a hung DB
-// can't hang the probe (and the load balancer behind it).
+// readyTimeout bounds the store ping behind the readiness probe so a hung
+// datastore can't hang the probe (and the load balancer behind it).
 const readyTimeout = 2 * time.Second
 
-// readyBody is the readiness failure response (liveness is unaffected by the DB).
+// readyBody is the response body when the service is not ready to serve traffic.
 const readyBody = `{"status":"unavailable"}` + "\n"
 
-// Pinger is the slice of the DB pool the readiness probe needs. Kept as a narrow
-// interface so the server package doesn't depend on pgx directly and tests can
-// supply a fake. *pgxpool.Pool satisfies it.
-type Pinger interface {
-	Ping(ctx context.Context) error
-}
-
-// readyz is a readiness probe: 200 only when the process can reach the database,
+// readyz is a readiness probe: 200 only when the service can reach its store,
 // 503 otherwise. Unlike healthz (liveness), this gates whether the instance
-// should receive traffic. A nil pinger reports unavailable rather than panicking.
-func readyz(db Pinger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
-		defer cancel()
+// should receive traffic.
+func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
+	defer cancel()
 
-		w.Header().Set(headerContentType, contentTypeJSON)
+	w.Header().Set(headerContentType, contentTypeJSON)
 
-		if db == nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(readyBody))
-			return
-		}
-		if err := db.Ping(ctx); err != nil {
-			httpmw.FromContext(r.Context()).Warn("readiness ping failed", "error", err)
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(readyBody))
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(healthBody))
+	if err := s.store.Ping(ctx); err != nil {
+		httpmw.LoggerFromContext(r.Context()).Warn("readiness check failed: store unreachable", "error", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(readyBody))
+		return
 	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(healthBody))
 }

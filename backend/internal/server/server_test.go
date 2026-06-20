@@ -1,6 +1,10 @@
+//go:build testunit
+
 package server
 
 import (
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,4 +31,17 @@ func TestNotFound(t *testing.T) {
 
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))
+}
+
+// TestNewRequiresDependencies verifies that missing required dependencies are a
+// loud, immediate failure (a wiring bug) rather than a nil-deref on first use.
+func TestNewRequiresDependencies(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	assert.PanicsWithValue(t, "server: New requires a Logger", func() {
+		New(Options{Store: fakeStore{}})
+	})
+	assert.PanicsWithValue(t, "server: New requires a Store", func() {
+		New(Options{Logger: logger})
+	})
 }

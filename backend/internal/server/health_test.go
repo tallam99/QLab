@@ -1,3 +1,5 @@
+//go:build testunit
+
 package server
 
 import (
@@ -14,8 +16,12 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
+// testHandler builds a server with discarded logs and a reachable fake store.
 func testHandler() http.Handler {
-	return New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	return New(Options{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Store:  fakeStore{},
+	})
 }
 
 // TestHealthz verifies the liveness probe: it must return 200 with the ok body

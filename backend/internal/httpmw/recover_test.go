@@ -1,3 +1,5 @@
+//go:build testunit
+
 package httpmw
 
 import (

@@ -19,7 +19,7 @@ const (
 // 500 — so one bad request never takes the whole server down.
 //
 // Mount it early (right after RequestID) so it wraps everything below. It reads
-// the request id from chi directly rather than via FromContext, because the
+// the request id from chi directly rather than via LoggerFromContext, because the
 // request-scoped logger is set further down the chain and may not exist yet when
 // an inner panic unwinds.
 func Recoverer(base *slog.Logger) func(http.Handler) http.Handler {
