@@ -11,18 +11,19 @@ import (
 )
 
 // Options configures New. It is a struct (rather than positional params) so the
-// logger's construction can grow new knobs without churning call sites.
+// logger's construction can grow new knobs without churning call sites. It is
+// specific to this implementation — other backends define their own.
 type Options struct {
 	// Local selects a human-readable text handler; otherwise a JSON handler for
 	// machine ingestion (Cloud Logging).
 	Local bool
-	// Level is the minimum level to emit (logging's own level; mapped to slog's).
-	Level logging.Level
+	// Level is the minimum level to emit.
+	Level stdslog.Level
 }
 
 // New returns a slog-backed logging.Logger configured per opts.
 func New(opts Options) logging.Logger {
-	handlerOpts := &stdslog.HandlerOptions{Level: toSlogLevel(opts.Level)}
+	handlerOpts := &stdslog.HandlerOptions{Level: opts.Level}
 
 	var h stdslog.Handler
 	if opts.Local {
@@ -31,20 +32,6 @@ func New(opts Options) logging.Logger {
 		h = stdslog.NewJSONHandler(os.Stdout, handlerOpts)
 	}
 	return logger{l: stdslog.New(h)}
-}
-
-// toSlogLevel maps a logging.Level to its slog equivalent.
-func toSlogLevel(level logging.Level) stdslog.Level {
-	switch level {
-	case logging.LevelDebug:
-		return stdslog.LevelDebug
-	case logging.LevelWarn:
-		return stdslog.LevelWarn
-	case logging.LevelError:
-		return stdslog.LevelError
-	default:
-		return stdslog.LevelInfo
-	}
 }
 
 // logger adapts *slog.Logger to logging.Logger.

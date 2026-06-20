@@ -8,12 +8,12 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/tallam99/qlab/backend/internal/config"
-	"github.com/tallam99/qlab/backend/internal/logging"
 	slogging "github.com/tallam99/qlab/backend/internal/logging/slog"
 	"github.com/tallam99/qlab/backend/internal/server"
 )
@@ -27,7 +27,7 @@ func main() {
 func run() error {
 	// Bootstrap logger (JSON) so a failure before config is loaded is still
 	// structured in Cloud Logging; replaced once the environment is known.
-	boot := slogging.New(slogging.Options{Local: false, Level: logging.LevelInfo})
+	boot := slogging.New(slogging.Options{Local: false, Level: slog.LevelInfo})
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -36,9 +36,9 @@ func run() error {
 	}
 
 	// Verbose locally, info and above in the cloud; stamp env on every line.
-	logLevel := logging.LevelInfo
+	logLevel := slog.LevelInfo
 	if cfg.IsLocal() {
-		logLevel = logging.LevelDebug
+		logLevel = slog.LevelDebug
 	}
 	logger := slogging.New(slogging.Options{Local: cfg.IsLocal(), Level: logLevel}).
 		With("env", cfg.Env.String())

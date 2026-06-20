@@ -13,7 +13,7 @@ The Go service: the Connect-RPC API and the scheduling engine.
     internal/
       config/          env-driven config (envconfig): PORT, QLAB_ENV, DATABASE_URL;
                        Environment enum (String()/parse generated via enumer)
-      logging/         Logger interface + Level + Nop()
+      logging/         Logger interface + Noop()
         slog/          slog-backed implementation (text locally, JSON in cloud)
       clients/         external client-tech setup (connection only)
         postgres/      pgx connection pool

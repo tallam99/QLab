@@ -18,7 +18,7 @@ import (
 // testHandler builds a server with discarded logs. It is not marked ready, so it
 // also exercises that liveness (/healthz) is up independent of readiness.
 func testHandler() http.Handler {
-	return New(Options{Logger: logging.Nop()})
+	return New(Options{Logger: logging.Noop()})
 }
 
 // TestHealthz verifies the liveness probe: it must return 200 with the ok body

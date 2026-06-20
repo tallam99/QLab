@@ -16,11 +16,10 @@ land in Phase 4.
   The server owns the lifecycle; no business logic here.
 - `internal/config/` — the *only* place env vars are read (envconfig). Holds the
   `Environment` enum (generated `String()`/parse via enumer).
-- `internal/logging/` — the `Logger` interface + `Level` (`interface.go`) and a
-  `Nop()` logger; the slog-backed implementation is in `logging/slog` (mirrors
+- `internal/logging/` — the `Logger` interface (`interface.go`) and a `Noop()`
+  logger; the slog-backed implementation is in `logging/slog` (mirrors
   `store`/`store/pgstore`). The server and middleware depend on the interface, so a
-  fake/alternate backend swaps in; `Level` is the package's own enum, mapped to
-  slog's by the implementation.
+  fake/alternate backend swaps in.
 - `internal/clients/` — external client-tech *connection* setup only (no data
   access). `clients/postgres` builds the pgx pool; Firebase/storage clients become
   siblings later.

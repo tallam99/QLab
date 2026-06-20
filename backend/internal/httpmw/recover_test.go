@@ -18,7 +18,7 @@ import (
 // real chain (Recoverer reads the id from chi).
 func TestRecoverer(t *testing.T) {
 	h := middleware.RequestID(
-		Recoverer(logging.Nop())(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		Recoverer(logging.Noop())(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 			panic("boom")
 		})),
 	)

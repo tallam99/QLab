@@ -22,7 +22,7 @@ type fakeStore struct{}
 // is marked ready, 200 afterward. Liveness (/healthz) is independent — see
 // TestHealthz, which gets 200 from the same un-readied server.
 func TestReadyz(t *testing.T) {
-	s := New(Options{Logger: logging.Nop()})
+	s := New(Options{Logger: logging.Noop()})
 	ts := httptest.NewServer(s)
 	defer ts.Close()
 
@@ -46,7 +46,7 @@ func TestReadyz(t *testing.T) {
 // TestReady verifies the readiness gate: false until every required dependency is
 // present, then latched true.
 func TestReady(t *testing.T) {
-	s := New(Options{Logger: logging.Nop()})
+	s := New(Options{Logger: logging.Noop()})
 	assert.False(t, s.Ready(), "no store yet")
 
 	s.store = fakeStore{}
