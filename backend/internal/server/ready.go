@@ -24,7 +24,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set(headerContentType, contentTypeJSON)
 
-	if err := s.ready(ctx); err != nil {
+	if err := s.readiness.Ready(ctx); err != nil {
 		httpmw.LoggerFromContext(r.Context()).Warn("readiness check failed: dependency unreachable", "error", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(readyBody))

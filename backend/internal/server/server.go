@@ -22,49 +22,63 @@ const (
 	pathReadyz  = "/readyz"
 )
 
+// ReadinessChecker reports whether the service's dependencies are reachable. It's
+// the server's own (consumer-defined) view of readiness, kept separate from the
+// data store interface so store holders may assume their store is already healthy.
+// The Postgres store satisfies it.
+type ReadinessChecker interface {
+	Ready(ctx context.Context) error
+}
+
 // Options configures New. A struct (rather than positional params) so the server
 // can take new dependencies (the data store, engine, auth) in later phases
-// without churning call sites.
+// without churning call sites. Each field is optional; New supplies a sensible
+// default for any left unset.
 type Options struct {
-	// Logger is the base logger; middleware derives request-scoped loggers from it.
+	// Logger is the base logger; middleware derives request-scoped loggers from
+	// it. Defaults to slog.Default().
 	Logger *slog.Logger
-	// Ready reports whether the service's dependencies are reachable; the
-	// readiness probe calls it. It's a plain check rather than the data store
-	// because store holders may assume their store is already healthy (the data
-	// store itself is wired in Phase 4). Required.
-	Ready func(ctx context.Context) error
+	// Readiness backs the readiness probe. Defaults to a checker that always
+	// reports ready — sensible for a server with no external dependencies to
+	// verify. In this service the data store is passed here.
+	Readiness ReadinessChecker
 }
 
-// Server holds the dependencies shared across handlers.
+// Server holds the dependencies shared across handlers, all fully resolved.
 type Server struct {
-	logger *slog.Logger
-	ready  func(ctx context.Context) error
+	logger    *slog.Logger
+	readiness ReadinessChecker
 }
 
-// New builds the HTTP handler with the middleware stack and routes wired in.
-//
-// It panics if a required dependency is missing: that is a programmer error at
-// startup (a wiring bug), not a runtime condition — and it surfaces loudly rather
-// than failing obscurely on the first request. The service cannot do anything
-// useful without a store, so there is no degraded, store-less mode.
+// New builds the HTTP handler, resolving each Option to a concrete dependency
+// (defaulting any left unset) so the Server owns everything it needs.
 func New(opts Options) http.Handler {
-	if opts.Logger == nil {
-		panic("server: New requires a Logger")
+	s := &Server{
+		logger:    opts.Logger,
+		readiness: opts.Readiness,
 	}
-	if opts.Ready == nil {
-		panic("server: New requires a Ready check")
+	if s.logger == nil {
+		s.logger = slog.Default()
 	}
-	s := &Server{logger: opts.Logger, ready: opts.Ready}
+	if s.readiness == nil {
+		s.readiness = alwaysReady{}
+	}
 
 	r := chi.NewRouter()
 
 	// Order matters — each line wraps everything below it:
-	r.Use(middleware.RequestID)              // generate/propagate a per-request id (in ctx + response header)
-	r.Use(httpmw.Recoverer(opts.Logger))     // turn downstream panics into a logged 500, never a crash
-	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
+	r.Use(middleware.RequestID)           // generate/propagate a per-request id (in ctx + response header)
+	r.Use(httpmw.Recoverer(s.logger))     // turn downstream panics into a logged 500, never a crash
+	r.Use(httpmw.RequestLogger(s.logger)) // one structured log line per request + request-scoped logger in ctx
 
 	r.Get(pathHealthz, s.healthz) // liveness: is the process up?
 	r.Get(pathReadyz, s.readyz)   // readiness: are its dependencies reachable?
 
 	return r
 }
+
+// alwaysReady is the default ReadinessChecker: a server given no dependencies to
+// verify has nothing that can be un-ready.
+type alwaysReady struct{}
+
+func (alwaysReady) Ready(context.Context) error { return nil }

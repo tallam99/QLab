@@ -3,7 +3,6 @@
 package server
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -34,16 +33,17 @@ func TestNotFound(t *testing.T) {
 	assert.NotEmpty(t, resp.Header.Get(httpmw.HeaderRequestID))
 }
 
-// TestNewRequiresDependencies verifies that missing required dependencies are a
-// loud, immediate failure (a wiring bug) rather than a nil-deref on first use.
-func TestNewRequiresDependencies(t *testing.T) {
+// TestNewDefaultsReadiness verifies New supplies a sensible default for an unset
+// option: with no Readiness configured, /readyz reports ready (a server with no
+// dependencies to verify has nothing that can be un-ready).
+func TestNewDefaultsReadiness(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ready := func(context.Context) error { return nil }
+	srv := httptest.NewServer(New(Options{Logger: logger})) // no Readiness set
+	defer srv.Close()
 
-	assert.PanicsWithValue(t, "server: New requires a Logger", func() {
-		New(Options{Ready: ready})
-	})
-	assert.PanicsWithValue(t, "server: New requires a Ready check", func() {
-		New(Options{Logger: logger})
-	})
+	resp, err := srv.Client().Get(srv.URL + pathReadyz)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

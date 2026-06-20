@@ -17,6 +17,11 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
+// stubReadiness is a ReadinessChecker whose result the test controls.
+type stubReadiness struct{ err error }
+
+func (s stubReadiness) Ready(context.Context) error { return s.err }
+
 // TestReadyz verifies the readiness probe reflects the readiness check: 200 when
 // it passes, 503 when it fails. This is an infrastructure check (is the instance
 // fit to receive traffic?), not endpoint functionality.
@@ -33,8 +38,7 @@ func TestReadyz(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ready := func(context.Context) error { return tc.check }
-			srv := httptest.NewServer(New(Options{Logger: logger, Ready: ready}))
+			srv := httptest.NewServer(New(Options{Logger: logger, Readiness: stubReadiness{err: tc.check}}))
 			defer srv.Close()
 
 			resp, err := srv.Client().Get(srv.URL + pathReadyz)

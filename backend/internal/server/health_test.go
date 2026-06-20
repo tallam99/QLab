@@ -3,7 +3,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -17,12 +16,9 @@ import (
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 )
 
-// testHandler builds a server with discarded logs and an always-ready check.
+// testHandler builds a server with discarded logs; readiness defaults to ready.
 func testHandler() http.Handler {
-	return New(Options{
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Ready:  func(context.Context) error { return nil },
-	})
+	return New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 }
 
 // TestHealthz verifies the liveness probe: it must return 200 with the ok body

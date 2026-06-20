@@ -84,7 +84,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           server.New(server.Options{Logger: logger, Ready: dataStore.Ready}),
+		Handler:           server.New(server.Options{Logger: logger, Readiness: dataStore}),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 

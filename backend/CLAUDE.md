@@ -26,8 +26,9 @@ land in Phase 4.
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
   (`RequestLogger`, `LoggerFromContext`) and panic recovery (`Recoverer`).
 - `internal/server/` — chi router and handlers (methods on `Server`): `/healthz`
-  (liveness) and `/readyz` (readiness — calls the `Ready` check, wired to
-  `pgstore.Store.Ready`).
+  (liveness) and `/readyz` (readiness — calls a `ReadinessChecker`, which the
+  store satisfies; defaults to always-ready when unset). `New` resolves each
+  `Options` field to a concrete dependency, defaulting any left unset.
 
 ## Conventions
 
@@ -51,10 +52,14 @@ land in Phase 4.
   and slog attribute keys are package-level consts so they're grep-able and
   changeable in one place. **Log messages are the exception: keep them inline
   unless the same message is emitted from more than one site.**
-- **Programmer-error invariants panic** (e.g. `LoggerFromContext` with no logger,
-  `server.New` with a missing required dependency); the `Recoverer` middleware
-  turns request-time panics into a logged 500 rather than a crash, and a
-  construction-time panic fails the boot loudly.
+- **Programmer-error invariants panic** (e.g. `LoggerFromContext` with no logger);
+  the `Recoverer` middleware turns request-time panics into a logged 500 rather
+  than a crash.
+- **Constructors own their dependencies.** An `Options` struct carries dependencies
+  (or instructions to build them) and `New` resolves each to a concrete value,
+  defaulting any left unset to sensible behavior — rather than requiring callers to
+  supply everything. (`server.New` defaults the logger to `slog.Default()` and
+  readiness to always-ready.)
 - The **scheduling engine (`internal/scheduling`, Phase 6) is pure**: no DB, no
   HTTP, no clock reads. Read `docs/ALGORITHM.md` before touching it.
 - From the **repo root**, run `go build ./backend/...`, `go vet ./backend/...`, and
