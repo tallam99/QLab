@@ -31,7 +31,10 @@ services:
 
   api:
     build:
-      context: ./backend
+      # Context is the repo root (the Go module lives there); the Dockerfile is
+      # under backend/.
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       QLAB_ENV: local
       PORT: "8090"

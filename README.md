@@ -40,13 +40,13 @@ The local stack (Go API + Postgres in Docker Compose) is driven by `mage`. From 
 clean checkout:
 
 ```bash
-mage up                              # build + start API + Postgres (creates .env on first run)
+mage startStack                      # build + start API + Postgres (creates .env.json on first run)
 curl localhost:8090/healthz          # -> {"status":"ok"}   (liveness)
 curl localhost:8090/readyz           # -> {"status":"ok"}   (readiness — pings the DB)
-mage test                            # Go suite + Yaak secret-check tests
-mage logs                            # follow logs
-mage reset                           # wipe the DB volume and start fresh
-mage down                            # stop (keeps the data volume)
+mage testUnit                        # unit tests (-tags testunit) + Yaak secret-check tests
+mage serviceLogs                     # follow service logs
+mage resetStack                      # wipe the DB volume and start fresh
+mage stopStack                       # stop (keeps the data volume)
 ```
 
 Run `mage` with no args for the full target list. See

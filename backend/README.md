@@ -9,12 +9,15 @@ The Go service: the Connect-RPC API and the scheduling engine.
 
 ## Layout
 
-    cmd/server/        entrypoint (thin: config, logger, DB connect, wiring, start)
+    cmd/server/        entrypoint (thin: config, logger, store wiring, start)
     internal/
       config/          env-driven config (envconfig): PORT, QLAB_ENV, DATABASE_URL;
                        Environment enum (String()/parse generated via enumer)
       logging/         slog logger (text locally, JSON in cloud)
-      db/              Postgres connection pool (pgx); Phase 2 connects + pings only
+      clients/         external client-tech setup (connection only)
+        postgres/      pgx connection pool
+      store/           data store: business interface (interface.go) …
+        pgstore/       …and its Postgres-backed implementation
       httpmw/          HTTP middleware: request-id logging + panic recovery
       server/          chi router + handlers (/healthz, /readyz)
     migrations/        goose migrations (empty until Phase 4)
@@ -25,7 +28,8 @@ Planned additions (later phases):
     internal/
       scheduling/      the scheduling engine — PURE functions, no DB/HTTP/clock
                        (implements docs/ALGORITHM.md)
-      db/              query layer (sqlc, squirrel) on top of the pool
+      store/           query methods (sqlc, squirrel) grow on the interface
+      clients/         firebase, object storage, … as they're needed
       gen/             generated Connect/proto Go code (from proto/)
 
 ## Run it
@@ -33,7 +37,7 @@ Planned additions (later phases):
 The service requires `DATABASE_URL` and pings Postgres on boot, so the normal path
 is the Compose stack:
 
-    mage up                             # from repo root: API + Postgres
+    mage startStack                     # from repo root: API + Postgres
     curl localhost:8090/healthz         # -> {"status":"ok"}  (liveness)
     curl localhost:8090/readyz          # -> {"status":"ok"}  (readiness — DB reachable)
 
