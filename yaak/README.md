@@ -31,6 +31,13 @@ workspace contains a literal token/key/JWT or a non-empty secret-named field —
 filled secret can't be exported and committed by accident. The same check runs in
 CI (Phase 3).
 
+> **Convention — name secrets so the guard catches them.** The check only knows a
+> variable/header holds a secret if its *name* matches the `SECRET_NAME` regex in
+> `scripts/check-yaak-secrets.py` (e.g. contains `token`, `secret`, `key`,
+> `password`, `auth`, `credential`). When you introduce a new secret, name it to
+> match — otherwise the guard won't require it to stay empty. If a secret genuinely
+> can't be named that way, extend the regex in the same change.
+
 ## Production guardrails
 
 You can drive `production`, but it's deliberately built to resist thoughtless
