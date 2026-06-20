@@ -132,10 +132,11 @@ Notes:
 > under a one-time exception to the local/cloud boundary. Region: **us-east1**.
 > Created in each project: Artifact Registry repo `qlab`; service accounts
 > `qlab-deployer` (CI, 4 roles) and `qlab-api` (runtime); WIF pool/provider
-> `github` scoped to `tallam99/QLab` + the deployer binding. The commands are kept
-> below for reference and recreation. **Still pending (yours):** Neon + Secret
-> Manager `DATABASE_URL` (step 4) and Firebase Hosting init — see "What's left"
-> below. Claude does **not** resume running cloud commands; this was a one-off.
+> `github` scoped to `tallam99/QLab` + the deployer binding. The DB secrets
+> (`db-url-staging`/`db-url-production`) and runtime-SA access are also done
+> (step 4). The commands are kept below for reference and recreation. **Still
+> pending (yours):** Firebase Hosting init — see "What's left" below. Claude does
+> **not** resume running cloud commands; this was a one-off.
 
 Done **twice** — once per project (`staging`, then `production`), with the
 variables below set per session.
@@ -203,23 +204,33 @@ done
 (`iam.serviceAccountUser` lets the deployer "act as" the runtime SA when deploying
 the service.)
 
-### 4. Secret Manager — `DATABASE_URL`
+### 4. Secret Manager — the database URL secret
 
-Store the matching Neon **branch** connection string (from the Database setup
-section above — staging branch for the staging project, production branch for prod)
-and let the **runtime SA** read it.
+> ✅ **Done.** The secrets exist and the runtime SAs can read them: `db-url-staging`
+> in `qlab-staging` and `db-url-production` in `qlab-production` (each holds the
+> matching Neon branch string). The deploy maps the secret to the container's
+> `DATABASE_URL` env var; the secret's per-environment *name* is the
+> `DATABASE_SECRET` GitHub variable.
+
+The secret name is arbitrary — what matters is the container env var. Store the
+matching Neon **branch** connection string (staging branch → staging project,
+production branch → prod) and let the **runtime SA** read it:
 
 ```sh
+# names used here: db-url-staging (qlab-staging) / db-url-production (qlab-production)
 printf '%s' 'postgres://USER:PASSWORD@HOST/DB?sslmode=require' \
-  | gcloud secrets create DATABASE_URL --data-file=- --project "$PROJECT_ID"
+  | gcloud secrets create db-url-staging --data-file=- --project qlab-staging
 
-gcloud secrets add-iam-policy-binding DATABASE_URL \
-  --member="serviceAccount:${RUNTIME_SA}" \
-  --role=roles/secretmanager.secretAccessor --project "$PROJECT_ID"
+gcloud secrets add-iam-policy-binding db-url-staging \
+  --member="serviceAccount:qlab-api@qlab-staging.iam.gserviceaccount.com" \
+  --role=roles/secretmanager.secretAccessor --project qlab-staging
 ```
 
-(Cloud Run mounts it via `--set-secrets DATABASE_URL=DATABASE_URL:latest`, which
-the workflow already does. To rotate, add a new secret *version*.)
+Cloud Run mounts it via `--set-secrets DATABASE_URL=${DATABASE_SECRET}:latest`, so
+the secret can be named anything as long as `DATABASE_SECRET` points at it. To
+rotate, add a new secret *version* (`gcloud secrets versions add db-url-staging
+--data-file=-`); `:latest` picks it up on the next deploy and the IAM grant carries
+over.
 
 ### 5. Workload Identity Federation (no SA keys)
 
@@ -290,16 +301,18 @@ Variables), one set for `staging` and one for `production`.
 | Variable | Example (staging) | Notes |
 |----------|-------------------|-------|
 | `GCP_PROJECT_ID` | `qlab-staging` | |
-| `GCP_REGION` | `us-central1` | Cloud Run + Artifact Registry region |
+| `GCP_REGION` | `us-east1` | Cloud Run + Artifact Registry region |
 | `WIF_PROVIDER` | `projects/123…/locations/global/workloadIdentityPools/github/providers/github` | printed by step 5 |
 | `DEPLOY_SERVICE_ACCOUNT` | `qlab-deployer@qlab-staging.iam.gserviceaccount.com` | |
 | `CLOUD_RUN_RUNTIME_SA` | `qlab-api@qlab-staging.iam.gserviceaccount.com` | service runs as this |
 | `ARTIFACT_REGISTRY_REPO` | `qlab` | |
 | `CLOUD_RUN_SERVICE` | `api-staging` | `api-prod` for production |
-| `CORS_ALLOWED_ORIGINS` | `https://qlab-staging.web.app` | the Hosting origin(s); comma-separate if more than one |
+| `CORS_ALLOWED_ORIGINS` | `https://qlab-staging.web.app,https://qlab-staging.firebaseapp.com` | the Hosting origin(s); comma-separate if more than one |
 | `FIREBASE_PROJECT_ID` | `qlab-staging` | |
+| `DATABASE_SECRET` | `db-url-staging` | name of the Secret Manager secret holding the DB URL (`db-url-production` for prod) |
 
-`DATABASE_URL` is **not** here — it lives in Secret Manager (step 4).
+The DB connection string itself is **not** here — only the *name* of its Secret
+Manager secret is. The value lives in Secret Manager (step 4).
 
 ### Branch protection
 
@@ -311,22 +324,22 @@ gate for every merge.
 
 ## What's left for you
 
-The GCP infra and all GitHub config (Environments, prod reviewer, variables) are
-done. To get the **first green deploy**, you still need:
+The GCP infra, the database secrets (+ runtime-SA access), and all GitHub config
+(Environments, prod reviewer, variables) are **done**. To get the **first green
+deploy**, you still need:
 
-1. **Neon** — create the project + `staging`/`production` branches and copy each
-   branch's connection string (the "Database setup (Neon)" section above).
-2. **Secret Manager `DATABASE_URL`** — in **each** project, store that project's
-   Neon branch string and grant the runtime SA access (step 4 above). The backend
-   revision stays unhealthy until this resolves to a reachable DB (sequencing note
-   at the top). You can paste the connection strings to Claude to run step 4 under
-   the same exception, or run it yourself.
-3. **Firebase Hosting init** — in each Firebase project, enable Hosting (console →
+1. **Firebase Hosting init** — in each Firebase project, enable Hosting (console →
    Hosting → Get started, or `firebase init hosting` once) so the default
    `https://<project>.web.app` site exists for the deploy to target.
-4. **Merge this PR**, then approve the production deploy when prompted.
+2. **Merge this PR**, then approve the production deploy when prompted.
 
 Then verify (below) and paste the URLs back.
+
+> ✅ Already done: Neon `db-url-staging`/`db-url-production` secrets exist in their
+> respective projects with the runtime SAs granted `secretAccessor`, and the
+> `DATABASE_SECRET` variable points the deploy at each. (Assuming the Neon branches
+> are reachable; if a connection string is wrong the backend revision will stay
+> unhealthy — see the sequencing note up top.)
 
 ---
 
