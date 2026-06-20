@@ -1,14 +1,17 @@
-# CI gate — runs on every PR and on pushes to main.
+# CI gate — runs on every PR, and as the first job inside deploy.yml on pushes to
+# main (via workflow_call), so a deploy can only proceed once these checks pass.
 #
 # Each job mirrors a `mage` test target so a green PR means the same thing locally
-# and in CI (`mage test` = testUnit + testSecurity). Deploys live in deploy.yml
-# and only run after merge.
+# and in CI (`mage test` = testUnit + testSecurity).
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  # Called by deploy.yml as its gating job on push to main. We do NOT also trigger
+  # on `push: branches: [main]` directly: that would run CI twice per merge (once
+  # standalone, once via deploy) and waste free-tier minutes. Routing main through
+  # deploy.yml keeps a single CI run that gates the deploy on the same commit.
+  workflow_call:
 
 # One in-flight run per ref; a new push cancels the previous run.
 concurrency:
