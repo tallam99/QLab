@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- build stage: compile a static binary -------------------------------------
+# Build context is the repo ROOT (the Go module lives there); compose sets it.
 FROM golang:1.26 AS build
 WORKDIR /src
 
@@ -8,9 +9,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . .
+COPY backend/ ./backend/
 # CGO off + static linking so the binary runs on the distroless static image.
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./backend/cmd/server
 
 # --- runtime stage: minimal, non-root ----------------------------------------
 # distroless/static = libc-less base with CA certs and tzdata, no shell/package

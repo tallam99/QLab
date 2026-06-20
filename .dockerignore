@@ -1,0 +1,16 @@
+# Keep the build context lean: the image build needs only go.mod/go.sum and the
+# backend/ source. Everything else (other surfaces, docs, tooling, secrets) is
+# irrelevant to the Go binary.
+.git
+.claude
+frontend
+docs
+proto
+yaak
+scripts
+*.md
+magefile.go
+backend/bin
+**/*_test.go
+.env
+.env.json

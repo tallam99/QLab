@@ -400,11 +400,15 @@ and prod branches, with **seedable demo data for staging/local.**
   the same scenarios as `docs/ALGORITHM.md`'s test matrix (single- and multi-bench, gap-
   fill, no-show), so the UI and API have realistic situations to show. **Seeding is
   staging/local only** (guarded by `QLAB_ENV`).
+- **Install `mockery`** (pinned Go `tool` + `.mockery.yaml`) and generate mocks for
+  `store.Store` (and any service interfaces) via `//go:generate`, so tests can
+  assert interactions. Deferred from Phase 2 — there were no interfaces with methods
+  to mock yet (the logger uses `logging.Noop()`, a hand-written no-op, by design).
 
-**Exit criteria:** Schema applied to local + both Neon branches; a Go DB layer
-(`internal/db`) connects and runs a trivial query against Neon; `mage seed`
-populates a demo lab locally; the same seed is reproducible on the Neon staging
-branch.
+**Exit criteria:** Schema applied to local + both Neon branches; the Go store layer
+(`internal/store/pgstore`) connects and runs a trivial query against Neon; `mage
+seed` populates a demo lab locally; the same seed is reproducible on the Neon
+staging branch.
 
 **Notes:**
 - **Modeling time:** use **`timestamptz`** for `win_start` / `actual_start`

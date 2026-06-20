@@ -17,6 +17,10 @@ type Config struct {
 	// Env names the deployment environment. Parsed into the Environment enum,
 	// which rejects unknown values at load time (see Environment.Decode).
 	Env Environment `envconfig:"QLAB_ENV" default:"local"`
+	// DatabaseURL is the Postgres connection string (pgx format). Locally it
+	// points at the Compose Postgres; on Cloud Run it's the Neon string. Required:
+	// the service pings the database on boot, so there is no DB-less mode.
+	DatabaseURL string `envconfig:"DATABASE_URL" required:"true"`
 }
 
 // Load reads and validates configuration from the environment.
