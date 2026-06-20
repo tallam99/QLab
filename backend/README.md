@@ -9,17 +9,17 @@ The Go service: the Connect-RPC API and the scheduling engine.
 
 ## Layout
 
-    cmd/server/        entrypoint (thin: config, logger, store wiring, start)
+    cmd/server/        entrypoint (thin: config, logger, build server, register deps, run)
     internal/
       config/          env-driven config (envconfig): PORT, QLAB_ENV, DATABASE_URL;
                        Environment enum (String()/parse generated via enumer)
-      logging/         slog logger (text locally, JSON in cloud)
+      logging/         Logger interface + slog impl (text locally, JSON in cloud)
       clients/         external client-tech setup (connection only)
         postgres/      pgx connection pool
       store/           data store: business interface (interface.go) …
-        pgstore/       …and its Postgres-backed implementation
+        pgstore/       …and its Postgres-backed implementation (io.Closer)
       httpmw/          HTTP middleware: request-id logging + panic recovery
-      server/          chi router + handlers (/healthz, /readyz)
+      server/          router, handlers, and lifecycle (New + Run; /healthz, /readyz)
     migrations/        goose migrations (empty until Phase 4)
     Dockerfile         multi-stage build → distroless/static
 

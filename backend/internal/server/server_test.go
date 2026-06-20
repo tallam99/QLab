@@ -11,11 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
+	"github.com/tallam99/qlab/backend/internal/logging"
 )
 
 // Server-package tests are strictly infrastructural — server wiring, lifecycle,
 // liveness/readiness. Endpoint functionality belongs in dedicated integration
 // suites that exercise the full stack, not here.
+
+// noopLogger is a logging.Logger that discards everything, for quiet tests.
+type noopLogger struct{}
+
+func (noopLogger) Debug(string, ...any)       {}
+func (noopLogger) Info(string, ...any)        {}
+func (noopLogger) Warn(string, ...any)        {}
+func (noopLogger) Error(string, ...any)       {}
+func (noopLogger) With(...any) logging.Logger { return noopLogger{} }
 
 // TestNotFound checks the router's baseline behavior: an unknown path returns
 // 404 and still carries the request-id header (so even misses are traceable).

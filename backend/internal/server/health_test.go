@@ -4,8 +4,6 @@ package server
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +17,7 @@ import (
 // testHandler builds a server with discarded logs. It is not marked ready, so it
 // also exercises that liveness (/healthz) is up independent of readiness.
 func testHandler() http.Handler {
-	return New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	return New(Options{Logger: noopLogger{}})
 }
 
 // TestHealthz verifies the liveness probe: it must return 200 with the ok body

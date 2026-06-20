@@ -12,31 +12,36 @@ land in Phase 4.
 ## Key files
 
 - `cmd/server/main.go` — entrypoint. Keep it thin: load config → build logger →
-  start serving (liveness up immediately) → initialize dependencies with bounded
-  retry → `MarkReady` → serve until a shutdown signal. No business logic here.
+  build the server → register dependencies (`s.InjectDependency`) → `s.Run(ctx)`.
+  The server owns the lifecycle; no business logic here.
 - `internal/config/` — the *only* place env vars are read (envconfig). Holds the
   `Environment` enum (generated `String()`/parse via enumer).
-- `internal/logging/` — slog setup (text locally, JSON in cloud).
+- `internal/logging/` — the `Logger` interface (the logging methods the service
+  uses) and a slog-backed implementation (text locally, JSON in cloud). The server
+  and middleware depend on the interface, so a fake/alternate backend can be swapped.
 - `internal/clients/` — external client-tech *connection* setup only (no data
   access). `clients/postgres` builds the pgx pool; Firebase/storage clients become
   siblings later.
 - `internal/store/` — the data store: the business `Store` interface
   (`interface.go`, business-domain methods only — empty until Phase 4), implemented
   by `store/pgstore`. `pgstore.New` pings on construction, so a returned store is
-  guaranteed ready and nothing re-checks it (no health methods on the interface).
+  guaranteed ready and nothing re-checks it (no health methods on the interface);
+  `pgstore.Store` is an `io.Closer` so the server can drain its pool on shutdown.
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
   (`RequestLogger`, `LoggerFromContext`) and panic recovery (`Recoverer`).
-- `internal/server/` — chi router and handlers (methods on `Server`). `New`
-  returns a `*Server` that serves immediately so `/healthz` (liveness) is 200 from
-  the start; `/readyz` (readiness) returns 503 until `MarkReady` runs — which
-  `main` calls once dependencies initialize — then 200. Runtime deps are injected
-  via `MarkReady` (not `Options`), because the server listens before they exist.
+- `internal/server/` — the server: router, handlers (methods on `Server`), and the
+  lifecycle. `New` returns a `*Server`; `Run(ctx)` serves immediately (so
+  `/healthz` liveness is 200 at once), runs the registered dependency injectors
+  (`InjectDependency` / `WithPostgres`, private `initPgStore`), calls `Ready()` to
+  flip `/readyz` to 200, then drains and closes deps on shutdown. `/readyz` is 503
+  until ready.
 
 ## Conventions
 
 - **`internal/` for everything not meant to be imported externally.**
-- **slog everywhere**, never `fmt.Println`/`log`. Use the request-scoped logger
-  from `httpmw.LoggerFromContext(ctx)` inside handlers so lines carry the request id.
+- **Structured logging via the `logging.Logger` interface** (slog-backed), never
+  `fmt.Println`/`log`. Use the request-scoped logger from
+  `httpmw.LoggerFromContext(ctx)` inside handlers so lines carry the request id.
 - **chi** for routing/middleware; Connect-RPC handlers mount on the same router
   later. Wire format is protobuf via Connect — generated types only, no
   hand-written request/response shapes (lands Phase 5).
@@ -51,23 +56,24 @@ land in Phase 4.
   value is `EnumNameUnknown` and is **never valid** — seeing it in a logical flow
   is a programmer error. Reject it when decoding external input.
 - **Don't hardcode strings in logic** — route paths, header names, content types,
-  and slog attribute keys are package-level consts so they're grep-able and
+  and log attribute keys are package-level consts so they're grep-able and
   changeable in one place. **Log messages are the exception: keep them inline
   unless the same message is emitted from more than one site.**
 - **Programmer-error invariants panic** (e.g. `LoggerFromContext` with no logger,
   `server.New` with a nil required dependency); the `Recoverer` middleware turns
   request-time panics into a logged 500 rather than a crash.
-- **Liveness up first, then readiness.** The server starts listening *before*
+- **The server owns its lifecycle** (`Run(ctx)`): it starts listening *before*
   dependencies initialize, so `/healthz` is up immediately and the platform never
-  mistakes slow startup for a dead container. `main` then initializes dependencies
-  (their constructors verify health — e.g. `pgstore.New` pings — with bounded retry
-  to ride out transient failures) and calls `MarkReady`, flipping `/readyz` to 200.
-- **Dependencies are injected as interfaces, already constructed and ready.** The
-  service uses them through their interfaces and never configures or re-checks them.
-  Construction-time deps (the logger) go in `Options` (validated in `New`, panic on
-  nil); runtime deps that must be initialized first (the store, later
-  cache/queue/…) are injected via `MarkReady`. Interface types let tests and infra
-  swap implementations freely.
+  mistakes slow startup for a dead container. `Run` then runs the registered
+  injectors (their constructors verify health — e.g. `pgstore.New` pings — with
+  bounded retry to ride out transient failures), calls `Ready()` to flip `/readyz`
+  to 200, and on shutdown drains the HTTP server then closes dependencies.
+- **Add dependencies via `InjectDependency`, not new setter methods.** A dependency
+  is a `func(ctx, *Server) error` that initializes it (its constructor verifies
+  health) and attaches it — registered before `Run`, executed inside it. This keeps
+  the `Server` method set fixed as dependencies grow. Construction-time deps (the
+  logger) still go in `Options`, validated in `New`. Deps are interface-typed where
+  practical so tests and infra can swap implementations.
 - The **scheduling engine (`internal/scheduling`, Phase 6) is pure**: no DB, no
   HTTP, no clock reads. Read `docs/ALGORITHM.md` before touching it.
 - From the **repo root**, run `go build ./backend/...`, `go vet ./backend/...`, and

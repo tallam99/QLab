@@ -27,3 +27,10 @@ func New(ctx context.Context, pool *pgxpool.Pool) (*Store, error) {
 	}
 	return &Store{pool: pool}, nil
 }
+
+// Close releases the store's resources (the connection pool). It satisfies
+// io.Closer so the server can track and close it during shutdown.
+func (s *Store) Close() error {
+	s.pool.Close()
+	return nil
+}
