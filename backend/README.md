@@ -10,9 +10,10 @@ The Go service: the Connect-RPC API and the scheduling engine.
 
     cmd/server/        entrypoint (thin: config, logger, wiring, start)
     internal/
-      config/          env-driven config (envconfig): PORT, QLAB_ENV
+      config/          env-driven config (envconfig): PORT, QLAB_ENV;
+                       Environment enum (String()/parse generated via enumer)
       logging/         slog logger (text locally, JSON in cloud)
-      httplog/         request-id + per-request structured log middleware
+      httpmw/          HTTP middleware: request-id logging + panic recovery
       server/          chi router + handlers (currently /healthz)
     Dockerfile         multi-stage build → distroless/static
 
@@ -26,13 +27,23 @@ Planned additions (later phases):
 
 ## Run it
 
-    go run ./cmd/server                 # listens on :8080 (override with PORT)
-    curl localhost:8080/healthz         # -> {"status":"ok"}
+    go run ./cmd/server                 # listens on :8090 (override with PORT)
+    curl localhost:8090/healthz         # -> {"status":"ok"}
 
     docker build -t qlab-api .          # multi-stage build
-    docker run -p 8080:8080 -e QLAB_ENV=staging qlab-api
+    docker run -p 8090:8090 -e QLAB_ENV=staging qlab-api
 
-`QLAB_ENV=local` (the default) uses text logs; anything else uses JSON.
+`QLAB_ENV` must be one of `local` / `staging` / `prod` (invalid values fail at
+startup). `local` (the default) uses text logs; the others use JSON. The local
+default port is `8090` to dodge other tooling (Firebase emulators, Postgres,
+cloud-sql-proxy, Vite); Cloud Run overrides it via `PORT`.
+
+## Codegen
+
+`enumer` is pinned as a Go tool dependency (`tool` directive in `go.mod`), so no
+separate install is needed:
+
+    go generate ./...   # regenerates enum String()/parse via `go tool enumer`
 
 ## Conventions
 

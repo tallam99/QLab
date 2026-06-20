@@ -9,11 +9,14 @@ import "github.com/kelseyhightower/envconfig"
 // Config is the fully-resolved service configuration.
 type Config struct {
 	// Port is the TCP port the HTTP server listens on. Cloud Run injects PORT
-	// and the container must respect it.
-	Port string `envconfig:"PORT" default:"8080"`
-	// Env names the deployment environment: "local", "staging", or "prod".
-	// It drives log format now, and dev-only route guards later (see PLAN.md).
-	Env string `envconfig:"QLAB_ENV" default:"local"`
+	// and the container must respect it. The local default (8090) is deliberately
+	// uncommon to dodge other tooling on this stack — Firebase emulators
+	// (Firestore 8080, Auth 9099), cloud-sql-proxy (9472), Postgres (5432),
+	// Vite (5173). (envconfig defaults must be tag literals, hence not a const.)
+	Port string `envconfig:"PORT" default:"8090"`
+	// Env names the deployment environment. Parsed into the Environment enum,
+	// which rejects unknown values at load time (see Environment.Decode).
+	Env Environment `envconfig:"QLAB_ENV" default:"local"`
 }
 
 // Load reads and validates configuration from the environment.
@@ -26,4 +29,4 @@ func Load() (Config, error) {
 }
 
 // IsLocal reports whether the service is running in the local dev environment.
-func (c Config) IsLocal() bool { return c.Env == "local" }
+func (c Config) IsLocal() bool { return c.Env == EnvLocal }
