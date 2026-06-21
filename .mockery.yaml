@@ -1,10 +1,11 @@
 # mockery (v2) config. Generates testify mocks for the service's interfaces so
-# tests can assert interactions. Run via `go generate ./backend/...` (the
-# //go:generate directive lives on the interface) or `go tool mockery` from the
-# repo root.
+# tests can assert interactions. Run via `mage genMocks` (or `go generate
+# ./backend/...` — the //go:generate directive lives on the interface, or `go tool
+# mockery` from the repo root).
 #
-# Mocks are committed (like the generated enum/proto code) so the test build needs
-# no codegen step. Regenerate after changing a mocked interface.
+# Mocks are NOT committed (they're gitignored). Generate them with `mage genMocks`
+# before building/testing code that imports one, then `go mod tidy` to pull the mock
+# runtime deps; `mage clearMocks` removes them.
 #
 # dir uses {{.InterfaceDir}} so the output lands next to the interface regardless
 # of the working directory `go generate` runs mockery from.

@@ -180,23 +180,29 @@ func ResetStack() error {
 	return StartStack()
 }
 
-// Migrate applies goose migrations to local Postgres. Migrations live in
-// backend/migrations (added in Phase 5). goose errors on an empty directory, so
-// until the first migration exists this skips cleanly.
+// Migrate applies goose migrations. Against local Postgres by default; CI/CD sets
+// MIGRATE_DATABASE_URL to point at a remote database (the deploy pipeline fills it
+// from the migrator secret, running migrations before the new revision deploys).
+// That override is for trusted automation only — never run migrations against
+// staging/prod from a laptop (see docs/deploy.md).
 func Migrate() error {
-	env, err := loadEnv()
-	if err != nil {
-		return err
+	url := os.Getenv("MIGRATE_DATABASE_URL")
+	if url == "" {
+		env, err := loadEnv()
+		if err != nil {
+			return err
+		}
+		url = env.hostDatabaseURL()
 	}
 	sqlFiles, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
 	if err != nil {
 		return err
 	}
 	if len(sqlFiles) == 0 {
-		fmt.Println("migrate: no migrations yet (added with the schema in Phase 5)")
+		fmt.Println("migrate: no migrations to apply")
 		return nil
 	}
-	return run("go", "run", goosePackage, "-dir", migrationsDir, "postgres", env.hostDatabaseURL(), "up")
+	return run("go", "run", goosePackage, "-dir", migrationsDir, "postgres", url, "up")
 }
 
 // Seed loads demo data into local Postgres by applying backend/seed/seed.sql. It
@@ -212,13 +218,17 @@ func Seed() error {
 	return psql(env, env.PostgresDB, seedFile, "-f", "-")
 }
 
-// Test runs every test tier. Integration and database tiers (testIntegration,
-// testDatabase) get their own targets and are added here as they land.
+// Test runs every test tier: unit, security, and the DB schema tests. TestSchema
+// needs a reachable Postgres, so `mage test` now requires the local stack up
+// (mage startStack); in CI each tier runs as its own job with a Postgres service.
 func Test() error {
 	if err := TestUnit(); err != nil {
 		return err
 	}
-	return TestSecurity()
+	if err := TestSecurity(); err != nil {
+		return err
+	}
+	return TestSchema()
 }
 
 // TestUnit runs the Go unit tests (build tag `testunit`). They need no
@@ -238,41 +248,30 @@ func TestSecurity() error {
 }
 
 // TestSchema runs the DB-level schema tests (constraints, triggers, seed values)
-// against a throwaway database. It creates qlab_schema_test fresh, applies all
-// migrations, loads the demo seed, runs the `database`-tagged Go tests against it,
-// and drops it — so it never touches dev data and is repeatable. Requires the
-// local stack (mage startStack); it is NOT part of `mage test` because that runs
-// in CI without a database. The tests reach the throwaway DB via the
-// SCHEMA_TEST_DATABASE_URL it sets.
+// against a throwaway database. The suite's TestMain owns that database — it
+// creates it fresh, applies all migrations with goose, loads the demo seed, runs,
+// and drops it — so this target just hands it the coordinates. It works the same
+// locally and in CI; both only need a reachable Postgres (mage startStack locally,
+// a Postgres service in CI). Part of `mage test`.
 func TestSchema() error {
 	env, err := loadEnv()
 	if err != nil {
 		return err
 	}
-	// Recreate the throwaway DB. WITH (FORCE) drops any lingering connections from
-	// a previous interrupted run.
-	recreate := func() error {
-		return psql(env, "postgres", "",
-			"-c", "DROP DATABASE IF EXISTS "+schemaTestDB+" WITH (FORCE)",
-			"-c", "CREATE DATABASE "+schemaTestDB)
+	abs := func(p string) string {
+		if a, err := filepath.Abs(p); err == nil {
+			return a
+		}
+		return p
 	}
-	if err := recreate(); err != nil {
-		return fmt.Errorf("create schema-test database (is the stack up? run `mage startStack`): %w", err)
-	}
-	// Always drop the throwaway DB on the way out, even if the tests fail.
-	defer func() {
-		_ = psql(env, "postgres", "", "-c", "DROP DATABASE IF EXISTS "+schemaTestDB+" WITH (FORCE)")
-	}()
-
-	testURL := env.hostDatabaseURLFor(schemaTestDB)
-	if err := run("go", "run", goosePackage, "-dir", migrationsDir, "postgres", testURL, "up"); err != nil {
-		return fmt.Errorf("migrate schema-test database: %w", err)
-	}
-	if err := psql(env, schemaTestDB, seedFile, "-f", "-"); err != nil {
-		return fmt.Errorf("seed schema-test database: %w", err)
-	}
-	return runWithEnv(append(os.Environ(), "SCHEMA_TEST_DATABASE_URL="+testURL),
-		"go", "test", "-tags", "database", schemaTestDir)
+	testEnv := append(os.Environ(),
+		"SCHEMA_TEST_DATABASE_URL="+env.hostDatabaseURLFor(schemaTestDB),
+		"SCHEMA_TEST_MIGRATIONS_DIR="+abs(migrationsDir),
+		"SCHEMA_TEST_SEED_FILE="+abs(seedFile),
+		"SCHEMA_TEST_GOOSE_PKG="+goosePackage,
+	)
+	// -count=1 disables the test cache: the result depends on live DB state.
+	return runWithEnv(testEnv, "go", "test", "-tags", "database", "-count=1", schemaTestDir)
 }
 
 // mutateDirs are the directories `mage mutate` runs mutation testing over, in
@@ -338,6 +337,31 @@ func DbStringProd() error { return printDBString(gcpProjectProd, dbSecretProdRW)
 func printDBString(project, secret string) error {
 	return run("gcloud", "secrets", "versions", "access", "latest",
 		"--secret", secret, "--project", project)
+}
+
+// mockDirs are the directories holding generated mocks (mockery output). Mocks are
+// NOT committed — GenMocks regenerates them, ClearMocks removes them. Add new
+// output dirs here as more interfaces get mocked (mirror .mockery.yaml).
+var mockDirs = []string{
+	"backend/internal/store/storemock",
+}
+
+// GenMocks regenerates the testify mocks from .mockery.yaml. Mocks are generated
+// on demand rather than committed, so run this before building or testing code
+// that imports a mock (then `go mod tidy` to pull the mock runtime deps).
+func GenMocks() error {
+	return run("go", "tool", "mockery")
+}
+
+// ClearMocks removes the generated mock directories — mocks aren't committed, so
+// this just tidies the working tree.
+func ClearMocks() error {
+	for _, dir := range mockDirs {
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("remove %s: %w", dir, err)
+		}
+	}
+	return nil
 }
 
 // GenProto regenerates Go + TS from the .proto contract via buf. The contract and
