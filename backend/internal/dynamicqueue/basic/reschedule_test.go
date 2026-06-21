@@ -252,6 +252,47 @@ func TestReschedule(t *testing.T) {
 			slots:     []dynamicqueue.Slot{sched("a", 1, 600, 480, 0, 600)}, // desired 19:00, runs 8h
 			want:      map[string]want{"a": placed(600, "r1", false)},
 		},
+		// ---- interactions (multiple mechanisms at once) ----
+		{
+			name:      "no-show frees capacity and the next slot pulls forward",
+			grace:     15,
+			now:       20, // 09:20
+			resources: resources("r1"),
+			slots: []dynamicqueue.Slot{
+				sched("b", 1, 0, 60, 0, 0),    // committed 09:00; grace lapsed at 09:15 -> no-show
+				sched("c", 2, 30, 60, 30, 90), // floor 09:00, clamped to now; pulled forward
+			},
+			want: map[string]want{
+				"b": noShow,
+				"c": placed(20, "r1", true), // 09:20
+			},
+		},
+		{
+			name:      "overrun pushes a slot that hops to a free resource",
+			resources: resources("r1", "r2"),
+			slots: []dynamicqueue.Slot{
+				active("a", 0, "r1", 0, 80),  // overruns to 10:20
+				sched("b", 1, 60, 60, 0, 60), // hops to free r2 at 10:00
+				sched("c", 2, 60, 30, 0, 60), // takes r1 after the overrun, 10:20
+			},
+			want: map[string]want{
+				"b": placed(60, "r2", false),
+				"c": placed(80, "r1", true),
+			},
+		},
+		{
+			name:      "lookahead lets a slot reach an earlier gap",
+			resources: resources("r1"),
+			slots: []dynamicqueue.Slot{
+				active("a", 0, "r1", 0, 60),     // frees r1 at 10:00
+				sched("b", 1, 90, 60, 0, 90),    // 10:30, leaves a 10:00–10:30 gap
+				sched("c", 2, 120, 30, 60, 120), // desired 11:00, lookahead 60 -> floor 10:00 reaches the gap
+			},
+			want: map[string]want{
+				"b": placed(90, "r1", false),
+				"c": placed(60, "r1", true), // gap-filled at 10:00
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -370,6 +411,7 @@ func TestRescheduleValidation(t *testing.T) {
 		{"foreign pool slot", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{foreignPool}}},
 		{"active without resource", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{noResource}}},
 		{"active projected end not after now", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{active("z", 1, "r1", -60, 0)}}},
+		{"two active slots on one resource", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{active("a", 1, "r1", 0, 60), active("b", 2, "r1", 0, 90)}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

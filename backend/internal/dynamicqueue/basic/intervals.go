@@ -2,7 +2,6 @@ package basic
 
 import (
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
@@ -52,9 +51,11 @@ func buildFree(resources []dynamicqueue.Resource, slots []dynamicqueue.Slot, now
 		busy[s.AssignedResource] = append(busy[s.AssignedResource], interval{start: now, end: s.ProjectedEnd})
 	}
 
+	// Validate guarantees at most one ACTIVE slot per resource, so each busy list
+	// holds zero or one interval — no merging needed.
 	free := make(freeMap, len(resources))
 	for _, r := range resources {
-		free[r.ID] = freeFrom(now, mergeIntervals(busy[r.ID]))
+		free[r.ID] = freeFrom(now, busy[r.ID])
 	}
 	return free
 }
@@ -76,33 +77,13 @@ func freeFrom(now time.Time, busy []interval) []interval {
 	return append(out, interval{start: cursor, openEnded: true})
 }
 
-// mergeIntervals sorts bounded intervals by start and merges overlapping or
-// touching ones.
-func mergeIntervals(ivs []interval) []interval {
-	if len(ivs) == 0 {
-		return nil
-	}
-	sort.Slice(ivs, func(i, j int) bool { return ivs[i].start.Before(ivs[j].start) })
-	merged := []interval{ivs[0]}
-	for _, iv := range ivs[1:] {
-		last := &merged[len(merged)-1]
-		if !iv.start.After(last.end) { // overlaps or touches the previous
-			if iv.end.After(last.end) {
-				last.end = iv.end
-			}
-			continue
-		}
-		merged = append(merged, iv)
-	}
-	return merged
-}
-
 // place finds the earliest feasible start for a slot of length d, no earlier than
 // earliest, across all resources' free intervals — the argmin of t = max(start,
-// earliest) at which the slot fits. Ties break to the smaller start, then the
-// smaller resource id (determinism, §4). It returns the chosen start and resource,
-// and whether the slot backfilled a bounded gap (vs. the open-ended tail). Every
-// resource has an open-ended tail, so a placement always exists (§8).
+// earliest) at which the slot fits. It returns the chosen start and resource, and
+// whether the slot backfilled a bounded gap (vs. the open-ended tail). Resources
+// are scanned in id order and a tie on start keeps the first (smallest-id) one, so
+// the result is deterministic (§4). Every resource has an open-ended tail, so a
+// placement always exists (§8).
 func place(free freeMap, earliest time.Time, d dynamicqueue.Minutes) (time.Time, dynamicqueue.ResourceID, bool) {
 	var (
 		bestStart    time.Time
@@ -119,7 +100,7 @@ func place(free freeMap, earliest time.Time, d dynamicqueue.Minutes) (time.Time,
 			}
 			// The first fitting interval on a resource gives its earliest feasible
 			// start (intervals are start-ordered, so later ones can only be later).
-			if !found || t.Before(bestStart) || (t.Equal(bestStart) && rid < bestResource) {
+			if !found || t.Before(bestStart) {
 				bestStart, bestResource, bestGapFill, found = t, rid, !iv.openEnded, true
 			}
 			break

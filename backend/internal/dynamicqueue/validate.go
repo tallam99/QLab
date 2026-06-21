@@ -24,6 +24,7 @@ func (in Input) Validate() error {
 	// SlotPriority is a unique total order and the sole tie-break key (§4), so
 	// duplicates are a data bug the engine must not silently resolve.
 	priorities := make(map[SlotPriority]SlotID, len(in.Slots))
+	activeResources := make(map[ResourceID]SlotID)
 	for _, s := range in.Slots {
 		switch {
 		case s.ResourcePoolID != in.ResourcePoolID:
@@ -48,6 +49,12 @@ func (in Input) Validate() error {
 				return fmt.Errorf("dynamicqueue: active slot %q projected end %s is not after now %s; re-project on overrun",
 					s.ID, s.ProjectedEnd.Format(time.RFC3339), in.Now.Format(time.RFC3339))
 			}
+			// A resource runs one experiment at a time, so two ACTIVE slots cannot
+			// share a resource — it would also make seeded occupancy ambiguous.
+			if other, dup := activeResources[s.AssignedResource]; dup {
+				return fmt.Errorf("dynamicqueue: resource %q has two active slots, %q and %q; a resource runs one at a time", s.AssignedResource, other, s.ID)
+			}
+			activeResources[s.AssignedResource] = s.ID
 		}
 		if other, dup := priorities[s.SlotPriority]; dup {
 			return fmt.Errorf("dynamicqueue: slots %q and %q share priority %d; it must be a unique total order", other, s.ID, s.SlotPriority)
