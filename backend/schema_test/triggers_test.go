@@ -24,15 +24,15 @@ func TestUpdatedAtTrigger(t *testing.T) {
 	var createdAt, updatedAt0 time.Time
 	require.NoError(t, conn.QueryRow(ctx,
 		`INSERT INTO labs (name) VALUES ('touch test')
-		 RETURNING id::text, created_at, updated_at`).Scan(&id, &createdAt, &updatedAt0))
-	t.Cleanup(func() { _, _ = conn.Exec(ctx, `DELETE FROM labs WHERE id = $1`, id) })
+		 RETURNING labs_id::text, created_at, updated_at`).Scan(&id, &createdAt, &updatedAt0))
+	t.Cleanup(func() { _, _ = conn.Exec(ctx, `DELETE FROM labs WHERE labs_id = $1`, id) })
 	require.Equal(t, createdAt, updatedAt0, "updated_at should equal created_at on insert")
 
 	time.Sleep(5 * time.Millisecond) // guarantee the next transaction's now() is later
 
 	var updatedAt1 time.Time
 	require.NoError(t, conn.QueryRow(ctx,
-		`UPDATE labs SET name = 'touched' WHERE id = $1 RETURNING updated_at`, id).Scan(&updatedAt1))
+		`UPDATE labs SET name = 'touched' WHERE labs_id = $1 RETURNING updated_at`, id).Scan(&updatedAt1))
 	assert.True(t, updatedAt1.After(updatedAt0),
 		"updated_at should advance on UPDATE (was %s, now %s)", updatedAt0, updatedAt1)
 }
@@ -48,10 +48,10 @@ func TestActivePinTrigger(t *testing.T) {
 	insertActive := func(ctx context.Context, tx pgx.Tx, f fixture) string {
 		var id string
 		require.NoError(t, tx.QueryRow(ctx, `INSERT INTO slots
-			(lab_id, user_id, resource_pool_id, assigned_resource_id, slot_priority,
+			(labs_id, users_id, resource_pools_id, resources_id, slot_priority,
 			 desired_start, lookahead, duration, committed_start, actual_start, status)
 			VALUES ($1, $2, $3, $4, 1, $5, 0, 60, $5, $5, 'ACTIVE')
-			RETURNING id::text`,
+			RETURNING slots_id::text`,
 			f.labID, f.userID, f.poolID, f.res1ID, base).Scan(&id))
 		return id
 	}
@@ -65,7 +65,7 @@ func TestActivePinTrigger(t *testing.T) {
 			name: "cannot reassign the resource",
 			mutate: func(ctx context.Context, tx pgx.Tx, f fixture, id string) error {
 				_, err := tx.Exec(ctx,
-					`UPDATE slots SET assigned_resource_id = $1 WHERE id = $2`, f.res2ID, id)
+					`UPDATE slots SET resources_id = $1 WHERE slots_id = $2`, f.res2ID, id)
 				return err
 			},
 		},
@@ -73,21 +73,21 @@ func TestActivePinTrigger(t *testing.T) {
 			name: "cannot move the start",
 			mutate: func(ctx context.Context, tx pgx.Tx, _ fixture, id string) error {
 				_, err := tx.Exec(ctx,
-					`UPDATE slots SET actual_start = $1 WHERE id = $2`, base.Add(time.Hour), id)
+					`UPDATE slots SET actual_start = $1 WHERE slots_id = $2`, base.Add(time.Hour), id)
 				return err
 			},
 		},
 		{
 			name: "cannot revert to SCHEDULED",
 			mutate: func(ctx context.Context, tx pgx.Tx, _ fixture, id string) error {
-				_, err := tx.Exec(ctx, `UPDATE slots SET status = 'SCHEDULED' WHERE id = $1`, id)
+				_, err := tx.Exec(ctx, `UPDATE slots SET status = 'SCHEDULED' WHERE slots_id = $1`, id)
 				return err
 			},
 		},
 		{
 			name: "cannot become NO_SHOW",
 			mutate: func(ctx context.Context, tx pgx.Tx, _ fixture, id string) error {
-				_, err := tx.Exec(ctx, `UPDATE slots SET status = 'NO_SHOW' WHERE id = $1`, id)
+				_, err := tx.Exec(ctx, `UPDATE slots SET status = 'NO_SHOW' WHERE slots_id = $1`, id)
 				return err
 			},
 		},
@@ -107,7 +107,7 @@ func TestActivePinTrigger(t *testing.T) {
 		t.Run("can settle to "+status, func(t *testing.T) {
 			withFixture(t, conn, func(ctx context.Context, tx pgx.Tx, f fixture) {
 				id := insertActive(ctx, tx, f)
-				_, err := tx.Exec(ctx, `UPDATE slots SET status = $1 WHERE id = $2`, status, id)
+				_, err := tx.Exec(ctx, `UPDATE slots SET status = $1 WHERE slots_id = $2`, status, id)
 				require.NoError(t, err)
 			})
 		})

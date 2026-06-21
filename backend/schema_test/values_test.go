@@ -56,15 +56,16 @@ const (
 )
 
 // TestSeedValues checks `mage testSchema` loaded the demo seed with the expected
-// shape: one lab, a head + two members, a vent-hood pool of two resources, and a
-// four-slot queue whose first entry is the ACTIVE one pinned to Vent Hood A.
+// shape: one lab, a head + four members (five people), a vent-hood pool of two
+// resources, and a five-slot queue whose first entry is the ACTIVE one pinned to
+// Vent Hood A.
 func TestSeedValues(t *testing.T) {
 	conn := connect(t)
 	ctx := context.Background()
 
 	var labName string
 	require.NoError(t, conn.QueryRow(ctx,
-		`SELECT name FROM labs WHERE id = $1`, demoLab).Scan(&labName))
+		`SELECT name FROM labs WHERE labs_id = $1`, demoLab).Scan(&labName))
 	assert.Equal(t, "Demo Lab", labName)
 
 	scalar := func(query string, args ...any) int {
@@ -73,21 +74,21 @@ func TestSeedValues(t *testing.T) {
 		return n
 	}
 
-	assert.Equal(t, 3, scalar(`SELECT count(*) FROM lab_memberships WHERE lab_id = $1`, demoLab),
-		"three memberships")
-	assert.Equal(t, 1, scalar(`SELECT count(*) FROM lab_memberships WHERE lab_id = $1 AND role = 'HEAD'`, demoLab),
+	assert.Equal(t, 5, scalar(`SELECT count(*) FROM labs_users WHERE labs_id = $1`, demoLab),
+		"five memberships")
+	assert.Equal(t, 1, scalar(`SELECT count(*) FROM labs_users WHERE labs_id = $1 AND role = 'HEAD'`, demoLab),
 		"one head")
-	assert.Equal(t, 2, scalar(`SELECT count(*) FROM lab_memberships WHERE lab_id = $1 AND role = 'MEMBER'`, demoLab),
-		"two members")
-	assert.Equal(t, 2, scalar(`SELECT count(*) FROM resources WHERE resource_pool_id = $1`, demoPool),
+	assert.Equal(t, 4, scalar(`SELECT count(*) FROM labs_users WHERE labs_id = $1 AND role = 'MEMBER'`, demoLab),
+		"four members")
+	assert.Equal(t, 2, scalar(`SELECT count(*) FROM resources WHERE resource_pools_id = $1`, demoPool),
 		"two resources in the pool")
-	assert.Equal(t, 4, scalar(`SELECT count(*) FROM slots WHERE lab_id = $1`, demoLab),
-		"four slots")
+	assert.Equal(t, 5, scalar(`SELECT count(*) FROM slots WHERE labs_id = $1`, demoLab),
+		"five slots")
 
 	// The first slot is ACTIVE and pinned to Vent Hood A.
 	var status, assigned string
 	require.NoError(t, conn.QueryRow(ctx,
-		`SELECT status, assigned_resource_id::text FROM slots WHERE id = $1`, demoActive).Scan(&status, &assigned))
+		`SELECT status, resources_id::text FROM slots WHERE slots_id = $1`, demoActive).Scan(&status, &assigned))
 	assert.Equal(t, "ACTIVE", status)
 	assert.Equal(t, demoResA, assigned)
 
@@ -95,7 +96,7 @@ func TestSeedValues(t *testing.T) {
 	var pulledStatus string
 	var pulledResource *string
 	require.NoError(t, conn.QueryRow(ctx,
-		`SELECT status, assigned_resource_id::text FROM slots WHERE id = $1`, demoPulled).Scan(&pulledStatus, &pulledResource))
+		`SELECT status, resources_id::text FROM slots WHERE slots_id = $1`, demoPulled).Scan(&pulledStatus, &pulledResource))
 	assert.Equal(t, "SCHEDULED", pulledStatus)
 	assert.Nil(t, pulledResource, "unplaced slot has no assigned resource")
 }

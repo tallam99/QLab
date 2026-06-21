@@ -30,7 +30,7 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 			code: codeCheckViolation,
 			op: func(ctx context.Context, tx pgx.Tx, f fixture) error {
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, slot_priority, desired_start, lookahead, duration)
+					(labs_id, users_id, resource_pools_id, slot_priority, desired_start, lookahead, duration)
 					VALUES ($1, $2, $3, 1, $4, -1, 60)`, f.labID, f.userID, f.poolID, base)
 				return err
 			},
@@ -40,7 +40,7 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 			code: codeCheckViolation,
 			op: func(ctx context.Context, tx pgx.Tx, f fixture) error {
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, slot_priority, desired_start, lookahead, duration)
+					(labs_id, users_id, resource_pools_id, slot_priority, desired_start, lookahead, duration)
 					VALUES ($1, $2, $3, 1, $4, 0, 0)`, f.labID, f.userID, f.poolID, base)
 				return err
 			},
@@ -54,18 +54,26 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 			},
 		},
 		{
+			name: "audit created_by must reference a real user",
+			code: codeForeignKeyViolation,
+			op: func(ctx context.Context, tx pgx.Tx, _ fixture) error {
+				_, err := tx.Exec(ctx,
+					`INSERT INTO labs (name, created_by) VALUES ('x', gen_random_uuid())`)
+				return err
+			},
+		},
+		{
 			name: "slot lab must match its pool's lab",
 			code: codeForeignKeyViolation,
 			op: func(ctx context.Context, tx pgx.Tx, f fixture) error {
-				// A second lab whose id is used on a slot that points at the
-				// fixture pool (which belongs to the fixture lab): the composite FK
-				// (resource_pool_id, lab_id) -> resource_pools(id, lab_id) can't
-				// resolve.
+				// A second lab whose id is used on a slot that points at the fixture
+				// pool (which belongs to the fixture lab): the composite FK
+				// (resource_pools_id, labs_id) can't resolve.
 				var otherLab string
 				require.NoError(t, tx.QueryRow(ctx,
-					`INSERT INTO labs (name) VALUES ('other') RETURNING id::text`).Scan(&otherLab))
+					`INSERT INTO labs (name) VALUES ('other') RETURNING labs_id::text`).Scan(&otherLab))
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, slot_priority, desired_start, lookahead, duration)
+					(labs_id, users_id, resource_pools_id, slot_priority, desired_start, lookahead, duration)
 					VALUES ($1, $2, $3, 1, $4, 0, 60)`, otherLab, f.userID, f.poolID, base)
 				return err
 			},
@@ -78,13 +86,13 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 				// slot in the fixture pool.
 				var otherPool, otherRes string
 				require.NoError(t, tx.QueryRow(ctx,
-					`INSERT INTO resource_pools (lab_id, kind, name) VALUES ($1, 'VENT_HOOD', 'p2')
-					 RETURNING id::text`, f.labID).Scan(&otherPool))
+					`INSERT INTO resource_pools (labs_id, kind, name) VALUES ($1, 'VENT_HOOD', 'p2')
+					 RETURNING resource_pools_id::text`, f.labID).Scan(&otherPool))
 				require.NoError(t, tx.QueryRow(ctx,
-					`INSERT INTO resources (resource_pool_id, lab_id, kind, name)
-					 VALUES ($1, $2, 'VENT_HOOD', 'C') RETURNING id::text`, otherPool, f.labID).Scan(&otherRes))
+					`INSERT INTO resources (resource_pools_id, labs_id, kind, name)
+					 VALUES ($1, $2, 'VENT_HOOD', 'C') RETURNING resources_id::text`, otherPool, f.labID).Scan(&otherRes))
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, assigned_resource_id, slot_priority,
+					(labs_id, users_id, resource_pools_id, resources_id, slot_priority,
 					 desired_start, lookahead, duration, actual_start)
 					VALUES ($1, $2, $3, $4, 1, $5, 0, 60, $5)`,
 					f.labID, f.userID, f.poolID, otherRes, base)
@@ -98,9 +106,9 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 				var stranger string
 				require.NoError(t, tx.QueryRow(ctx,
 					`INSERT INTO users (email) VALUES (lower(gen_random_uuid()::text) || '@example.com')
-					 RETURNING id::text`).Scan(&stranger))
+					 RETURNING users_id::text`).Scan(&stranger))
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, slot_priority, desired_start, lookahead, duration)
+					(labs_id, users_id, resource_pools_id, slot_priority, desired_start, lookahead, duration)
 					VALUES ($1, $2, $3, 1, $4, 0, 60)`, f.labID, stranger, f.poolID, base)
 				return err
 			},
@@ -110,11 +118,11 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 			code: codeUniqueViolation,
 			op: func(ctx context.Context, tx pgx.Tx, f fixture) error {
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, slot_priority, desired_start, lookahead, duration)
+					(labs_id, users_id, resource_pools_id, slot_priority, desired_start, lookahead, duration)
 					VALUES ($1, $2, $3, 1, $4, 0, 60)`, f.labID, f.userID, f.poolID, base)
 				require.NoError(t, err)
 				_, err = tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, slot_priority, desired_start, lookahead, duration)
+					(labs_id, users_id, resource_pools_id, slot_priority, desired_start, lookahead, duration)
 					VALUES ($1, $2, $3, 1, $4, 0, 60)`, f.labID, f.userID, f.poolID, base)
 				return err
 			},
@@ -128,14 +136,14 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 				_, err := tx.Exec(ctx, `SET CONSTRAINTS slots_no_resource_overlap IMMEDIATE`)
 				require.NoError(t, err)
 				_, err = tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, assigned_resource_id, slot_priority,
+					(labs_id, users_id, resource_pools_id, resources_id, slot_priority,
 					 desired_start, lookahead, duration, actual_start)
 					VALUES ($1, $2, $3, $4, 1, $5, 0, 60, $5)`,
 					f.labID, f.userID, f.poolID, f.res1ID, base)
 				require.NoError(t, err)
 				// Same resource, starts 30m in → overlaps [base, base+60).
 				_, err = tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, assigned_resource_id, slot_priority,
+					(labs_id, users_id, resource_pools_id, resources_id, slot_priority,
 					 desired_start, lookahead, duration, actual_start)
 					VALUES ($1, $2, $3, $4, 2, $5, 0, 60, $5)`,
 					f.labID, f.userID, f.poolID, f.res1ID, base.Add(30*time.Minute))
@@ -147,7 +155,7 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 			code: codeCheckViolation,
 			op: func(ctx context.Context, tx pgx.Tx, f fixture) error {
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, slot_priority, desired_start,
+					(labs_id, users_id, resource_pools_id, slot_priority, desired_start,
 					 lookahead, duration, actual_start, status)
 					VALUES ($1, $2, $3, 1, $4, 0, 60, $4, 'ACTIVE')`,
 					f.labID, f.userID, f.poolID, base)
@@ -159,7 +167,7 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 			code: codeCheckViolation,
 			op: func(ctx context.Context, tx pgx.Tx, f fixture) error {
 				_, err := tx.Exec(ctx, `INSERT INTO slots
-					(lab_id, user_id, resource_pool_id, assigned_resource_id, slot_priority,
+					(labs_id, users_id, resource_pools_id, resources_id, slot_priority,
 					 desired_start, lookahead, duration, status)
 					VALUES ($1, $2, $3, $4, 1, $5, 0, 60, 'ACTIVE')`,
 					f.labID, f.userID, f.poolID, f.res1ID, base)
@@ -185,11 +193,11 @@ func TestValidSlotInserts(t *testing.T) {
 	base := time.Date(2026, 6, 21, 9, 0, 0, 0, time.UTC)
 	withFixture(t, conn, func(ctx context.Context, tx pgx.Tx, f fixture) {
 		_, err := tx.Exec(ctx, `INSERT INTO slots
-			(lab_id, user_id, resource_pool_id, slot_priority, desired_start, lookahead, duration)
+			(labs_id, users_id, resource_pools_id, slot_priority, desired_start, lookahead, duration)
 			VALUES ($1, $2, $3, 1, $4, 30, 60)`, f.labID, f.userID, f.poolID, base)
 		require.NoError(t, err)
 		_, err = tx.Exec(ctx, `INSERT INTO slots
-			(lab_id, user_id, resource_pool_id, assigned_resource_id, slot_priority,
+			(labs_id, users_id, resource_pools_id, resources_id, slot_priority,
 			 desired_start, lookahead, duration, actual_start, status)
 			VALUES ($1, $2, $3, $4, 2, $5, 0, 60, $5, 'ACTIVE')`,
 			f.labID, f.userID, f.poolID, f.res1ID, base)

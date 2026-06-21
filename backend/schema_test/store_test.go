@@ -4,7 +4,6 @@ package schematest
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,16 +15,12 @@ import (
 
 // TestStoreConnectsAndQueries is the Phase 5 store exit criterion: the real
 // pgstore connects to the database and runs a trivial query. It builds a pool
-// against the throwaway DB and calls CountLabs — the same code path runs against
-// Neon when DATABASE_URL points there.
+// against the throwaway DB (set up by TestMain) and calls CountLabs — the same
+// code path runs against Neon when DATABASE_URL points there.
 func TestStoreConnectsAndQueries(t *testing.T) {
-	url := os.Getenv("SCHEMA_TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("SCHEMA_TEST_DATABASE_URL not set; run via `mage testSchema`")
-	}
 	ctx := context.Background()
 
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := pgxpool.New(ctx, testDatabaseURL)
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
