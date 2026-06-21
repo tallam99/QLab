@@ -2,7 +2,8 @@
 # main (via workflow_call), so a deploy can only proceed once these checks pass.
 #
 # Each job mirrors a `mage` test target so a green PR means the same thing locally
-# and in CI (`mage test` = testUnit + testSecurity).
+# and in CI (`mage test` = testUnit + testSecurity + testSchema; the schema tier
+# needs a database, so it runs as its own job with a Postgres service).
 name: CI
 
 on:
@@ -64,6 +65,38 @@ jobs:
         run: go install github.com/magefile/mage@v1.17.2
       - name: Security tests
         run: mage testSecurity
+
+  # DB schema tests — `mage testSchema`. A Postgres service stands in for the local
+  # Compose stack; its credentials match .env.example.json (qlab/qlab/qlab:5432) so
+  # `mage` derives the same connection string it uses locally. TestMain creates,
+  # migrates, seeds, and drops a throwaway database. This job also gates CD, since
+  # deploy.yml runs this workflow before any deploy.
+  schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: qlab
+          POSTGRES_PASSWORD: qlab
+          POSTGRES_DB: qlab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qlab -d qlab"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Schema tests
+        run: mage testSchema
 
   lint:
     runs-on: ubuntu-latest
