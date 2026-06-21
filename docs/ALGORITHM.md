@@ -54,8 +54,9 @@ concerns never enter here.
 | `status`      | enum             | See §1.2. |
 | `note`        | text             | Opaque to the engine. |
 
-Occupancy is always `[actualStart, actualStart + duration]` — full duration,
-always.
+Occupancy is the half-open interval `[actualStart, actualStart + duration)` — full
+duration, always. Half-open so a slot may start exactly when the one before it ends:
+back-to-back is not an overlap (§4 invariant 1).
 
 **Earliest allowed start** of a slot is `desiredStart − lookahead` (and never
 before `now`). The engine places `actualStart` at the earliest feasible instant

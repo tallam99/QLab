@@ -53,6 +53,10 @@ func buildFree(resources []dynamicqueue.Resource, slots []dynamicqueue.Slot, now
 
 	// Validate guarantees at most one ACTIVE slot per resource, so each busy list
 	// holds zero or one interval — no merging needed.
+	//
+	// free is keyed only by the resources passed in. An ACTIVE slot on a resource not
+	// in `resources` is intentionally ignored: its busy entry is never read, so a
+	// retiring resource finishes its running work but takes on no new scheduled slots.
 	free := make(freeMap, len(resources))
 	for _, r := range resources {
 		free[r.ID] = freeFrom(now, busy[r.ID])
@@ -61,8 +65,9 @@ func buildFree(resources []dynamicqueue.Resource, slots []dynamicqueue.Slot, now
 }
 
 // freeFrom returns the complement of busy within [now, +inf): the gaps before,
-// between, and after the (merged, sorted) busy intervals, always ending in the
-// open-ended tail.
+// between, and after the busy intervals, always ending in the open-ended tail.
+// buildFree guarantees at most one busy interval per resource, so busy needs no
+// sorting or merging here; the loop tolerates more regardless.
 func freeFrom(now time.Time, busy []interval) []interval {
 	var out []interval
 	cursor := now
@@ -80,11 +85,11 @@ func freeFrom(now time.Time, busy []interval) []interval {
 // place finds the earliest feasible start for a slot of length d, no earlier than
 // earliest, across all resources' free intervals — the argmin of t = max(start,
 // earliest) at which the slot fits. It returns the chosen start and resource, and
-// whether the slot backfilled a bounded gap (vs. the open-ended tail). Resources
-// are scanned in id order and a tie on start keeps the first (smallest-id) one, so
-// the result is deterministic (§4). Every resource has an open-ended tail, so a
-// placement always exists (§8).
-func place(free freeMap, earliest time.Time, d dynamicqueue.Minutes) (time.Time, dynamicqueue.ResourceID, bool) {
+// whether the slot backfilled a bounded gap (vs. the open-ended tail). order is the
+// resource ids in ascending order (caller-precomputed, stable across the call); a
+// tie on start keeps the first (smallest-id) one, so the result is deterministic
+// (§4). Every resource has an open-ended tail, so a placement always exists (§8).
+func place(free freeMap, order []dynamicqueue.ResourceID, earliest time.Time, d dynamicqueue.Minutes) (time.Time, dynamicqueue.ResourceID, bool) {
 	var (
 		bestStart    time.Time
 		bestResource dynamicqueue.ResourceID
@@ -92,7 +97,7 @@ func place(free freeMap, earliest time.Time, d dynamicqueue.Minutes) (time.Time,
 		found        bool
 	)
 	dur := d.Duration()
-	for _, rid := range sortedKeys(free) {
+	for _, rid := range order {
 		for _, iv := range free[rid] {
 			t := laterOf(iv.start, earliest)
 			if !iv.fits(t, dur) {
