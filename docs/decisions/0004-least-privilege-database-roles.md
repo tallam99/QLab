@@ -27,8 +27,10 @@ none of them the owner:
 
 Each role's connection string is stored as its **own** Secret Manager secret
 (`db-url-<env>` for the app; `db-url-<env>-readwrite` / `-readonly` for humans).
-The Neon **owner** credential is reserved for schema changes (migrations) only and
-is never the everyday credential.
+The Neon **owner** credential is reserved for schema changes (migrations): it lives
+in a `db-url-<env>-migrator` secret readable **only by the CI deployer**, which runs
+migrations before each deploy (see `_deploy.yml` / decision in `docs/deploy.md`). The
+owner credential is never an everyday or laptop credential.
 
 Humans fetch a string on demand via `mage dbStringStaging` / `mage dbStringProd`,
 which read the read-write human secret using the operator's own `gcloud` auth and

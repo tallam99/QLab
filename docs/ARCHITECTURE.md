@@ -41,19 +41,21 @@ QLab is two separate surfaces plus managed backing services:
 
 ## Data model (shape)
 
-Tenant-scoped by `lab_id`. Core tables: `labs`, `users`, `lab_memberships` (role),
-equipment as **resource pools** + interchangeable **resources** (each a `kind`),
-`slots` (priority queue with `slot_priority` / `desired_start` / `lookahead` /
-`duration` / `committed_start` / `actual_start` / `assigned_resource_id` /
-`status`), `outbox`. See `docs/PLAN.md` Phase 5 and `docs/ALGORITHM.md` §1.
+Tenant-scoped by `labs_id`. Core tables: `users`, `labs`, `labs_users` (membership
++ role), equipment as **resource pools** + interchangeable **resources** (each a
+`kind`), `slots` (priority queue with `slot_priority` / `desired_start` /
+`lookahead` / `duration` / `committed_start` / `actual_start` / `resources_id` /
+`status`), `outbox`. Every table carries audit columns (`created_at`/`updated_at`,
+`created_by`/`updated_by`); ids follow `<table>_id`. See `docs/PLAN.md` Phase 5 and
+`docs/ALGORITHM.md` §1.
 
 The **database enforces the domain itself** (decision 0003): native enums,
 composite FKs (cross-lab / pool / kind consistency, member-only booking), CHECKs,
 a partial-unique live `slot_priority` order, a GiST per-resource no-overlap
 exclusion constraint, and triggers (ACTIVE immutability, `updated_at`). It connects
 as least-privilege roles, never the Neon owner (decision 0004). The schema lives in
-`backend/migrations` (goose) and is regression-tested by `backend/schema_test`
-(`mage testSchema`).
+`backend/migrations` (goose), is applied to Neon by CI before each deploy, and is
+regression-tested by `backend/schema_test` (`mage testSchema`).
 
 ## Live updates
 

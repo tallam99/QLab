@@ -44,10 +44,11 @@ same fields.
 | `mage resetStack` | wipe the data volume **and** recreate (fresh DB) |
 | `mage migrate` | apply `goose` migrations (`backend/migrations/`) to local Postgres |
 | `mage seed` | load demo data (`backend/seed/seed.sql`) into local Postgres — **local only** |
-| `mage test` | run the no-infra test tiers: `testUnit` + `testSecurity` |
+| `mage test` | run all test tiers: `testUnit` + `testSecurity` + `testSchema`. **Requires the stack up** (testSchema needs Postgres) |
 | `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
 | `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
-| `mage testSchema` | DB-level schema tests (constraints/triggers/seed) against a throwaway DB; requires the stack up. **Not** in `mage test` (needs a database) |
+| `mage testSchema` | DB-level schema tests (constraints/triggers/seed) against a throwaway DB; **requires the stack up**. Its `TestMain` creates/migrates/seeds/drops `qlab_schema_test` |
+| `mage genMocks` / `mage clearMocks` | (re)generate / remove the mockery mocks. Mocks are **not** committed (`.mockery.yaml`); generate before building code that imports one, then `go mod tidy` |
 | `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
@@ -56,9 +57,10 @@ same fields.
 
 `genProto` is wired to its real tool but skips cleanly until the proto contract
 exists (Phase 6). `migrate`/`seed` now drive real content. Unit tests carry a
-`//go:build testunit` tag and run via `mage testUnit`; the `database`-tagged schema
-tests need Postgres, so they run via `mage testSchema` (which creates, migrates,
-seeds, and drops a `qlab_schema_test` database), not as part of `mage test`.
+`//go:build testunit` tag; the `database`-tagged schema tests need Postgres. `mage
+test` runs all three tiers, so it now needs the stack up. In CI each tier is its
+own job (the schema job runs against a Postgres service), and the deploy pipeline
+runs the same CI gate before deploying — so schema tests also gate CD.
 
 > **`mage seed` is local by construction:** it runs `psql` *inside* the Compose
 > Postgres container, which has no route to Neon — there is no way for it to seed
