@@ -21,13 +21,30 @@ const (
 	envFile         = ".env.json"
 	envExampleFile  = ".env.example.json"
 	migrationsDir   = "backend/migrations"
+	seedFile        = "backend/seed/seed.sql"
 	bufConfigFile   = "proto/buf.gen.yaml"
+	// schemaTestDir holds the DB-level schema tests (constraints/triggers/seed),
+	// tagged `database`; schemaTestDB is the throwaway database mage testSchema
+	// creates, migrates, and drops so the tests never touch dev data.
+	schemaTestDir = "./backend/schema_test/..."
+	schemaTestDB  = "qlab_schema_test"
 	// engineDir is the pure scheduling engine; mutation testing recurses it.
 	engineDir = "./backend/internal/dynamicqueue"
 	// goosePackage pins the migration tool. It's run via `go run …@version` rather
 	// than a go.mod tool dependency so its many DB-driver deps don't bloat the
 	// module (we only use Postgres).
 	goosePackage = "github.com/pressly/goose/v3/cmd/goose@v3.27.1"
+
+	// Cloud DB access (dbStringStaging / dbStringProd) — USER-RUN ONLY. These read
+	// the human read-write connection string from the matching project's Secret
+	// Manager. The service itself connects as a dedicated least-privilege Neon role
+	// (its string is the db-url-<env> secret); these *-readwrite secrets are
+	// separate human-access credentials, never the Neon admin/owner password. See
+	// docs/deploy.md for how the roles + secrets are provisioned.
+	gcpProjectStaging = "qlab-staging"
+	gcpProjectProd    = "qlab-production"
+	dbSecretStagingRW = "db-url-staging-readwrite"
+	dbSecretProdRW    = "db-url-production-readwrite"
 )
 
 // Env is the local dev configuration, loaded from .env.json (see
@@ -78,9 +95,13 @@ func (e Env) composeEnv() []string {
 
 // hostDatabaseURL is the connection string for host-run tooling (goose), which
 // reaches Postgres on the published host port.
-func (e Env) hostDatabaseURL() string {
+func (e Env) hostDatabaseURL() string { return e.hostDatabaseURLFor(e.PostgresDB) }
+
+// hostDatabaseURLFor is hostDatabaseURL for an arbitrary database on the same
+// local server (e.g. the throwaway schema-test database).
+func (e Env) hostDatabaseURLFor(db string) string {
 	return fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable",
-		e.PostgresUser, e.PostgresPassword, e.PostgresPort, e.PostgresDB)
+		e.PostgresUser, e.PostgresPassword, e.PostgresPort, db)
 }
 
 // run executes a command, streaming stdio, inheriting the process environment.
@@ -101,6 +122,30 @@ func runWithEnv(env []string, name string, args ...string) error {
 // compose runs `docker compose` with the dev variables in its environment.
 func compose(env Env, args ...string) error {
 	return runWithEnv(env.composeEnv(), "docker", append([]string{"compose", "-f", composeFile}, args...)...)
+}
+
+// psql runs psql inside the Postgres container against database db. stdinPath, if
+// non-empty, is opened and fed to psql's stdin (for `-f -`). Running psql in the
+// container avoids depending on a host psql install. ON_ERROR_STOP makes any SQL
+// error fail the command rather than passing silently.
+func psql(env Env, db, stdinPath string, args ...string) error {
+	full := append([]string{
+		"compose", "-f", composeFile, "exec", "-T", postgresService,
+		"psql", "-v", "ON_ERROR_STOP=1", "-U", env.PostgresUser, "-d", db,
+	}, args...)
+	cmd := exec.Command("docker", full...)
+	cmd.Env = env.composeEnv()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if stdinPath != "" {
+		f, err := os.Open(stdinPath)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		cmd.Stdin = f
+	}
+	return cmd.Run()
 }
 
 // StartStack builds and starts the API + Postgres in the background, waiting for
@@ -154,11 +199,17 @@ func Migrate() error {
 	return run("go", "run", goosePackage, "-dir", migrationsDir, "postgres", env.hostDatabaseURL(), "up")
 }
 
-// Seed loads demo data into local Postgres. The seed lands with the schema in
-// Phase 5; this placeholder keeps the target in the contract until then.
+// Seed loads demo data into local Postgres by applying backend/seed/seed.sql. It
+// is LOCAL ONLY by construction: it runs psql inside the Compose Postgres
+// container, which has no route to Neon staging/prod. Demo data lives only here;
+// anything that must exist in staging/prod goes in a migration instead. Requires
+// the stack up (mage startStack) and migrations applied (mage migrate).
 func Seed() error {
-	fmt.Println("seed: no seed data yet (lands with the schema in Phase 5)")
-	return nil
+	env, err := loadEnv()
+	if err != nil {
+		return err
+	}
+	return psql(env, env.PostgresDB, seedFile, "-f", "-")
 }
 
 // Test runs every test tier. Integration and database tiers (testIntegration,
@@ -184,6 +235,44 @@ func TestSecurity() error {
 		return err
 	}
 	return run("python3", "scripts/check-yaak-secrets.py")
+}
+
+// TestSchema runs the DB-level schema tests (constraints, triggers, seed values)
+// against a throwaway database. It creates qlab_schema_test fresh, applies all
+// migrations, loads the demo seed, runs the `database`-tagged Go tests against it,
+// and drops it — so it never touches dev data and is repeatable. Requires the
+// local stack (mage startStack); it is NOT part of `mage test` because that runs
+// in CI without a database. The tests reach the throwaway DB via the
+// SCHEMA_TEST_DATABASE_URL it sets.
+func TestSchema() error {
+	env, err := loadEnv()
+	if err != nil {
+		return err
+	}
+	// Recreate the throwaway DB. WITH (FORCE) drops any lingering connections from
+	// a previous interrupted run.
+	recreate := func() error {
+		return psql(env, "postgres", "",
+			"-c", "DROP DATABASE IF EXISTS "+schemaTestDB+" WITH (FORCE)",
+			"-c", "CREATE DATABASE "+schemaTestDB)
+	}
+	if err := recreate(); err != nil {
+		return fmt.Errorf("create schema-test database (is the stack up? run `mage startStack`): %w", err)
+	}
+	// Always drop the throwaway DB on the way out, even if the tests fail.
+	defer func() {
+		_ = psql(env, "postgres", "", "-c", "DROP DATABASE IF EXISTS "+schemaTestDB+" WITH (FORCE)")
+	}()
+
+	testURL := env.hostDatabaseURLFor(schemaTestDB)
+	if err := run("go", "run", goosePackage, "-dir", migrationsDir, "postgres", testURL, "up"); err != nil {
+		return fmt.Errorf("migrate schema-test database: %w", err)
+	}
+	if err := psql(env, schemaTestDB, seedFile, "-f", "-"); err != nil {
+		return fmt.Errorf("seed schema-test database: %w", err)
+	}
+	return runWithEnv(append(os.Environ(), "SCHEMA_TEST_DATABASE_URL="+testURL),
+		"go", "test", "-tags", "database", schemaTestDir)
 }
 
 // mutateDirs are the directories `mage mutate` runs mutation testing over, in
@@ -228,6 +317,27 @@ func PostgresLogs() error {
 		return err
 	}
 	return compose(env, "logs", "-f", postgresService)
+}
+
+// DbStringStaging prints the STAGING human read-write Postgres connection string,
+// read from Secret Manager using your logged-in gcloud identity. Paste it into
+// DBeaver (or psql). It is NOT the Neon admin password and NOT the service's
+// credential — it is a dedicated human read-write role (see docs/deploy.md).
+//
+// USER-RUN ONLY. Per the project boundary (CLAUDE.md) Claude never authenticates
+// to or invokes gcloud — do not run this target as Claude; it is here for the user.
+func DbStringStaging() error { return printDBString(gcpProjectStaging, dbSecretStagingRW) }
+
+// DbStringProd prints the PRODUCTION human read-write connection string. Same
+// boundary as DbStringStaging — USER-RUN ONLY; Claude never invokes it.
+func DbStringProd() error { return printDBString(gcpProjectProd, dbSecretProdRW) }
+
+// printDBString fetches a secret's latest version from the given GCP project and
+// writes it to stdout (no trailing newline from gcloud), ready to paste into a DB
+// client. Uses the caller's existing gcloud auth.
+func printDBString(project, secret string) error {
+	return run("gcloud", "secrets", "versions", "access", "latest",
+		"--secret", secret, "--project", project)
 }
 
 // GenProto regenerates Go + TS from the .proto contract via buf. The contract and
