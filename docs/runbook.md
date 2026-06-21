@@ -47,7 +47,7 @@ same fields.
 | `mage test` | run all test tiers (currently `testUnit` + `testSecurity`; integration/database tiers added later) |
 | `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
 | `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
-| `mage mutate` | mutation-test the scheduling engine with gremlins (on-demand; needs gremlins installed) |
+| `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
 | `mage genProto` | `buf generate` (Go + TS from `.proto`; buf config lands in Phase 6) |

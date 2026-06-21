@@ -26,14 +26,19 @@ func (in Input) Validate() error {
 	priorities := make(map[SlotPriority]SlotID, len(in.Slots))
 	activeResources := make(map[ResourceID]SlotID)
 	for _, s := range in.Slots {
-		switch {
-		case s.ResourcePoolID != in.ResourcePoolID:
+		// Sequential guard clauses (not a tagless switch) so each condition sits in
+		// its own coverage block — otherwise Go attributes coverage to the case
+		// bodies and mutation testing can't see the conditions as exercised.
+		if s.ResourcePoolID != in.ResourcePoolID {
 			return fmt.Errorf("dynamicqueue: slot %q is in resource pool %q, not %q", s.ID, s.ResourcePoolID, in.ResourcePoolID)
-		case s.Duration <= 0:
+		}
+		if s.Duration <= 0 {
 			return fmt.Errorf("dynamicqueue: slot %q has non-positive duration %d", s.ID, s.Duration)
-		case s.Lookahead < 0:
+		}
+		if s.Lookahead < 0 {
 			return fmt.Errorf("dynamicqueue: slot %q has negative lookahead %d", s.ID, s.Lookahead)
-		case !s.Status.IsOpen() && !s.Status.IsPinned():
+		}
+		if !s.Status.IsOpen() && !s.Status.IsPinned() {
 			return fmt.Errorf("dynamicqueue: slot %q has status %s; the engine accepts only SCHEDULED or ACTIVE", s.ID, s.Status)
 		}
 		if s.Status.IsPinned() {

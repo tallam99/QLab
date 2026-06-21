@@ -1,0 +1,19 @@
+# Shared gremlins config for `mage mutate` and the CI mutation job. Keys mirror
+# the `gremlins unleash` flags. gremlins auto-loads .gremlins.yaml from the repo
+# root, so both invocations get the same settings.
+unleash:
+  # Unit tests are behind this build tag.
+  tags: "testunit"
+  # The per-mutant timeout derives from the sub-second baseline test run, which is
+  # too tight for each mutant's recompile and spuriously times them out; a generous
+  # coefficient keeps the run stable (notably on variable CI runners).
+  timeout-coefficient: 10
+  # Generated code is not ours to test.
+  exclude-files:
+    - "_enumer\\.go$"
+  # Quality gate: every reachable mutant must be exercised by a test (mutant
+  # coverage), which `mage mutate` and CI enforce. We do NOT gate on efficacy — the
+  # engine has a couple of equivalent mutants (a slice capacity hint, and a `<`/`<=`
+  # on the unique-by-Validate priority sort) that no test can kill.
+  threshold-mcover: 100
+  threshold-efficacy: 0
