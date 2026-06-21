@@ -23,16 +23,3 @@ type Engine struct {
 func New(cfg Config) dynamicqueue.Algorithm {
 	return Engine{clockInGrace: cfg.ClockInGrace}
 }
-
-// Reschedule recomputes the pool's queue (ALGORITHM §5): validate the input,
-// sweep no-shows (scheduled slots whose CommittedStart + grace is before
-// Input.Now), then place the remaining open slots in SlotPriority order at the
-// earliest feasible start across resources, recording a Trace throughout. The
-// scheduling body is implemented next.
-func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
-	if err := in.Validate(); err != nil {
-		return dynamicqueue.Result{}, err
-	}
-	_ = e.clockInGrace // consumed by the no-show sweep, implemented next
-	panic("not implemented")
-}
