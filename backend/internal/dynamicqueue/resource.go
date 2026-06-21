@@ -21,6 +21,6 @@ const (
 // it may place onto.
 type Resource struct {
 	ID     ResourceID
-	PoolID PoolID
+	ResourcePoolID ResourcePoolID
 	Kind   ResourceKind
 }

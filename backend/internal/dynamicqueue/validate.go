@@ -15,8 +15,8 @@ func (in Input) Validate() error {
 		return errors.New("dynamicqueue: input has no resources")
 	}
 	for _, r := range in.Resources {
-		if r.PoolID != in.PoolID {
-			return fmt.Errorf("dynamicqueue: resource %q is in pool %q, not %q", r.ID, r.PoolID, in.PoolID)
+		if r.ResourcePoolID != in.ResourcePoolID {
+			return fmt.Errorf("dynamicqueue: resource %q is in resource pool %q, not %q", r.ID, r.ResourcePoolID, in.ResourcePoolID)
 		}
 	}
 
@@ -25,8 +25,8 @@ func (in Input) Validate() error {
 	priorities := make(map[SlotPriority]SlotID, len(in.Slots))
 	for _, s := range in.Slots {
 		switch {
-		case s.PoolID != in.PoolID:
-			return fmt.Errorf("dynamicqueue: slot %q is in pool %q, not %q", s.ID, s.PoolID, in.PoolID)
+		case s.ResourcePoolID != in.ResourcePoolID:
+			return fmt.Errorf("dynamicqueue: slot %q is in resource pool %q, not %q", s.ID, s.ResourcePoolID, in.ResourcePoolID)
 		case s.Duration <= 0:
 			return fmt.Errorf("dynamicqueue: slot %q has non-positive duration %d", s.ID, s.Duration)
 		case s.Lookahead < 0:

@@ -42,7 +42,7 @@ This project is built with Claude as the primary engine, with a hard boundary:
 - **Wire format:** Protobuf via Connect-RPC + buf. `.proto` is the contract of record;
   Go + TS types are generated — don't hand-write request/response shapes.
 - **Logging:** `slog` (structured, JSON in cloud). **Tracing:** OpenTelemetry → Cloud
-  Trace; annotate spans with `lab_id`, `pool_id`, `slot_id`, event type.
+  Trace; annotate spans with `lab_id`, `resource_pool_id`, `slot_id`, event type.
 - **Topology:** the public PWA (Firebase Hosting) and the data API (Cloud Run) are
   **separate origins**; every API endpoint requires a Firebase JWT. See decision 0001.
 - **Multi-tenancy:** every tenant-scoped row carries `lab_id`; scope every query by it.

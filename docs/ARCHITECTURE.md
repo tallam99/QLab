@@ -67,7 +67,7 @@ Claude operates **local** only; the user drives staging/prod (see `CLAUDE.md`).
 
 - **Contract:** protobuf via Connect + buf — one schema, generated Go + TS.
 - **Observability:** `slog` JSON + OpenTelemetry spans (→ Cloud Trace), keyed by
-  `lab_id` / `pool_id` / `slot_id` for selectively-feedable debugging.
+  `lab_id` / `resource_pool_id` / `slot_id` for selectively-feedable debugging.
 - **Scaling note:** the engine's cost is **per-pool** (bounded by one lab's queue);
   scaling to many labs is horizontal/infra (DB connections, SSE capacity), not
   algorithmic. The engine is only revisited if a *single pool's* queue grows large.

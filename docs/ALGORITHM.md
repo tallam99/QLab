@@ -43,7 +43,7 @@ concerns never enter here.
 | `id`          | opaque id        | Stable identity. **Not** the ordering key (§1.3). |
 | `userID`      | opaque id        | Who booked it. Opaque to the engine. |
 | `labID`       | opaque id        | All slots in one engine call share this. |
-| `pool`        | opaque id        | The interchangeable resource pool (see §1.4). The *specific* resource is assigned by the engine, not at booking (§10). |
+| `resourcePoolID` | opaque id     | The interchangeable resource pool (see §1.4). The *specific* resource is assigned by the engine, not at booking (§10). |
 | `slotPriority`| ordered key      | Position in line: lower = ahead. A **unique total order** across the pool's open slots and the **sole** processing/tie-break key (§1.3, §4). |
 | `desiredStart`| instant          | The booked/intended start. The reference point for earliness (§2). |
 | `lookahead`   | minutes (≥ 0)    | How far **before** `desiredStart` the engine may pull the slot. See §2. |

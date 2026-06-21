@@ -6,8 +6,8 @@ package dynamicqueue
 type (
 	// LabID is the tenant scope. Every slot in one engine call shares it.
 	LabID string
-	// PoolID is the interchangeable resource pool the queue feeds (§1.4).
-	PoolID string
+	// ResourcePoolID is the interchangeable resource pool the queue feeds (§1.4).
+	ResourcePoolID string
 	// ResourceID is a specific resource within a pool. The zero value "" means
 	// "unassigned" — a slot's resource is provisional until it clocks in (§1.1).
 	ResourceID string

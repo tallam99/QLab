@@ -206,7 +206,7 @@ than you can eyeball, optimize for **selectively feedable** evidence:
   every line, so any request's full story can be filtered out and handed to Claude
   as a self-contained slice.
 - **Spans** (OTel) on every meaningful unit of work (handler, engine call, DB tx,
-  notification send), annotated with the relevant ids (`lab_id`, `pool_id`,
+  notification send), annotated with the relevant ids (`lab_id`, `resource_pool_id`,
   `slot_id`, event type, which slots re-committed) — exactly the fields you'd
   want when reconstructing a reschedule.
 - **A `lab_id`-scoped state-export endpoint (staging only, head-auth):** dumps a
@@ -429,7 +429,7 @@ and prod branches, with **seedable demo data for staging/local.**
 - Migrations (via `goose`) for: `labs`, `users`, `lab_memberships` (with role),
   **equipment as a *pool* of interchangeable resources** (each resource carries a
   `kind`; MVP ships one — the vent hood) (see the data-model note),
-  `slots` (id, user_id, lab_id, **pool_id**, **assigned_resource_id** (nullable),
+  `slots` (id, user_id, lab_id, **resource_pool_id**, **assigned_resource_id** (nullable),
   **slot_priority**, **desired_start**, lookahead, duration, **committed_start**,
   **actual_start**, status, note — per `docs/ALGORITHM.md` §1.1; mirror the Phase 4
   domain types), **and `outbox`** (for
@@ -470,7 +470,7 @@ staging branch.
   clock-in grace lapses — `docs/ALGORITHM.md` §1.2/§2.3) alongside SCHEDULED / ACTIVE /
   COMPLETE / CANCELLED.
 - **Multi-tenancy:** `lab_id` on every tenant-scoped row. Index `lab_id`, and
-  `(pool_id, slot_priority)` for queue order plus `(assigned_resource_id, actual_start)`
+  `(resource_pool_id, slot_priority)` for queue order plus `(assigned_resource_id, actual_start)`
   for per-resource timeline lookups.
 - Neon scale-to-zero idles after inactivity — the weekly cron (Phase 11) doubles as
   a keep-alive.
@@ -525,7 +525,7 @@ request hits one Connect endpoint and gets `Unimplemented`.
   any resulting notifications to the **outbox** (same tx) → return the updated
   schedule.
 - Enforce **`lab_id` scoping in every query** (defense in depth; pairs with Phase 8).
-- **Spans** on handler → engine → tx → outbox, annotated with `lab_id`, `pool_id`,
+- **Spans** on handler → engine → tx → outbox, annotated with `lab_id`, `resource_pool_id`,
   event type, and per-slot re-commit info (which starts changed) (observability
   convention).
 - **Add a Yaak request for each behavior variation** (every matrix scenario, each

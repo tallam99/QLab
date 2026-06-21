@@ -22,7 +22,7 @@ type Algorithm interface {
 // NOT here: it is configuration the implementation is constructed with, not
 // world-state (§10).
 type Input struct {
-	PoolID    PoolID
+	ResourcePoolID    ResourcePoolID
 	Slots     []Slot
 	Resources []Resource
 	Now       time.Time

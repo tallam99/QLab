@@ -52,7 +52,7 @@ type Slot struct {
 	ID     SlotID
 	UserID UserID
 	LabID  LabID
-	PoolID PoolID
+	ResourcePoolID ResourcePoolID
 
 	SlotPriority SlotPriority
 	Status       SlotStatus
