@@ -1,48 +1,63 @@
--- Tenancy and identity: labs, users, and the membership join that ties a user to
--- a lab with a role. Every tenant-scoped row elsewhere carries lab_id and scopes
--- to one of these labs.
+-- Tenancy and identity: users, labs, and the labs_users join that ties a user to
+-- a lab with a role. Every tenant-scoped row elsewhere carries labs_id.
+--
+-- users is created first so the audit columns (created_by / updated_by, present on
+-- every table) can carry a foreign key to users(users_id) — including users' own,
+-- which is self-referential and nullable (the first user is created_by NULL).
 
 -- +goose Up
 
-CREATE TABLE labs (
-    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       text NOT NULL CHECK (length(trim(name)) > 0),
-    created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now()
-);
-
 CREATE TABLE users (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    users_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     -- Firebase's stable external identity. NULL until the invited user first logs
     -- in (invite-only provisioning, Phase 8); UNIQUE so one Firebase identity maps
     -- to at most one user. Postgres allows multiple NULLs under UNIQUE.
     firebase_uid text UNIQUE,
     -- Canonical lowercase email. The lowercase CHECK makes "same email, different
     -- case" impossible so the UNIQUE actually means one human = one row.
-    email        text NOT NULL UNIQUE
-                 CHECK (email = lower(email) AND position('@' IN email) > 1),
-    display_name text NOT NULL DEFAULT '',
-    created_at   timestamptz NOT NULL DEFAULT now(),
-    updated_at   timestamptz NOT NULL DEFAULT now()
+    email      text NOT NULL UNIQUE
+               CHECK (email = lower(email) AND position('@' IN email) > 1),
+    -- Name parts are filled from the identity provider on first login; they may be
+    -- empty between invite and first login, hence NOT NULL DEFAULT '' rather than
+    -- required. dob is optional PII (never supplied by Google sign-in).
+    first_name text NOT NULL DEFAULT '',
+    last_name  text NOT NULL DEFAULT '',
+    dob        date,
+
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL
 );
 
-CREATE TABLE lab_memberships (
-    lab_id     uuid NOT NULL REFERENCES labs(id) ON DELETE CASCADE,
-    user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+CREATE TABLE labs (
+    labs_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       text NOT NULL CHECK (length(trim(name)) > 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL
+);
+
+CREATE TABLE labs_users (
+    labs_id    uuid NOT NULL REFERENCES labs(labs_id) ON DELETE CASCADE,
+    users_id   uuid NOT NULL REFERENCES users(users_id) ON DELETE CASCADE,
     role       lab_role NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- One membership row per (lab, user); the leading lab_id also serves
+    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    -- One membership row per (lab, user); the leading labs_id also serves
     -- lab-scoped membership listing.
-    PRIMARY KEY (lab_id, user_id)
+    PRIMARY KEY (labs_id, users_id)
 );
 
 -- Reverse lookup: "which labs is this user in" (e.g. resolving a login to its
--- memberships). The PK already covers the (lab_id, …) direction.
-CREATE INDEX lab_memberships_user ON lab_memberships (user_id);
+-- memberships). The PK already covers the (labs_id, …) direction.
+CREATE INDEX labs_users_user ON labs_users (users_id);
 
 -- +goose Down
 
-DROP TABLE IF EXISTS lab_memberships;
-DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS labs_users;
 DROP TABLE IF EXISTS labs;
+DROP TABLE IF EXISTS users;

@@ -7,8 +7,8 @@
 -- +goose Up
 
 CREATE TABLE outbox (
-    id     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    lab_id uuid NOT NULL REFERENCES labs(id) ON DELETE CASCADE,
+    outbox_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    labs_id   uuid NOT NULL REFERENCES labs(labs_id) ON DELETE CASCADE,
 
     -- Idempotency: retries reuse the same dedup_key so a message is never
     -- double-sent. UNIQUE makes a duplicate enqueue a no-op at the DB level.
@@ -28,7 +28,9 @@ CREATE TABLE outbox (
     available_at timestamptz NOT NULL DEFAULT now(),
 
     created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now()
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL
 );
 
 -- The worker's drain query: pending messages whose backoff has elapsed, oldest
@@ -37,7 +39,7 @@ CREATE INDEX outbox_pending_due
     ON outbox (available_at)
     WHERE status = 'PENDING';
 
-CREATE INDEX outbox_lab ON outbox (lab_id);
+CREATE INDEX outbox_lab ON outbox (labs_id);
 
 -- +goose Down
 
