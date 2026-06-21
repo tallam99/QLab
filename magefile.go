@@ -9,9 +9,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -339,29 +341,28 @@ func printDBString(project, secret string) error {
 		"--secret", secret, "--project", project)
 }
 
-// mockDirs are the directories holding generated mocks (mockery output). Mocks are
-// NOT committed — GenMocks regenerates them, ClearMocks removes them. Add new
-// output dirs here as more interfaces get mocked (mirror .mockery.yaml).
-var mockDirs = []string{
-	"backend/internal/store/storemock",
-}
-
 // GenMocks regenerates the testify mocks from .mockery.yaml. Mocks are generated
 // on demand rather than committed, so run this before building or testing code
-// that imports a mock (then `go mod tidy` to pull the mock runtime deps).
+// that imports a mock (then `go mod tidy` to pull the mock runtime deps). Every
+// mock file is named <interface>_mock.go.
 func GenMocks() error {
 	return run("go", "tool", "mockery")
 }
 
-// ClearMocks removes the generated mock directories — mocks aren't committed, so
-// this just tidies the working tree.
+// ClearMocks removes generated mock files (every *_mock.go under backend). Mocks
+// aren't committed, so this just tidies the working tree.
 func ClearMocks() error {
-	for _, dir := range mockDirs {
-		if err := os.RemoveAll(dir); err != nil {
-			return fmt.Errorf("remove %s: %w", dir, err)
+	return filepath.WalkDir("backend", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-	}
-	return nil
+		if !d.IsDir() && strings.HasSuffix(d.Name(), "_mock.go") {
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("remove %s: %w", path, err)
+			}
+		}
+		return nil
+	})
 }
 
 // GenProto regenerates Go + TS from the .proto contract via buf. The contract and

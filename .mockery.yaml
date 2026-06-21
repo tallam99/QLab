@@ -8,12 +8,14 @@
 # runtime deps; `mage clearMocks` removes them.
 #
 # dir uses {{.InterfaceDir}} so the output lands next to the interface regardless
-# of the working directory `go generate` runs mockery from.
+# of the working directory `go generate` runs mockery from. Every mock file is
+# named <interface>_mock.go so a single `*_mock.go` rule covers them in .gitignore
+# and `mage clearMocks`.
 with-expecter: true
-dir: "{{.InterfaceDir}}/storemock"
-outpkg: "storemock"
+dir: "{{.InterfaceDir}}/mocks"
+outpkg: "mocks"
 mockname: "Mock{{.InterfaceName}}"
-filename: "store_mock.go"
+filename: "{{.InterfaceName | snakecase}}_mock.go"
 # Opt in to the v3 defaults now to silence v2 deprecation warnings.
 resolve-type-alias: false
 disable-version-string: true

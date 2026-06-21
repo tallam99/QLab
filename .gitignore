@@ -2,7 +2,8 @@
 backend/bin/
 
 # Generated mocks (mockery). Not committed — regenerate with `mage genMocks`.
-backend/internal/store/storemock/
+# Every mock file is named <interface>_mock.go.
+*_mock.go
 
 # Node
 frontend/node_modules/
