@@ -22,6 +22,8 @@ const (
 	envExampleFile  = ".env.example.json"
 	migrationsDir   = "backend/migrations"
 	bufConfigFile   = "proto/buf.gen.yaml"
+	// enginePkg is the pure scheduling engine; mutation testing targets it.
+	enginePkg = "./backend/internal/dynamicqueue/basic"
 	// goosePackage pins the migration tool. It's run via `go run …@version` rather
 	// than a go.mod tool dependency so its many DB-driver deps don't bloat the
 	// module (we only use Postgres).
@@ -182,6 +184,20 @@ func TestSecurity() error {
 		return err
 	}
 	return run("python3", "scripts/check-yaak-secrets.py")
+}
+
+// Mutate runs mutation testing (gremlins) over the scheduling engine to verify
+// the test suite actually kills injected faults, not just executes them. It is an
+// on-demand quality check, not part of `mage test`. Needs gremlins on PATH —
+// install with `brew install go-gremlins/tap/gremlins`.
+func Mutate() error {
+	if _, err := exec.LookPath("gremlins"); err != nil {
+		return fmt.Errorf("gremlins not found on PATH; install with `brew install go-gremlins/tap/gremlins`: %w", err)
+	}
+	// The per-mutant timeout is derived from the sub-second baseline test run,
+	// which is too tight for each mutant's recompile and spuriously times them
+	// out; a generous coefficient keeps the run stable.
+	return run("gremlins", "unleash", enginePkg, "--tags", "testunit", "--timeout-coefficient", "10")
 }
 
 // ServiceLogs follows all services' logs (last 100 lines, then live).
