@@ -42,8 +42,9 @@ QLab is two separate surfaces plus managed backing services:
 ## Data model (shape)
 
 Tenant-scoped by `lab_id`. Core tables: `labs`, `users`, `lab_memberships` (role),
-equipment as **bench pools**, `slots` (priority queue with `win_start` / `window` /
-`duration` / `actual_start` / `assigned_bench_id` / `status`), `outbox`. See
+equipment as **resource pools**, `slots` (priority queue with `slot_priority` /
+`desired_start` / `lookahead` / `duration` / `committed_start` / `actual_start` /
+`assigned_resource_id` / `status`), `outbox`. See
 `docs/PLAN.md` Phase 5 and `docs/ALGORITHM.md` §1.
 
 ## Live updates

@@ -1,6 +1,6 @@
 # QLab
 
-Lab equipment scheduling PWA with a live queue and a **multi-bench scheduling
+Lab equipment scheduling PWA with a live queue and a **multi-resource scheduling
 engine** that continuously re-flows the queue when experiments run over, finish
 early, or get cancelled. Built initially for a ~15-person biology lab sharing
 ventilation hoods.

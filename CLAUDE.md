@@ -1,8 +1,8 @@
 # QLab — orientation for Claude
 
-QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-bench
+QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-resource
 scheduling engine** that continuously re-flows a priority queue across
-interchangeable benches as experiments overrun, finish early, or get cancelled.
+interchangeable resources as experiments overrun, finish early, or get cancelled.
 
 **Current status:** Phase 3 (CI/CD). The Go service, a one-command local stack
 (Docker Compose + Postgres, `mage` targets), and the GitHub Actions pipeline
