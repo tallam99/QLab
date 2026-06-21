@@ -11,8 +11,8 @@
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `.github/workflows/ci.yml` | every PR + push to `main` | `go build`/`vet` + `mage testUnit` (Go unit tests), `mage testSecurity` (Yaak secret scan + its tests), `golangci-lint`. The merge gate. |
-| `.github/workflows/deploy.yml` | push to `main` (i.e. after merge) | Deploy both surfaces to **staging** automatically, then to **production** behind a manual approval. Calls the reusable `_deploy.yml` once per environment. |
+| `.github/workflows/ci.yml` | every PR; and via `deploy.yml` on push to `main` | `go build`/`vet` + `mage testUnit` (Go unit tests), `mage testSecurity` (Yaak secret scan + its tests), `golangci-lint`. The merge gate. |
+| `.github/workflows/deploy.yml` | push to `main` (i.e. after merge) | Run `ci.yml` as a gating job, then (only if green) deploy both surfaces to **staging** automatically, then to **production** behind a manual approval. Calls the reusable `_deploy.yml` once per environment. |
 
 `_deploy.yml` for one environment: build the backend image → push to Artifact
 Registry → deploy to Cloud Run → build the hello-world frontend with the live
@@ -145,10 +145,9 @@ variables below set per session.
 ```sh
 # --- per environment: fill these in ---
 export PROJECT_ID="qlab-staging"          # your real GCP/Firebase project id
-export REGION="us-central1"               # your chosen Cloud Run + Artifact Registry region
+export REGION="us-east1"                  # Cloud Run + Artifact Registry region (matches the Neon DB region)
 export REPO="github.com/tallam99/QLab"    # the GitHub repo WIF will trust
 export AR_REPO="qlab"                     # Artifact Registry repo name
-export RUN_SERVICE="api-staging"          # Cloud Run service name (api-prod for prod)
 export PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 ```
 
@@ -263,8 +262,10 @@ echo "projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/p
 
 Each project is already a Firebase project (Phase 0). Ensure Hosting is
 initialized for it (Firebase console → Hosting → Get started, or `firebase init
-hosting` locally once). The default site serves at `https://<PROJECT_ID>.web.app`
-— that URL is the value for `CORS_ALLOWED_ORIGINS` (below).
+hosting` locally once). The default site is reachable at **two** origins —
+`https://<PROJECT_ID>.web.app` and `https://<PROJECT_ID>.firebaseapp.com` — so
+`CORS_ALLOWED_ORIGINS` (below) lists **both**; otherwise the page fails CORS when
+loaded via the alias the user didn't allow.
 
 > The deploy SA already has `roles/firebasehosting.admin` from step 3, so the CI
 > Firebase deploy authenticates via WIF — no `firebase login:ci` token needed.
@@ -319,7 +320,9 @@ Manager secret is. The value lives in Secret Manager (step 4).
 
 On `main`: require the **CI** checks (`test`, `security`, `lint`) to pass,
 squash-merge, auto-delete branches (Phase 0). This makes a green `ci.yml` the
-gate for every merge.
+gate for every merge. (`deploy.yml` *also* runs CI as a gating job before any
+deploy, so even a direct push that bypasses a PR can't ship a red build — branch
+protection and the deploy graph enforce the gate independently.)
 
 ---
 

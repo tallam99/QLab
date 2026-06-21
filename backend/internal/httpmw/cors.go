@@ -30,7 +30,7 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 		// protocol headers (Connect-Protocol-Version, Connect-Timeout-Ms, …) or
 		// adopt connectrpc.com/cors.
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization", HeaderRequestID},
+		AllowedHeaders:   []string{headerAccept, headerContentType, headerAuthorization, HeaderRequestID},
 		ExposedHeaders:   []string{HeaderRequestID},
 		AllowCredentials: false, // auth is a Bearer JWT in a header, not a cookie
 		MaxAge:           preflightMaxAgeSeconds,

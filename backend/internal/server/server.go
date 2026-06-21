@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -147,15 +148,26 @@ func (s *Server) Ready() bool {
 	return true
 }
 
-// Run starts serving immediately (liveness up), initializes the registered
-// dependencies, marks the service ready, and serves until ctx is cancelled or the
-// listener fails. It always drains the HTTP server and closes dependencies before
-// returning.
+// Run binds the listener and starts serving immediately (liveness up), initializes
+// the registered dependencies, marks the service ready, and serves until ctx is
+// cancelled or the listener fails. It always drains the HTTP server and closes
+// dependencies before returning.
 func (s *Server) Run(ctx context.Context) error {
+	// Bind the listener synchronously, before the serve goroutine and the
+	// injectors. This makes three things independent of how long dependency init
+	// takes: liveness (/healthq) answers from the moment Run is past this line; a
+	// port-bind failure surfaces here directly instead of being masked behind a
+	// slow (or failing) database connect; and the deferred Shutdown can never race
+	// a server that has not started listening yet.
+	listener, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", s.httpServer.Addr, err)
+	}
+
 	serveErr := make(chan error, 1)
 	go func() {
 		s.logger.Info("server starting", attrAddr, s.httpServer.Addr)
-		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := s.httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}
 	}()
@@ -172,6 +184,13 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	if !s.Ready() {
 		return errors.New("dependencies initialized but server is not ready")
+	}
+	// Don't log "ready; serving" if the listener has already failed (it was bound,
+	// then errored mid-startup): surface that error instead of a misleading line.
+	select {
+	case err := <-serveErr:
+		return fmt.Errorf("serve: %w", err)
+	default:
 	}
 	s.logger.Info("ready; serving")
 

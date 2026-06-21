@@ -1,10 +1,15 @@
-# Continuous deployment. On merge to main: deploy both surfaces to staging
-# automatically, then deploy to production gated by a manual approval.
+# Continuous deployment. On merge to main: run the CI gate, then (only if it
+# passes) deploy both surfaces to staging automatically, then deploy to production
+# gated by a manual approval.
 #
-# The gate is the `production` GitHub Environment's required-reviewers rule (set up
-# in docs/deploy.md): the production job waits for staging to succeed, then pauses
-# for an approver before it runs. Per the project's local/cloud boundary, *you*
-# are the approver — Claude never triggers a prod deploy.
+# CI runs as a job here (workflow_call into ci.yml) rather than relying on branch
+# protection alone, so the deploy graph itself blocks on a red build/vet/test —
+# including a direct push to main that bypasses a PR.
+#
+# The prod gate is the `production` GitHub Environment's required-reviewers rule
+# (set up in docs/deploy.md): the production job waits for staging to succeed, then
+# pauses for an approver before it runs. Per the project's local/cloud boundary,
+# *you* are the approver — Claude never triggers a prod deploy.
 name: Deploy
 
 on:
@@ -22,7 +27,13 @@ permissions:
   id-token: write
 
 jobs:
+  # The merge gate: build/vet, unit tests, secret scan, lint. Staging won't deploy
+  # unless this passes, so a red commit on main never reaches Cloud Run/Firebase.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   staging:
+    needs: ci
     uses: ./.github/workflows/_deploy.yml
     with:
       environment: staging
