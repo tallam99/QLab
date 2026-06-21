@@ -45,7 +45,10 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 
 	// 2. Seed each resource's free intervals from now and pinned ACTIVE occupancy.
 	free := buildFree(in.Resources, in.Slots, in.Now)
-	for _, rid := range sortedKeys(free) {
+	// The resource id set is fixed for the rest of the call — carve mutates interval
+	// lists, never the keys — so sort once and reuse for both seeding and placement.
+	order := sortedKeys(free)
+	for _, rid := range order {
 		trace = append(trace, dynamicqueue.Step{
 			Kind:     dynamicqueue.StepKindSeedResource,
 			Resource: rid,
@@ -59,7 +62,7 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 	sort.Slice(open, func(i, j int) bool { return open[i].SlotPriority < open[j].SlotPriority })
 	for _, s := range open {
 		earliest := laterOf(s.EarliestStart(), in.Now)
-		start, resource, gapFill := place(free, earliest, s.Duration)
+		start, resource, gapFill := place(free, order, earliest, s.Duration)
 		carve(free, resource, start, s.Duration)
 
 		recommitted := !start.Equal(s.CommittedStart)
