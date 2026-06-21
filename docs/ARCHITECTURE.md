@@ -42,10 +42,18 @@ QLab is two separate surfaces plus managed backing services:
 ## Data model (shape)
 
 Tenant-scoped by `lab_id`. Core tables: `labs`, `users`, `lab_memberships` (role),
-equipment as **resource pools**, `slots` (priority queue with `slot_priority` /
-`desired_start` / `lookahead` / `duration` / `committed_start` / `actual_start` /
-`assigned_resource_id` / `status`), `outbox`. See
-`docs/PLAN.md` Phase 5 and `docs/ALGORITHM.md` §1.
+equipment as **resource pools** + interchangeable **resources** (each a `kind`),
+`slots` (priority queue with `slot_priority` / `desired_start` / `lookahead` /
+`duration` / `committed_start` / `actual_start` / `assigned_resource_id` /
+`status`), `outbox`. See `docs/PLAN.md` Phase 5 and `docs/ALGORITHM.md` §1.
+
+The **database enforces the domain itself** (decision 0003): native enums,
+composite FKs (cross-lab / pool / kind consistency, member-only booking), CHECKs,
+a partial-unique live `slot_priority` order, a GiST per-resource no-overlap
+exclusion constraint, and triggers (ACTIVE immutability, `updated_at`). It connects
+as least-privilege roles, never the Neon owner (decision 0004). The schema lives in
+`backend/migrations` (goose) and is regression-tested by `backend/schema_test`
+(`mage testSchema`).
 
 ## Live updates
 

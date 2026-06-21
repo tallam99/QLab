@@ -19,3 +19,5 @@ One file per decision, numbered `NNNN-short-title.md`. Each records:
 
 - [0001 — Public site vs. data API are separate surfaces](0001-topology-public-site-vs-data-api.md)
 - [0002 — CI/CD via GitHub Actions + Workload Identity Federation](0002-cicd-and-workload-identity.md)
+- [0003 — The database enforces domain invariants (belt-and-suspenders)](0003-database-enforced-invariants.md)
+- [0004 — Least-privilege Neon roles per access pattern](0004-least-privilege-database-roles.md)

@@ -126,6 +126,90 @@ Notes:
 
 ---
 
+## Database roles & access (Phase 5) — you run these
+
+> **Boundary:** Neon and `gcloud secrets` writes stay **user-driven**. Claude drafts
+> these; you run them. See **decision 0004** for the rationale.
+
+The service must **not** connect as the Neon owner, and humans must **not** need the
+owner password. Per branch (staging, production) create three least-privilege roles
+and give each its own Secret Manager secret. The owner role is reserved for
+migrations only.
+
+### 1. Create the roles (run in Neon's SQL editor, on each branch)
+
+```sql
+-- App runtime role: DML only, no DDL, no superuser.
+CREATE ROLE qlab_app       LOGIN PASSWORD '<generate-a-strong-password>';
+-- Human ad-hoc read-write.
+CREATE ROLE qlab_human_rw  LOGIN PASSWORD '<generate-a-strong-password>';
+-- Human read-only inspection.
+CREATE ROLE qlab_human_ro  LOGIN PASSWORD '<generate-a-strong-password>';
+
+-- Grants on existing objects.
+GRANT USAGE ON SCHEMA public TO qlab_app, qlab_human_rw, qlab_human_ro;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO qlab_app, qlab_human_rw;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO qlab_app, qlab_human_rw;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO qlab_human_ro;
+
+-- Future tables (created by later migrations as the owner) are reachable too.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO qlab_app, qlab_human_rw;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO qlab_app, qlab_human_rw;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON TABLES TO qlab_human_ro;
+```
+
+### 2. Store each role's connection string in Secret Manager
+
+Build each string from Neon's **pooled** host for that branch and the role's
+password (`postgres://<role>:<password>@<pooled-host>/<db>?sslmode=require`).
+
+| Secret (staging project / prod project) | Holds the string for |
+|------------------------------------------|----------------------|
+| `db-url-staging` / `db-url-production` | `qlab_app` — **the Cloud Run runtime** (existing secret; rotate its value to the app role) |
+| `db-url-staging-readwrite` / `db-url-production-readwrite` | `qlab_human_rw` — DBeaver ad-hoc writes |
+| `db-url-staging-readonly` / `db-url-production-readonly` | `qlab_human_ro` — read-only inspection |
+
+```sh
+# Rotate the runtime secret to the app role (Cloud Run picks up :latest on next deploy):
+printf '%s' 'postgres://qlab_app:PASSWORD@HOST/DB?sslmode=require' \
+  | gcloud secrets versions add db-url-staging --data-file=- --project qlab-staging
+
+# Create the human secrets and let the runtime SA stay out of them (humans use their
+# own gcloud identity to read these; only the app secret is granted to qlab-api):
+printf '%s' 'postgres://qlab_human_rw:PASSWORD@HOST/DB?sslmode=require' \
+  | gcloud secrets create db-url-staging-readwrite --data-file=- --project qlab-staging
+printf '%s' 'postgres://qlab_human_ro:PASSWORD@HOST/DB?sslmode=require' \
+  | gcloud secrets create db-url-staging-readonly  --data-file=- --project qlab-staging
+```
+
+### 3. Connect with DBeaver
+
+Fetch the string on demand (don't save the owner password anywhere):
+
+```sh
+mage dbStringStaging   # prints the staging human read-write string
+mage dbStringProd      # prints the production human read-write string
+```
+
+These run `gcloud secrets versions access` as **your** logged-in identity and print
+the string to paste into DBeaver. They are **user-run only** — Claude never invokes
+`gcloud`. (A read-only variant target can be added later; for now read the
+`*-readonly` secret directly if you want read-only.)
+
+### Applying migrations to staging/prod
+
+Migrations are **not** run against Neon from a local machine (by you or Claude).
+The schema is applied to a branch by running goose as the **owner** role from a
+trusted place — for the MVP, you do this deliberately (e.g. Neon's SQL editor, or
+goose with the owner string) when promoting schema. Automating it as a CI/Cloud
+Run migration step is a recommended follow-up (it keeps the owner credential out of
+laptops entirely); flagged, not built this phase.
+
+---
+
 ## One-time GCP setup
 
 > ✅ **Done (2026-06-20)** for both `qlab-staging` and `qlab-production`, by Claude

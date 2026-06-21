@@ -4,11 +4,13 @@ QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-resource
 scheduling engine** that continuously re-flows a priority queue across
 interchangeable resources as experiments overrun, finish early, or get cancelled.
 
-**Current status:** Phase 3 (CI/CD). The Go service, a one-command local stack
-(Docker Compose + Postgres, `mage` targets), and the GitHub Actions pipeline
-(CI gate + deploy to Cloud Run + Firebase Hosting, both environments — see
-`docs/deploy.md`) are in place; the scheduling engine, data model, and API are next. Work
-proceeds through the phases in `docs/PLAN.md`.
+**Current status:** Phase 5 (database). The Go service, a one-command local stack
+(Docker Compose + Postgres, `mage` targets), the GitHub Actions pipeline (CI gate +
+deploy to Cloud Run + Firebase Hosting, both environments — see `docs/deploy.md`),
+the pure scheduling engine (`internal/dynamicqueue`, Phase 4), and the data model
+(goose migrations + a self-enforcing schema, seed, and the `schema_test` suite —
+Phase 5) are in place; the proto contract and API are next. Work proceeds through
+the phases in `docs/PLAN.md`.
 
 ## Read these first
 
