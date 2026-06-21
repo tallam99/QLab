@@ -386,7 +386,7 @@ prod; the PWA can reach the API cross-origin (CORS works).
 exhaustively-tested Go.
 
 **Work:**
-- Implement `internal/scheduling` as **pure functions** over slot slices — *no DB,
+- Implement `internal/dynamicqueue` as **pure functions** over the pool's slots — *no DB,
   no HTTP, no clock reads* (the engine contract, `docs/ALGORITHM.md` §10). The corrected
   model is **a single `reschedule(slots, resources, now, grace)`** (a greedy, priority-
   ordered, multi-resource list scheduler with gap-fill — `docs/ALGORITHM.md` §5); cascade

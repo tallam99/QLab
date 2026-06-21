@@ -29,7 +29,7 @@ QLab is two separate surfaces plus managed backing services:
 ## Backend components (Go)
 
 - **API / Connect handlers** — thin; convert proto ⇄ domain at the edges.
-- **Scheduling engine** (`internal/scheduling`) — **pure functions**, no DB/HTTP/clock.
+- **Scheduling engine** (`internal/dynamicqueue`) — **pure**, no DB/HTTP/clock.
   The product's core; specified in `docs/ALGORITHM.md`. A single `reschedule()`
   operation re-flows the queue on every event.
 - **Persistence** — Postgres via pgx; queries via sqlc (static) + squirrel (dynamic);

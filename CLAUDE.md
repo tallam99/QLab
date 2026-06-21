@@ -61,7 +61,7 @@ Playwright, Connect-Query, Tailwind, Biome, vite-plugin-pwa.
 The repo is a **single Go module** rooted at the top (`github.com/tallam99/qlab`);
 the `magefile.go` shares it, and `backend/` is a subtree, not a separate module.
 
-    backend/    Go API + scheduling engine (internal/scheduling is pure: no DB/HTTP/clock)
+    backend/    Go API + scheduling engine (internal/dynamicqueue is pure: no DB/HTTP/clock)
     frontend/   React PWA (scaffolded in a later phase)
     proto/      .proto contract (buf; lands Phase 6)
     docs/       project docs

@@ -80,7 +80,7 @@ land in Phase 5.
   the `Server` method set fixed as dependencies grow. Construction-time deps (the
   logger) still go in `Options`, validated in `New`. Deps are interface-typed where
   practical so tests and infra can swap implementations.
-- The **scheduling engine (`internal/scheduling`, Phase 4) is pure**: no DB, no
+- The **scheduling engine (`internal/dynamicqueue`, Phase 4) is pure**: no DB, no
   HTTP, no clock reads. Read `docs/ALGORITHM.md` before touching it.
 - From the **repo root**, run `go build ./backend/...`, `go vet ./backend/...`, and
   `mage test` (all tiers; or `mage testUnit` for just the Go suite) before
