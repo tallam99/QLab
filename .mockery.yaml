@@ -1,0 +1,23 @@
+# mockery (v2) config. Generates testify mocks for the service's interfaces so
+# tests can assert interactions. Run via `go generate ./backend/...` (the
+# //go:generate directive lives on the interface) or `go tool mockery` from the
+# repo root.
+#
+# Mocks are committed (like the generated enum/proto code) so the test build needs
+# no codegen step. Regenerate after changing a mocked interface.
+#
+# dir uses {{.InterfaceDir}} so the output lands next to the interface regardless
+# of the working directory `go generate` runs mockery from.
+with-expecter: true
+dir: "{{.InterfaceDir}}/storemock"
+outpkg: "storemock"
+mockname: "Mock{{.InterfaceName}}"
+filename: "store_mock.go"
+# Opt in to the v3 defaults now to silence v2 deprecation warnings.
+resolve-type-alias: false
+disable-version-string: true
+issue-845-fix: true
+packages:
+  github.com/tallam99/qlab/backend/internal/store:
+    interfaces:
+      Store:
