@@ -104,8 +104,8 @@ func TestReschedule(t *testing.T) {
 			name:      "capacity within lookahead pulls a slot earlier than desired",
 			resources: resources("r1"),
 			slots: []dynamicqueue.Slot{
-				active("a", 0, "r1", 0, 60),     // frees r1 at 10:00
-				sched("b", 1, 90, 60, 30, 90),   // desired 10:30, floor 10:00, committed 10:30
+				active("a", 0, "r1", 0, 60),   // frees r1 at 10:00
+				sched("b", 1, 90, 60, 30, 90), // desired 10:30, floor 10:00, committed 10:30
 			},
 			want: map[string]want{"b": placed(60, "r1", true)}, // 10:00, moved earlier
 		},
@@ -119,8 +119,8 @@ func TestReschedule(t *testing.T) {
 			name:      "overrun pushes a slot later — recommit",
 			resources: resources("r1"),
 			slots: []dynamicqueue.Slot{
-				active("a", 0, "r1", 0, 80),   // overruns to 10:20
-				sched("b", 1, 60, 60, 0, 60),  // desired/committed 10:00
+				active("a", 0, "r1", 0, 80),  // overruns to 10:20
+				sched("b", 1, 60, 60, 0, 60), // desired/committed 10:00
 			},
 			want: map[string]want{"b": placed(80, "r1", true)}, // pushed to 10:20
 		},
@@ -164,30 +164,30 @@ func TestReschedule(t *testing.T) {
 			name:      "gap-fill promotes a shorter lower-priority slot",
 			resources: resources("r1"),
 			slots: []dynamicqueue.Slot{
-				active("a", 0, "r1", 0, 60),    // frees r1 at 10:00
-				sched("b", 1, 90, 60, 0, 90),   // 10:30, leaves a 10:00–10:30 gap
-				sched("c", 2, 60, 60, 0, 60),   // 60m can't fit the 30m gap
-				sched("d", 3, 60, 30, 0, 60),   // 30m fits the gap
+				active("a", 0, "r1", 0, 60),  // frees r1 at 10:00
+				sched("b", 1, 90, 60, 0, 90), // 10:30, leaves a 10:00–10:30 gap
+				sched("c", 2, 60, 60, 0, 60), // 60m can't fit the 30m gap
+				sched("d", 3, 60, 30, 0, 60), // 30m fits the gap
 			},
 			want: map[string]want{
-				"b": placed(90, "r1", false),  // 10:30
-				"c": placed(150, "r1", true),  // after b, 11:30
-				"d": placed(60, "r1", false),  // gap-filled at 10:00
+				"b": placed(90, "r1", false), // 10:30
+				"c": placed(150, "r1", true), // after b, 11:30
+				"d": placed(60, "r1", false), // gap-filled at 10:00
 			},
 		},
 		{
 			name:      "promotion undone when the gap shrinks",
 			resources: resources("r1"),
 			slots: []dynamicqueue.Slot{
-				active("a", 0, "r1", 0, 75),   // overruns to 10:15; gap is now 10:15–10:30 (15m)
-				sched("b", 1, 90, 60, 0, 90),  // 10:30
-				sched("c", 2, 60, 60, 0, 60),  // after b, 11:30
-				sched("d", 3, 60, 30, 0, 60),  // no longer fits the 15m gap -> behind c
+				active("a", 0, "r1", 0, 75),  // overruns to 10:15; gap is now 10:15–10:30 (15m)
+				sched("b", 1, 90, 60, 0, 90), // 10:30
+				sched("c", 2, 60, 60, 0, 60), // after b, 11:30
+				sched("d", 3, 60, 30, 0, 60), // no longer fits the 15m gap -> behind c
 			},
 			want: map[string]want{
-				"b": placed(90, "r1", false),  // 10:30
-				"c": placed(150, "r1", true),  // 11:30
-				"d": placed(210, "r1", true),  // 12:30, behind c
+				"b": placed(90, "r1", false), // 10:30
+				"c": placed(150, "r1", true), // 11:30
+				"d": placed(210, "r1", true), // 12:30, behind c
 			},
 		},
 		{
@@ -224,8 +224,8 @@ func TestReschedule(t *testing.T) {
 			resources: resources("r1"),
 			// the slot that was ahead of c is simply absent (cancelled/filtered);
 			// c, previously committed to 10:25, now pulls forward to its floor.
-			slots:     []dynamicqueue.Slot{sched("c", 2, 60, 60, 0, 85)},
-			want:      map[string]want{"c": placed(60, "r1", true)},
+			slots: []dynamicqueue.Slot{sched("c", 2, 60, 60, 0, 85)},
+			want:  map[string]want{"c": placed(60, "r1", true)},
 		},
 		{
 			name:      "freed resource (active cleared) pulls a slot forward",
@@ -238,12 +238,12 @@ func TestReschedule(t *testing.T) {
 			name:      "booking inserts at the earliest feasible start within reach",
 			resources: resources("r1"),
 			slots: []dynamicqueue.Slot{
-				sched("a", 1, 0, 60, 0, 0),    // 09:00–10:00
-				sched("b", 2, 30, 30, 0, -1),  // brand-new booking, desired 09:30
+				sched("a", 1, 0, 60, 0, 0),   // 09:00–10:00
+				sched("b", 2, 30, 30, 0, -1), // brand-new booking, desired 09:30
 			},
 			want: map[string]want{
-				"a": placed(0, "r1", false),  // 09:00
-				"b": placed(60, "r1", true),  // pushed to 10:00 behind a; first commit notifies
+				"a": placed(0, "r1", false), // 09:00
+				"b": placed(60, "r1", true), // pushed to 10:00 behind a; first commit notifies
 			},
 		},
 		{

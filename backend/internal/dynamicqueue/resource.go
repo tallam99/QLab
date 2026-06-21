@@ -10,7 +10,7 @@ package dynamicqueue
 type ResourceKind int
 
 const (
-	ResourceKindUnknown  ResourceKind = iota // zero value; never valid
+	ResourceKindUnknown ResourceKind = iota // zero value; never valid
 	ResourceKindVentHood
 )
 
@@ -20,7 +20,7 @@ const (
 // derived from the slots placed on it. The engine only needs the set of resources
 // it may place onto.
 type Resource struct {
-	ID     ResourceID
+	ID             ResourceID
 	ResourcePoolID ResourcePoolID
-	Kind   ResourceKind
+	Kind           ResourceKind
 }

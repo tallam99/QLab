@@ -22,10 +22,10 @@ type Algorithm interface {
 // NOT here: it is configuration the implementation is constructed with, not
 // world-state (§10).
 type Input struct {
-	ResourcePoolID    ResourcePoolID
-	Slots     []Slot
-	Resources []Resource
-	Now       time.Time
+	ResourcePoolID ResourcePoolID
+	Slots          []Slot
+	Resources      []Resource
+	Now            time.Time
 }
 
 // Result is what Reschedule returns: the recomputed queue and the trace of how

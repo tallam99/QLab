@@ -49,9 +49,9 @@ func (s SlotStatus) IsPinned() bool { return s == SlotStatusActive }
 //   - ACTIVE: AssignedResource, ActualStart, and ProjectedEnd are inputs and
 //     pinned; the engine schedules around them and never moves them.
 type Slot struct {
-	ID     SlotID
-	UserID UserID
-	LabID  LabID
+	ID             SlotID
+	UserID         UserID
+	LabID          LabID
 	ResourcePoolID ResourcePoolID
 
 	SlotPriority SlotPriority
