@@ -186,17 +186,29 @@ func TestSecurity() error {
 	return run("python3", "scripts/check-yaak-secrets.py")
 }
 
-// Mutate runs mutation testing (gremlins) over the scheduling engine to verify
-// the test suite actually kills injected faults, not just executes them. Settings
-// (build tag, timeout, excluded generated files, thresholds) come from
-// .gremlins.yaml, which CI shares. It gates on mutant coverage, so it exits
-// non-zero if any reachable mutant goes unexercised. Not part of `mage test`.
-// Needs gremlins on PATH — install with `brew install go-gremlins/tap/gremlins`.
+// mutateDirs are the directories `mage mutate` runs mutation testing over, in
+// order. Add logic-dense packages here as they land; glue/infra packages (DB
+// wiring, HTTP lifecycle) aren't good mutation fodder.
+var mutateDirs = []string{
+	engineDir,
+}
+
+// Mutate runs mutation testing (gremlins) over mutateDirs to verify the test suite
+// actually kills injected faults, not just executes them. Settings (build tag,
+// timeout, excluded generated files, thresholds) come from .gremlins.yaml, which
+// CI shares. It gates on mutant coverage, so it exits non-zero if any reachable
+// mutant goes unexercised. Not part of `mage test`. Needs gremlins on PATH —
+// install with `brew install go-gremlins/tap/gremlins`.
 func Mutate() error {
 	if _, err := exec.LookPath("gremlins"); err != nil {
 		return fmt.Errorf("gremlins not found on PATH; install with `brew install go-gremlins/tap/gremlins`: %w", err)
 	}
-	return run("gremlins", "unleash", engineDir)
+	for _, dir := range mutateDirs {
+		if err := run("gremlins", "unleash", dir); err != nil {
+			return fmt.Errorf("mutate %s: %w", dir, err)
+		}
+	}
+	return nil
 }
 
 // ServiceLogs follows all services' logs (last 100 lines, then live).
