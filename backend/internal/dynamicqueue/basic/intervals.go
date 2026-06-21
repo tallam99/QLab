@@ -8,30 +8,48 @@ import (
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 )
 
-// interval is a half-open free span [from, to) on one resource. The final
-// interval on a resource has to == maxInstant, standing for open-ended.
+// interval is a free span on one resource. A bounded interval is [start, end); the
+// open-ended tail interval every resource ends with is [start, +inf) and carries
+// openEnded == true (end is ignored). Modelling "no upper bound" as a flag rather
+// than a sentinel instant keeps an unbounded tail unrepresentable as a real time.
 type interval struct {
-	from time.Time
-	to   time.Time
+	start     time.Time
+	end       time.Time
+	openEnded bool
 }
 
-// freeMap holds each resource's ordered, non-overlapping free intervals.
+// fits reports whether a span of length d starting at t lies within the interval.
+func (iv interval) fits(t time.Time, d time.Duration) bool {
+	if t.Before(iv.start) {
+		return false
+	}
+	return iv.openEnded || !t.Add(d).After(iv.end)
+}
+
+// contains reports whether the span [s, e) lies within the interval.
+func (iv interval) contains(s, e time.Time) bool {
+	if s.Before(iv.start) {
+		return false
+	}
+	return iv.openEnded || !e.After(iv.end)
+}
+
+// freeMap holds each resource's ordered, non-overlapping free intervals, each
+// list ending in an open-ended tail.
 type freeMap map[dynamicqueue.ResourceID][]interval
 
 // buildFree seeds every resource's availability from now, carving out the
 // occupancy of pinned ACTIVE slots ([now, projectedEnd)) so scheduled slots are
-// placed only into genuinely free time (ALGORITHM §5 step 1). Every resource ends
-// with an open-ended tail, so a placement always exists.
+// placed only into genuinely free time (ALGORITHM §5 step 1). Validate guarantees
+// each active slot's projectedEnd is after now, so its occupancy is non-empty and
+// an overrunning active is never mistaken for a free resource.
 func buildFree(resources []dynamicqueue.Resource, slots []dynamicqueue.Slot, now time.Time) freeMap {
 	busy := make(map[dynamicqueue.ResourceID][]interval)
 	for _, s := range slots {
 		if !s.Status.IsPinned() {
 			continue
 		}
-		if !s.ProjectedEnd.After(now) {
-			continue // already finished by now; frees no future time
-		}
-		busy[s.AssignedResource] = append(busy[s.AssignedResource], interval{from: now, to: s.ProjectedEnd})
+		busy[s.AssignedResource] = append(busy[s.AssignedResource], interval{start: now, end: s.ProjectedEnd})
 	}
 
 	free := make(freeMap, len(resources))
@@ -41,35 +59,36 @@ func buildFree(resources []dynamicqueue.Resource, slots []dynamicqueue.Slot, now
 	return free
 }
 
-// freeFrom returns the complement of busy within [now, maxInstant): the gaps
-// before, between, and after the (merged, sorted) busy intervals, always ending
-// in the open-ended tail.
+// freeFrom returns the complement of busy within [now, +inf): the gaps before,
+// between, and after the (merged, sorted) busy intervals, always ending in the
+// open-ended tail.
 func freeFrom(now time.Time, busy []interval) []interval {
 	var out []interval
 	cursor := now
 	for _, b := range busy {
-		if b.from.After(cursor) {
-			out = append(out, interval{from: cursor, to: b.from})
+		if b.start.After(cursor) {
+			out = append(out, interval{start: cursor, end: b.start})
 		}
-		if b.to.After(cursor) {
-			cursor = b.to
+		if b.end.After(cursor) {
+			cursor = b.end
 		}
 	}
-	return append(out, interval{from: cursor, to: maxInstant})
+	return append(out, interval{start: cursor, openEnded: true})
 }
 
-// mergeIntervals sorts by start and merges overlapping or touching intervals.
+// mergeIntervals sorts bounded intervals by start and merges overlapping or
+// touching ones.
 func mergeIntervals(ivs []interval) []interval {
 	if len(ivs) == 0 {
 		return nil
 	}
-	sort.Slice(ivs, func(i, j int) bool { return ivs[i].from.Before(ivs[j].from) })
+	sort.Slice(ivs, func(i, j int) bool { return ivs[i].start.Before(ivs[j].start) })
 	merged := []interval{ivs[0]}
 	for _, iv := range ivs[1:] {
 		last := &merged[len(merged)-1]
-		if !iv.from.After(last.to) { // overlaps or touches the previous
-			if iv.to.After(last.to) {
-				last.to = iv.to
+		if !iv.start.After(last.end) { // overlaps or touches the previous
+			if iv.end.After(last.end) {
+				last.end = iv.end
 			}
 			continue
 		}
@@ -79,11 +98,11 @@ func mergeIntervals(ivs []interval) []interval {
 }
 
 // place finds the earliest feasible start for a slot of length d, no earlier than
-// earliest, across all resources' free intervals — the argmin of t = max(from,
-// earliest) at which the slot fits before the interval's end. Ties break to the
-// smaller start, then the smaller resource id (determinism, §4). It returns the
-// chosen start and resource, and whether the slot backfilled a bounded gap (vs.
-// the resource's open-ended tail).
+// earliest, across all resources' free intervals — the argmin of t = max(start,
+// earliest) at which the slot fits. Ties break to the smaller start, then the
+// smaller resource id (determinism, §4). It returns the chosen start and resource,
+// and whether the slot backfilled a bounded gap (vs. the open-ended tail). Every
+// resource has an open-ended tail, so a placement always exists (§8).
 func place(free freeMap, earliest time.Time, d dynamicqueue.Minutes) (time.Time, dynamicqueue.ResourceID, bool) {
 	var (
 		bestStart    time.Time
@@ -94,14 +113,14 @@ func place(free freeMap, earliest time.Time, d dynamicqueue.Minutes) (time.Time,
 	dur := d.Duration()
 	for _, rid := range sortedKeys(free) {
 		for _, iv := range free[rid] {
-			t := laterOf(iv.from, earliest)
-			if t.Add(dur).After(iv.to) {
+			t := laterOf(iv.start, earliest)
+			if !iv.fits(t, dur) {
 				continue // doesn't fit this interval; try the next
 			}
-			// First fitting interval on this resource gives its earliest feasible
+			// The first fitting interval on a resource gives its earliest feasible
 			// start (intervals are start-ordered, so later ones can only be later).
 			if !found || t.Before(bestStart) || (t.Equal(bestStart) && rid < bestResource) {
-				bestStart, bestResource, bestGapFill, found = t, rid, !iv.to.Equal(maxInstant), true
+				bestStart, bestResource, bestGapFill, found = t, rid, !iv.openEnded, true
 			}
 			break
 		}
@@ -111,28 +130,33 @@ func place(free freeMap, earliest time.Time, d dynamicqueue.Minutes) (time.Time,
 
 // carve removes [start, start+d) from a resource's free intervals, splitting the
 // one interval that contained the placement into the 0–2 fragments left on either
-// side. place chose a start within exactly one free interval, so this never spans
-// intervals.
+// side. place chose a start within exactly one free interval, so only that
+// interval is split.
 func carve(free freeMap, r dynamicqueue.ResourceID, start time.Time, d dynamicqueue.Minutes) {
 	end := start.Add(d.Duration())
 	ivs := free[r]
 	out := make([]interval, 0, len(ivs)+1)
+	carved := false
 	for _, iv := range ivs {
-		if start.Before(iv.from) || end.After(iv.to) { // not the containing interval
+		if carved || !iv.contains(start, end) {
 			out = append(out, iv)
 			continue
 		}
-		if start.After(iv.from) {
-			out = append(out, interval{from: iv.from, to: start})
+		carved = true
+		if start.After(iv.start) {
+			out = append(out, interval{start: iv.start, end: start})
 		}
-		if iv.to.After(end) {
-			out = append(out, interval{from: end, to: iv.to})
+		switch {
+		case iv.openEnded:
+			out = append(out, interval{start: end, openEnded: true})
+		case iv.end.After(end):
+			out = append(out, interval{start: end, end: iv.end})
 		}
 	}
 	free[r] = out
 }
 
-// sortedKeys returns a resource id slice in ascending order, for deterministic
+// sortedKeys returns the resource ids in ascending order, for deterministic
 // iteration over the freeMap.
 func sortedKeys(free freeMap) []dynamicqueue.ResourceID {
 	keys := make([]dynamicqueue.ResourceID, 0, len(free))

@@ -8,12 +8,6 @@ import (
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 )
 
-// maxInstant stands in for "no upper bound" on a resource's final free interval.
-// It is a far-future constant rather than the time.Time zero value (which means
-// "unset"), so the "does the slot fit before `to`?" test works uniformly for
-// open-ended tails. Durations added to real instants never approach it.
-var maxInstant = time.Date(9999, time.December, 31, 23, 59, 59, 0, time.UTC)
-
 // Reschedule recomputes the resource pool's queue (ALGORITHM §5). It validates the
 // input, sweeps no-shows, seeds each resource's availability from pinned ACTIVE
 // occupancy, then places the remaining open slots in SlotPriority order at the
@@ -55,8 +49,8 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 		trace = append(trace, dynamicqueue.Step{
 			Kind:     dynamicqueue.StepKindSeedResource,
 			Resource: rid,
-			At:       free[rid][0].from,
-			Detail:   fmt.Sprintf("free from %s", fmtTime(free[rid][0].from)),
+			At:       free[rid][0].start,
+			Detail:   fmt.Sprintf("free from %s", fmtTime(free[rid][0].start)),
 		})
 	}
 

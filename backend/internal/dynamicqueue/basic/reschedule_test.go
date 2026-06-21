@@ -246,6 +246,12 @@ func TestReschedule(t *testing.T) {
 				"b": placed(60, "r1", true),  // pushed to 10:00 behind a; first commit notifies
 			},
 		},
+		{
+			name:      "long slot far in the future lands on the open-ended tail",
+			resources: resources("r1"),
+			slots:     []dynamicqueue.Slot{sched("a", 1, 600, 480, 0, 600)}, // desired 19:00, runs 8h
+			want:      map[string]want{"a": placed(600, "r1", false)},
+		},
 	}
 
 	for _, c := range cases {
@@ -363,6 +369,7 @@ func TestRescheduleValidation(t *testing.T) {
 		{"non-positive duration", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{sched("a", 1, 0, 0, 0, -1)}}},
 		{"foreign pool slot", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{foreignPool}}},
 		{"active without resource", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{noResource}}},
+		{"active projected end not after now", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{active("z", 1, "r1", -60, 0)}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

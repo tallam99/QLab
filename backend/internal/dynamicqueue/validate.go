@@ -3,6 +3,7 @@ package dynamicqueue
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Validate checks the structural preconditions an Algorithm assumes, so
@@ -38,8 +39,14 @@ func (in Input) Validate() error {
 			if !s.AssignedResource.IsAssigned() {
 				return fmt.Errorf("dynamicqueue: active slot %q has no assigned resource", s.ID)
 			}
-			if s.ProjectedEnd.IsZero() {
-				return fmt.Errorf("dynamicqueue: active slot %q has no projected end", s.ID)
+			// An ACTIVE slot still holds its resource; its ProjectedEnd is when it is
+			// expected to free it and must be strictly in the future. A projection
+			// at or before now means it is overrunning and the caller must re-project
+			// it (or record the clock-out) before rescheduling — otherwise the engine
+			// would treat a still-occupied resource as free (§2.3, §6).
+			if !s.ProjectedEnd.After(in.Now) {
+				return fmt.Errorf("dynamicqueue: active slot %q projected end %s is not after now %s; re-project on overrun",
+					s.ID, s.ProjectedEnd.Format(time.RFC3339), in.Now.Format(time.RFC3339))
 			}
 		}
 		if other, dup := priorities[s.SlotPriority]; dup {
