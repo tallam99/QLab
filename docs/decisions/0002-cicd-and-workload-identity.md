@@ -44,7 +44,7 @@ to deploy to **staging** and **production** from `main`, under three constraints
 - **Tradeoff / known overlap:** the API connects to its database on boot, so a
   Cloud Run revision only goes healthy once a reachable database exists. Phase 3's
   backend deploy therefore depends on a Neon instance (no schema needed — just a
-  connection), nudging Phase 4's database *creation* slightly earlier. Documented
+  connection), nudging Phase 5's database *creation* slightly earlier. Documented
   in `docs/deploy.md`. The frontend deploy has no such dependency.
 
 ## Alternatives considered

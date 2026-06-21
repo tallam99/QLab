@@ -7,7 +7,7 @@ lives under the `backend/` subtree, imported as `github.com/tallam99/qlab/backen
 Read the root `CLAUDE.md` and `docs/PLAN.md` first for the phase boundary and the
 local-vs-cloud rule. **Current status: Phase 2** — the HTTP service plus a local
 Docker Compose stack (Postgres) driven by `mage`. The data model and query layer
-land in Phase 4.
+land in Phase 5.
 
 ## Key files
 
@@ -25,7 +25,7 @@ land in Phase 4.
   access). `clients/postgres` builds the pgx pool; Firebase/storage clients become
   siblings later.
 - `internal/store/` — the data store: the business `Store` interface
-  (`interface.go`, business-domain methods only — empty until Phase 4), implemented
+  (`interface.go`, business-domain methods only — empty until Phase 5), implemented
   by `store/pgstore`. `pgstore.New` pings on construction, so a returned store is
   guaranteed ready and nothing re-checks it (no health methods on the interface);
   `pgstore.Store` is an `io.Closer` so the server can drain its pool on shutdown.
@@ -50,7 +50,7 @@ land in Phase 4.
   `httpmw.LoggerFromContext(ctx)` inside handlers so lines carry the request id.
 - **chi** for routing/middleware; Connect-RPC handlers mount on the same router
   later. Wire format is protobuf via Connect — generated types only, no
-  hand-written request/response shapes (lands Phase 5).
+  hand-written request/response shapes (lands Phase 6).
 - **Constructors take an `Options` (or `Config`) struct, not loose params** — so
   signatures don't churn as dependencies grow (`logging.New(Options)`,
   `server.New(Options)`).
@@ -80,7 +80,7 @@ land in Phase 4.
   the `Server` method set fixed as dependencies grow. Construction-time deps (the
   logger) still go in `Options`, validated in `New`. Deps are interface-typed where
   practical so tests and infra can swap implementations.
-- The **scheduling engine (`internal/scheduling`, Phase 6) is pure**: no DB, no
+- The **scheduling engine (`internal/dynamicqueue`, Phase 4) is pure**: no DB, no
   HTTP, no clock reads. Read `docs/ALGORITHM.md` before touching it.
 - From the **repo root**, run `go build ./backend/...`, `go vet ./backend/...`, and
   `mage test` (all tiers; or `mage testUnit` for just the Go suite) before

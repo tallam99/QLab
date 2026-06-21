@@ -29,7 +29,7 @@ QLab is two separate surfaces plus managed backing services:
 ## Backend components (Go)
 
 - **API / Connect handlers** — thin; convert proto ⇄ domain at the edges.
-- **Scheduling engine** (`internal/scheduling`) — **pure functions**, no DB/HTTP/clock.
+- **Scheduling engine** (`internal/dynamicqueue`) — **pure**, no DB/HTTP/clock.
   The product's core; specified in `docs/ALGORITHM.md`. A single `reschedule()`
   operation re-flows the queue on every event.
 - **Persistence** — Postgres via pgx; queries via sqlc (static) + squirrel (dynamic);
@@ -42,9 +42,10 @@ QLab is two separate surfaces plus managed backing services:
 ## Data model (shape)
 
 Tenant-scoped by `lab_id`. Core tables: `labs`, `users`, `lab_memberships` (role),
-equipment as **bench pools**, `slots` (priority queue with `win_start` / `window` /
-`duration` / `actual_start` / `assigned_bench_id` / `status`), `outbox`. See
-`docs/PLAN.md` Phase 4 and `docs/ALGORITHM.md` §1.
+equipment as **resource pools**, `slots` (priority queue with `slot_priority` /
+`desired_start` / `lookahead` / `duration` / `committed_start` / `actual_start` /
+`assigned_resource_id` / `status`), `outbox`. See
+`docs/PLAN.md` Phase 5 and `docs/ALGORITHM.md` §1.
 
 ## Live updates
 
@@ -66,7 +67,7 @@ Claude operates **local** only; the user drives staging/prod (see `CLAUDE.md`).
 
 - **Contract:** protobuf via Connect + buf — one schema, generated Go + TS.
 - **Observability:** `slog` JSON + OpenTelemetry spans (→ Cloud Trace), keyed by
-  `lab_id` / `pool_id` / `slot_id` for selectively-feedable debugging.
+  `lab_id` / `resource_pool_id` / `slot_id` for selectively-feedable debugging.
 - **Scaling note:** the engine's cost is **per-pool** (bounded by one lab's queue);
   scaling to many labs is horizontal/infra (DB connections, SSE capacity), not
   algorithmic. The engine is only revisited if a *single pool's* queue grows large.

@@ -12,5 +12,5 @@ package store
 
 // Store is the data store the service reads and writes its data model through. It
 // is intentionally empty today; the business-domain methods land with the schema
-// in Phase 4.
+// in Phase 5.
 type Store interface{}

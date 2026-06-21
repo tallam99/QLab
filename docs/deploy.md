@@ -45,16 +45,16 @@ unreachable, and Cloud Run then marks the revision unhealthy). So:
 - The **backend** Cloud Run deploy will only go green once a **reachable
   database** exists and `DATABASE_URL` resolves to it.
 
-The schema/migrations (Phase 4) are **not** required for this — `/healthq` and
+The schema/migrations (Phase 5) are **not** required for this — `/healthq` and
 `/readyq` only need a successful connection, not tables. Two options:
 
 1. **Recommended:** create a bare **Neon** project/branch now (a few minutes;
-   pull just the *creation* part of Phase 4 forward), put its connection string
+   pull just the *creation* part of Phase 5 forward), put its connection string
    in Secret Manager as `DATABASE_URL`, and the backend deploy goes green.
 2. Or deploy only the frontend now and let the backend's first green deploy land
-   with Phase 4. The pipeline is identical either way.
+   with Phase 5. The pipeline is identical either way.
 
-This is the one place Phase 3 and Phase 4 overlap; flagging it so a red backend
+This is the one place Phase 3 and Phase 5 overlap; flagging it so a red backend
 deploy isn't mistaken for a pipeline bug.
 
 ---
@@ -93,7 +93,7 @@ by exactly one operation ("reset a branch from its parent"), which we never run.
 
 - Right now `production` is empty (no schema yet), so `staging` is born empty too —
   nothing real is ever copied between them.
-- `staging` then diverges on its own: its own schema (Phase 4 migrations) + seeded
+- `staging` then diverges on its own: its own schema (Phase 5 migrations) + seeded
   demo data, while `production` holds real data. They never cross.
 
 (The symmetric "`base` root + two children" layout is also valid but buys no extra
@@ -118,7 +118,7 @@ branches and want to fork them from a schema-only source; you can create it then
    secret; the **production** branch's string → the **production** project's secret.
 
 Notes:
-- The **schema/migrations land in Phase 4** — for Phase 3 a bare branch (no tables)
+- The **schema/migrations land in Phase 5** — for Phase 3 a bare branch (no tables)
   is enough for `/healthq` and `/readyq`, which only need a successful *connection*.
 - Neon scales to zero, so the first connection after an idle period has a cold
   start; the service's boot retry rides it out, and the Phase 11 weekly cron

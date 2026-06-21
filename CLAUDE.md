@@ -1,13 +1,13 @@
 # QLab — orientation for Claude
 
-QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-bench
+QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-resource
 scheduling engine** that continuously re-flows a priority queue across
-interchangeable benches as experiments overrun, finish early, or get cancelled.
+interchangeable resources as experiments overrun, finish early, or get cancelled.
 
 **Current status:** Phase 3 (CI/CD). The Go service, a one-command local stack
 (Docker Compose + Postgres, `mage` targets), and the GitHub Actions pipeline
 (CI gate + deploy to Cloud Run + Firebase Hosting, both environments — see
-`docs/deploy.md`) are in place; the data model, API, and engine are next. Work
+`docs/deploy.md`) are in place; the scheduling engine, data model, and API are next. Work
 proceeds through the phases in `docs/PLAN.md`.
 
 ## Read these first
@@ -42,7 +42,7 @@ This project is built with Claude as the primary engine, with a hard boundary:
 - **Wire format:** Protobuf via Connect-RPC + buf. `.proto` is the contract of record;
   Go + TS types are generated — don't hand-write request/response shapes.
 - **Logging:** `slog` (structured, JSON in cloud). **Tracing:** OpenTelemetry → Cloud
-  Trace; annotate spans with `lab_id`, `pool_id`, `slot_id`, event type.
+  Trace; annotate spans with `lab_id`, `resource_pool_id`, `slot_id`, event type.
 - **Topology:** the public PWA (Firebase Hosting) and the data API (Cloud Run) are
   **separate origins**; every API endpoint requires a Firebase JWT. See decision 0001.
 - **Multi-tenancy:** every tenant-scoped row carries `lab_id`; scope every query by it.
@@ -61,9 +61,9 @@ Playwright, Connect-Query, Tailwind, Biome, vite-plugin-pwa.
 The repo is a **single Go module** rooted at the top (`github.com/tallam99/qlab`);
 the `magefile.go` shares it, and `backend/` is a subtree, not a separate module.
 
-    backend/    Go API + scheduling engine (internal/scheduling is pure: no DB/HTTP/clock)
+    backend/    Go API + scheduling engine (internal/dynamicqueue is pure: no DB/HTTP/clock)
     frontend/   React PWA (scaffolded in a later phase)
-    proto/      .proto contract (buf; lands Phase 5)
+    proto/      .proto contract (buf; lands Phase 6)
     docs/       project docs
 
 Per-area `CLAUDE.md` files live with their directories.

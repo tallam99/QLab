@@ -12,7 +12,7 @@ import (
 
 // Store implements store.Store over a pgx connection pool.
 type Store struct {
-	pool *pgxpool.Pool // closed on shutdown; read by the query methods that land in Phase 4
+	pool *pgxpool.Pool // closed on shutdown; read by the query methods that land in Phase 5
 }
 
 // Compile-time guarantee that *Store satisfies the store interface.

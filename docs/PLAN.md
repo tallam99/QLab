@@ -1,6 +1,6 @@
 # QLab — Build Plan
 
-> Lab equipment scheduling PWA with a live queue + multi-bench scheduling engine.
+> Lab equipment scheduling PWA with a live queue + multi-resource scheduling engine.
 > See **`docs/ALGORITHM.md`** for the
 > scheduling-engine specification (written up front, before any engine code). This
 > file is the *engineering* roadmap: broad phases, ordered, with exit criteria.
@@ -46,7 +46,7 @@ The practical implication: **local infra must be fully scriptable and
 self-contained** (a **[mage](https://magefile.org/)** target set Claude can invoke
 — `up`, `down`, `migrate`, `seed`, `reset`, `test`, `logs`, `proto`), so Claude can
 reproduce and debug any behavior without you in the loop. This is a hard
-requirement on Phase 2 and Phase 4, not a nicety.
+requirement on Phase 2 and Phase 5, not a nicety.
 
 ### 3. Documentation-first, for fast Claude bootstrap
 You must be able to open a fresh Claude session *anywhere* in the codebase and get
@@ -58,7 +58,7 @@ own area docs gets its own `docs/` folder too.
   **`docs/ALGORITHM.md`** (the engine), **`docs/PLAN.md`** (this roadmap),
   **`docs/runbook.md`** (how to run/debug local infra — the same commands Claude
   uses), and a **`docs/decisions/`** decision log capturing the "why" behind choices
-  that aren't obvious from code (e.g. the `window` semantics, the bench-pool model,
+  that aren't obvious from code (e.g. the `lookahead` semantics, the resource-pool model,
   the topology split).
 - A root **`CLAUDE.md`** plus **per-area `CLAUDE.md`** files (`backend/`,
   `frontend/`, `proto/`) pointing Claude at each area's conventions and key files; a
@@ -196,7 +196,7 @@ message silently.
 - **Idempotency:** each outbox row has a dedup key so retries don't double-send.
 
 This is detailed in Phase 11 but the **interface + outbox table** should be
-designed early (the table lands in Phase 4's schema) so it's not bolted on.
+designed early (the table lands in Phase 5's schema) so it's not bolted on.
 
 ### Observability & debugging-for-Claude
 
@@ -206,8 +206,8 @@ than you can eyeball, optimize for **selectively feedable** evidence:
   every line, so any request's full story can be filtered out and handed to Claude
   as a self-contained slice.
 - **Spans** (OTel) on every meaningful unit of work (handler, engine call, DB tx,
-  notification send), annotated with the relevant ids (`lab_id`, `pool_id`,
-  `slot_id`, event type, which `win_start`s ratcheted) — exactly the fields you'd
+  notification send), annotated with the relevant ids (`lab_id`, `resource_pool_id`,
+  `slot_id`, event type, which slots re-committed) — exactly the fields you'd
   want when reconstructing a reschedule.
 - **A `lab_id`-scoped state-export endpoint (staging only, head-auth):** dumps a
   lab's full queue + recent events as JSON/proto so you can hand Claude a precise,
@@ -254,7 +254,7 @@ engine is specified on paper** — nothing built yet.
 
 **Work:**
 - **Finalize `docs/ALGORITHM.md`** (already drafted): review the six flagged decisions in
-  §12 and sign off (notably window forward-only and the bench-pool data model). This
+  §12 and sign off (notably lookahead earliness-only and the resource-pool data model). This
   is the "solve it up front" step — the engine is the riskiest logic, so it's pinned
   down before any code.
 - Confirm local toolchain: Go, Node.js (current LTS), Docker Desktop, `gcloud`,
@@ -380,7 +380,45 @@ prod; the PWA can reach the API cross-origin (CORS works).
 
 ---
 
-## Phase 4 — Database: Neon + schema + migrations + seed
+## Phase 4 — Core domain: queue + scheduling engine
+
+**Goal:** Implement the engine **exactly as specified in `docs/ALGORITHM.md`**, as pure,
+exhaustively-tested Go.
+
+**Work:**
+- Implement `internal/dynamicqueue` as **pure functions** over the pool's slots — *no DB,
+  no HTTP, no clock reads* (the engine contract, `docs/ALGORITHM.md` §10). The corrected
+  model is **a single `reschedule(slots, resources, now, grace)`** (a greedy, priority-
+  ordered, multi-resource list scheduler with gap-fill — `docs/ALGORITHM.md` §5); cascade
+  and pull-forward are the *same* call. No compression, no `MIN_DURATION`, no
+  overflow/infeasible result.
+- **Table-driven `testify` suite** covering the **full §11 test matrix** (16 cases:
+  single-resource, multi-resource, lifecycle) plus invariant assertions (per-resource
+  no-overlap, priority respected, durations unchanged, `actual_start ≥ desired_start − lookahead`
+  and `≥ now`, ACTIVE untouched, determinism).
+- Add a **Yaak request per behavior variation** once the API wraps this (Phase 7),
+  mirroring the matrix.
+
+**Exit criteria:** Every §11 case passes; the engine has zero dependencies on
+DB/HTTP/proto (conversions happen at the edges); `mage test` runs it fast.
+
+**Notes:**
+- This is the heart of the product and the easiest thing to get subtly wrong —
+  which is exactly why it was specified up front and is built in isolation before
+  wiring. Resist writing it inside an HTTP handler.
+- **Why this precedes the schema and contract:** the engine's pure domain types
+  (slot, resource, reschedule outcomes) are the canonical shapes that the DB rows
+  (Phase 5) and proto messages (Phase 6) are mapped *from* — so the domain layer is
+  validated by working, tested code before either edge commits to it, rather than
+  the reverse. The engine depends on neither (conversions live at the edges,
+  `docs/ALGORITHM.md` §10), so it can be built first with no infra.
+- The §12 decisions in `docs/ALGORITHM.md` must be signed off (Phase 0) before this
+  starts — the implementation encodes them (notably: lookahead earliness-only, and the
+  resource-pool model).
+
+---
+
+## Phase 5 — Database: Neon + schema + migrations + seed
 
 **Goal:** The real data model exists, versioned via migrations, on Neon's staging
 and prod branches, with **seedable demo data for staging/local.**
@@ -389,15 +427,17 @@ and prod branches, with **seedable demo data for staging/local.**
 - Create the Neon project; create `staging` and `prod` **branches** (cheap
   copy-on-write Postgres instances).
 - Migrations (via `goose`) for: `labs`, `users`, `lab_memberships` (with role),
-  **equipment as a *pool* of interchangeable benches** (see the data-model note),
-  `slots` (id, user_id, lab_id, **pool_id**, **assigned_bench_id** (nullable),
-  **priority**, **win_start**, window, duration, **actual_start**, status, note —
-  per `docs/ALGORITHM.md` §1.1), **and `outbox`** (for notifications — designed now per
-  the notifications convention).
+  **equipment as a *pool* of interchangeable resources** (each resource carries a
+  `kind`; MVP ships one — the vent hood) (see the data-model note),
+  `slots` (id, user_id, lab_id, **resource_pool_id**, **assigned_resource_id** (nullable),
+  **slot_priority**, **desired_start**, lookahead, duration, **committed_start**,
+  **actual_start**, status, note — per `docs/ALGORITHM.md` §1.1; mirror the Phase 4
+  domain types), **and `outbox`** (for
+  notifications — designed now per the notifications convention).
 - Run migrations against local Postgres and both Neon branches (locally + via
   `mage migrate`; staging/prod runs are triggered by **you**).
-- **Seed scripts** (`mage seed`) that build demo labs/users/bench-pools/queues —
-  the same scenarios as `docs/ALGORITHM.md`'s test matrix (single- and multi-bench, gap-
+- **Seed scripts** (`mage seed`) that build demo labs/users/resource-pools/queues —
+  the same scenarios as `docs/ALGORITHM.md`'s test matrix (single- and multi-resource, gap-
   fill, no-show), so the UI and API have realistic situations to show. **Seeding is
   staging/local only** (guarded by `QLAB_ENV`).
 - **Install `mockery`** (pinned Go `tool` + `.mockery.yaml`) and generate mocks for
@@ -411,47 +451,48 @@ seed` populates a demo lab locally; the same seed is reproducible on the Neon
 staging branch.
 
 **Notes:**
-- **Modeling time:** use **`timestamptz`** for `win_start` / `actual_start`
-  (timezones, DST, human-readability); the engine works in absolute instants +
-  minute deltas, consistent with `docs/ALGORITHM.md`. `duration` and `window` are minute
-  integers.
-- **`window` is start-time flexibility, *not* tied to duration** (per `docs/ALGORITHM.md`
-  §2). Enforce only `window ≥ 0` at the DB level (`CHECK`). **Do not** add a
-  `window ≤ duration` constraint — durations are inviolable and unrelated to the
-  window. `window = 0` means *rigid* (`docs/ALGORITHM.md` §2.4).
-- **Equipment pool (⚠️ data-model decision, `docs/ALGORITHM.md` §10/§12):** the engine
-  fans a single queue out across interchangeable benches and assigns the *specific*
-  bench near clock-in — so model `equipment` as a **pool** of benches and keep
-  `slots.assigned_bench_id` **nullable** until clocked in (not a hard `equipment_id`
-  fixed at booking). Confirm this before writing the migration; it's the one place
-  the corrected algorithm reshapes the schema.
+- **Modeling time:** use **`timestamptz`** for `desired_start` / `committed_start` /
+  `actual_start` (timezones, DST, human-readability); the engine works in absolute
+  instants + minute deltas, consistent with `docs/ALGORITHM.md`. `duration` and
+  `lookahead` are minute integers.
+- **`lookahead` is earliness flexibility, *not* tied to duration** (per `docs/ALGORITHM.md`
+  §2). Enforce only `lookahead ≥ 0` at the DB level (`CHECK`). **Do not** add a
+  `lookahead ≤ duration` constraint — durations are inviolable and unrelated to the
+  lookahead. `lookahead = 0` means *no earliness* — the slot is never pulled before
+  `desired_start`, only ever pushed later (`docs/ALGORITHM.md` §2.4).
+- **Resource pool (⚠️ data-model decision, `docs/ALGORITHM.md` §10/§12):** the engine
+  fans a single queue out across interchangeable resources and assigns the *specific*
+  resource near clock-in — so model `equipment` as a **pool** of resources (each with
+  a `kind`) and keep `slots.assigned_resource_id` **nullable** until clocked in (not a
+  hard `resource_id` fixed at booking). Confirm this before writing the migration;
+  it's the one place the algorithm reshapes the schema.
 - **Statuses:** the `status` enum includes **`NO_SHOW`** (auto-applied when the
   clock-in grace lapses — `docs/ALGORITHM.md` §1.2/§2.3) alongside SCHEDULED / ACTIVE /
   COMPLETE / CANCELLED.
 - **Multi-tenancy:** `lab_id` on every tenant-scoped row. Index `lab_id`, and
-  `(pool_id, priority)` for queue order plus `(assigned_bench_id, actual_start)` for
-  per-bench timeline lookups.
+  `(resource_pool_id, slot_priority)` for queue order plus `(assigned_resource_id, actual_start)`
+  for per-resource timeline lookups.
 - Neon scale-to-zero idles after inactivity — the weekly cron (Phase 11) doubles as
   a keep-alive.
 
 ---
 
-## Phase 5 — Contract layer (protobuf + codegen)
+## Phase 6 — Contract layer (protobuf + codegen)
 
 **Goal:** `.proto` schemas defined; Go and TypeScript types generated; an empty
 Connect service compiles and serves.
 
 **Work:**
-- Create `proto/qlab/v1/*.proto`. Messages for Lab, User, BenchPool + Bench,
+- Create `proto/qlab/v1/*.proto`. Messages for Lab, User, ResourcePool + Resource,
   Slot, Membership; a `Slot.Status` enum (incl. `NO_SHOW`); the SSE **event
-  envelope** message; a **reschedule result** message (the recomputed schedule —
-  per-slot `actual_start`, `assigned_bench`, ratcheted `win_start`, and a
-  re-committed/notify flag per `docs/ALGORITHM.md` §5). There is **no** overflow/
+  envelope** message; a **reschedule outcome** message (per-slot `actual_start`,
+  `assigned_resource`, and a re-commit/notify flag, or a `NO_SHOW` outcome, per
+  `docs/ALGORITHM.md` §5). There is **no** overflow/
   infeasible result — the schedule never fails (`docs/ALGORITHM.md` §8).
 - Define the service methods (list slots, create slot, clock in/out, cancel,
   overrun) — stub them; implement in Phase 7.
 - `buf.yaml` + `buf.gen.yaml`; wire `buf lint`, `buf breaking`, `buf generate` into
-  the mage targets + CI. Add **`protovalidate`** rules (e.g. `window ≥ 0`).
+  the mage targets + CI. Add **`protovalidate`** rules (e.g. `lookahead ≥ 0`).
 - Generate Go stubs into `backend/internal/gen`, TS into `frontend/src/gen`.
 - Mount the generated Connect handlers on the existing server; return
   `Unimplemented` for now.
@@ -469,62 +510,30 @@ request hits one Connect endpoint and gets `Unimplemented`.
 
 ---
 
-## Phase 6 — Core domain: queue + scheduling engine
-
-**Goal:** Implement the engine **exactly as specified in `docs/ALGORITHM.md`**, as pure,
-exhaustively-tested Go.
-
-**Work:**
-- Implement `internal/scheduling` as **pure functions** over slot slices — *no DB,
-  no HTTP, no clock reads* (the engine contract, `docs/ALGORITHM.md` §10). The corrected
-  model is **a single `reschedule(slots, benches, now)`** (a greedy, priority-
-  ordered, multi-bench list scheduler with gap-fill — `docs/ALGORITHM.md` §5); cascade
-  and pull-forward are the *same* call. No compression, no `MIN_DURATION`, no
-  overflow/infeasible result.
-- **Table-driven `testify` suite** covering the **full §11 test matrix** (16 cases:
-  single-bench, multi-bench, lifecycle) plus invariant assertions (per-bench
-  no-overlap, priority respected, durations unchanged, `actual_start ≥ win_start`
-  and `win_start` monotonic, ACTIVE/history untouched, determinism).
-- Add a **Yaak request per behavior variation** once the API wraps this (Phase 7),
-  mirroring the matrix.
-
-**Exit criteria:** Every §11 case passes; the engine has zero dependencies on
-DB/HTTP/proto (conversions happen at the edges); `mage test` runs it fast.
-
-**Notes:**
-- This is the heart of the product and the easiest thing to get subtly wrong —
-  which is exactly why it was specified up front and is built in isolation before
-  wiring. Resist writing it inside an HTTP handler.
-- The §12 decisions in `docs/ALGORITHM.md` must be signed off (Phase 0) before this
-  starts — the implementation encodes them (notably: window forward-only, and the
-  bench-pool model).
-
----
-
 ## Phase 7 — API endpoints (wire engine ⇄ DB ⇄ Connect)
 
 **Goal:** Real, persisted operations exposed over the Connect/proto API.
 
 **Work:**
-- Implement the Phase 5 stubs as the engine **events** (`docs/ALGORITHM.md` §6): book/
-  create, clock-in (→ `ACTIVE`, pin to a bench), clock-out / early-finish (→
+- Implement the Phase 6 stubs as the engine **events** (`docs/ALGORITHM.md` §6): book/
+  create, clock-in (→ `ACTIVE`, pin to a resource), clock-out / early-finish (→
   `COMPLETE`), cancel (→ `CANCELLED`), overrun (active past scheduled end), and the
   **no-show sweep** (grace lapsed → `NO_SHOW`). Every event mutates state then calls
   the one `reschedule`.
 - Each mutating call: load the pool's open slots **`FOR UPDATE`** → run the pure
-  engine (Phase 6) → persist the recomputed schedule **in one transaction** → write
+  engine (Phase 4) → persist the recomputed schedule **in one transaction** → write
   any resulting notifications to the **outbox** (same tx) → return the updated
   schedule.
 - Enforce **`lab_id` scoping in every query** (defense in depth; pairs with Phase 8).
-- **Spans** on handler → engine → tx → outbox, annotated with `lab_id`, `pool_id`,
-  event type, and per-slot ratchet info (which `win_start`s shifted) (observability
+- **Spans** on handler → engine → tx → outbox, annotated with `lab_id`, `resource_pool_id`,
+  event type, and per-slot re-commit info (which starts changed) (observability
   convention).
 - **Add a Yaak request for each behavior variation** (every matrix scenario, each
   error path) — this is where the Yaak catalogue becomes the live regression set.
 
 **Exit criteria:** You can drive a full lifecycle via **Yaak** (or `buf curl`)
 against local Postgres: create slots, clock in, overrun → see people behind pushed
-(some hopping benches); finish early / cancel → see pull-forward; let a clock-in
+(some hopping resources); finish early / cancel → see pull-forward; let a clock-in
 grace lapse → see `NO_SHOW` re-flow the queue. Each is a saved Yaak request.
 
 **Notes:**
@@ -611,7 +620,7 @@ test drives login → list.
   Go API is a separate origin.
 - **Vite dev server** runs locally on its own port and proxies API calls to your
   local Go service; in prod the built static files live on Hosting.
-- **You already have typed API access** from Phase 5 codegen — you call generated
+- **You already have typed API access** from Phase 6 codegen — you call generated
   functions, not raw `fetch`. Deliberate, to shield you from contract drift.
 - **PWA = an installable website** (home-screen icon, offline-ish, app-like). The
   manifest describes the installable app; the service worker caches/works offline.
@@ -626,14 +635,14 @@ test drives login → list.
 updates.
 
 **Work:**
-- **Queue view:** the single priority-ordered line with status, user, time, window.
-- **Timeline view:** slots over time, **fanned out per bench** (`docs/ALGORITHM.md`
-  §1.4) — where the amber "flexible" vs rigid distinction and overrun-red from the
+- **Queue view:** the single priority-ordered line with status, user, time, lookahead.
+- **Timeline view:** slots over time, **fanned out per resource** (`docs/ALGORITHM.md`
+  §1.4) — where the amber "flexible" (has lookahead) vs fixed distinction and overrun-red from the
   branding matter; surface **pushed / re-committed** slots and `NO_SHOW`s clearly,
   and make execution-order-≠-priority-order legible when gap-fill reorders.
 - **Clock in / out / cancel** actions calling Phase 7 endpoints.
 - **Live updates via SSE:** backend pushes queue-changed events (proto envelope,
-  Phase 5); frontend subscribes via `EventSource` and re-renders (CORS applies to
+  Phase 6); frontend subscribes via `EventSource` and re-renders (CORS applies to
   the stream). On Cloud Run, SSE works over HTTP/1.1 — configure the request
   timeout for long-lived streams.
 - Apply branding: dark `#0F1117`, teal `#00C9A7`, amber `#F59E0B`, red `#F87171`,
@@ -663,9 +672,9 @@ events; weekly summary runs on a schedule.
   Cloud Run as a secret reference — never in the repo.
 - Implement the **outbox worker:** drain `outbox`, deliver via the channel, bounded
   retries with backoff, idempotent sends; exhausted messages → **dead-letter** +
-  **alert the admin address** (and an error span/log). Triggers: bench freed (notify
-  whoever the reschedule now places next), **slot re-committed** (a `win_start`
-  ratcheted past its window — notify of the new start, per `docs/ALGORITHM.md` §2.2),
+  **alert the admin address** (and an error span/log). Triggers: resource freed (notify
+  whoever the reschedule now places next), **slot re-committed** (its scheduled start
+  changed — notify of the new start, per `docs/ALGORITHM.md` §2.2),
   slot pulled forward, and `NO_SHOW` recorded.
 - **Weekly cron:** Cloud Scheduler → a backend endpoint that compiles the lab usage
   summary and emails the head; also keeps Neon warm. Protect it (OIDC from Cloud
@@ -700,12 +709,12 @@ a phone, and edge cases are handled.
 - Verify the **PWA install flow on a real phone** ("Add to Home Screen"; requires
   HTTPS — both Hosting and Cloud Run give it for free).
 - **Edge-case hardening:** pushed-far / re-committed slots surfaced in the UI;
-  `NO_SHOW` re-flow; concurrent clock-outs; empty queues; idle benches with nobody
+  `NO_SHOW` re-flow; concurrent clock-outs; empty queues; idle resources with nobody
   available; a member with no lab; expired tokens (frontend refreshes the Firebase
   token); dead-letter alerting verified.
 - Final pass on **docs** so a fresh Claude session can bootstrap anywhere:
   `docs/ARCHITECTURE.md` current, runbook complete, per-area `CLAUDE.md` accurate,
-  decision log captures the topology + `window` / bench-pool choices.
+  decision log captures the topology + `lookahead` / resource-pool choices.
 
 **Exit criteria:** The full app works from a phone against staging (you), then prod
 (you); "Add to Home Screen" works; a slot pushed far / no-showed re-flows gracefully
@@ -740,7 +749,7 @@ features.
 ## Suggested PR slicing
 
 Each phase is roughly one or a few PRs; keep PRs deployable. `docs/ALGORITHM.md` sign-off
-(Phase 0) and the pure engine (Phase 6) are their own reviewable units. Recommended
+(Phase 0) and the pure engine (Phase 4) are their own reviewable units. Recommended
 order of *first* deploys to prod: Phase 3 (hello world, both surfaces), then auth
-(8) + DB (4) before any real feature, so prod always has working auth + persistence
+(8) + DB (5) before any real feature, so prod always has working auth + persistence
 under whatever ships next.

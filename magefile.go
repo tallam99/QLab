@@ -22,6 +22,8 @@ const (
 	envExampleFile  = ".env.example.json"
 	migrationsDir   = "backend/migrations"
 	bufConfigFile   = "proto/buf.gen.yaml"
+	// engineDir is the pure scheduling engine; mutation testing recurses it.
+	engineDir = "./backend/internal/dynamicqueue"
 	// goosePackage pins the migration tool. It's run via `go run …@version` rather
 	// than a go.mod tool dependency so its many DB-driver deps don't bloat the
 	// module (we only use Postgres).
@@ -134,7 +136,7 @@ func ResetStack() error {
 }
 
 // Migrate applies goose migrations to local Postgres. Migrations live in
-// backend/migrations (added in Phase 4). goose errors on an empty directory, so
+// backend/migrations (added in Phase 5). goose errors on an empty directory, so
 // until the first migration exists this skips cleanly.
 func Migrate() error {
 	env, err := loadEnv()
@@ -146,16 +148,16 @@ func Migrate() error {
 		return err
 	}
 	if len(sqlFiles) == 0 {
-		fmt.Println("migrate: no migrations yet (added with the schema in Phase 4)")
+		fmt.Println("migrate: no migrations yet (added with the schema in Phase 5)")
 		return nil
 	}
 	return run("go", "run", goosePackage, "-dir", migrationsDir, "postgres", env.hostDatabaseURL(), "up")
 }
 
 // Seed loads demo data into local Postgres. The seed lands with the schema in
-// Phase 4; this placeholder keeps the target in the contract until then.
+// Phase 5; this placeholder keeps the target in the contract until then.
 func Seed() error {
-	fmt.Println("seed: no seed data yet (lands with the schema in Phase 4)")
+	fmt.Println("seed: no seed data yet (lands with the schema in Phase 5)")
 	return nil
 }
 
@@ -184,6 +186,31 @@ func TestSecurity() error {
 	return run("python3", "scripts/check-yaak-secrets.py")
 }
 
+// mutateDirs are the directories `mage mutate` runs mutation testing over, in
+// order. Add logic-dense packages here as they land; glue/infra packages (DB
+// wiring, HTTP lifecycle) aren't good mutation fodder.
+var mutateDirs = []string{
+	engineDir,
+}
+
+// Mutate runs mutation testing (gremlins) over mutateDirs to verify the test suite
+// actually kills injected faults, not just executes them. Settings (build tag,
+// timeout, excluded generated files, thresholds) come from .gremlins.yaml, which
+// CI shares. It gates on mutant coverage, so it exits non-zero if any reachable
+// mutant goes unexercised. Not part of `mage test`. Needs gremlins on PATH —
+// install with `brew install go-gremlins/tap/gremlins`.
+func Mutate() error {
+	if _, err := exec.LookPath("gremlins"); err != nil {
+		return fmt.Errorf("gremlins not found on PATH; install with `brew install go-gremlins/tap/gremlins`: %w", err)
+	}
+	for _, dir := range mutateDirs {
+		if err := run("gremlins", "unleash", dir); err != nil {
+			return fmt.Errorf("mutate %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
 // ServiceLogs follows all services' logs (last 100 lines, then live).
 func ServiceLogs() error {
 	env, err := loadEnv()
@@ -204,10 +231,10 @@ func PostgresLogs() error {
 }
 
 // GenProto regenerates Go + TS from the .proto contract via buf. The contract and
-// buf config land in Phase 5; until then this reports there's nothing to do.
+// buf config land in Phase 6; until then this reports there's nothing to do.
 func GenProto() error {
 	if _, err := os.Stat(bufConfigFile); err != nil {
-		fmt.Printf("genproto: no buf config yet (%s lands in Phase 5)\n", bufConfigFile)
+		fmt.Printf("genproto: no buf config yet (%s lands in Phase 6)\n", bufConfigFile)
 		return nil
 	}
 	return run("buf", "generate")

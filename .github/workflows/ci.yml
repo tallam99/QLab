@@ -79,3 +79,25 @@ jobs:
         with:
           # Pinned to the version validated locally; bump deliberately.
           version: v2.12.2
+
+  # Mutation-test the scheduling engine (`mage mutate`), which gates on mutant
+  # coverage — every reachable mutant must be exercised by a test (see
+  # .gremlins.yaml). Soft for now (continue-on-error) while we build confidence in
+  # its stability on CI runners; tighten to a required check later. It mutates the
+  # whole engine, which is fast today; switch to gremlins' `--diff` mode if it ever
+  # grows slow.
+  mutation:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Install gremlins
+        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
+      - name: Mutation test the engine
+        run: mage mutate
