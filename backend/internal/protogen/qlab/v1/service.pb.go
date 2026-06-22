@@ -425,6 +425,56 @@ func (x *ForceClockOutRequest) GetSlotId() string {
 	return ""
 }
 
+// ForceNoShow reclaims a slot whose clock-in grace lapsed (settles it NO_SHOW and
+// frees its place), then reschedules. The sibling of ForceClockOut for the no-show
+// case — but with NO prior poke, because the grace period was the implicit warning.
+// Called by the next-in-line user; the engine never no-shows anyone automatically.
+// Authorization (caller is next-in-line, target is SCHEDULED with grace lapsed) is
+// enforced server-side.
+type ForceNoShowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SlotId        string                 `protobuf:"bytes,1,opt,name=slot_id,json=slotId,proto3" json:"slot_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForceNoShowRequest) Reset() {
+	*x = ForceNoShowRequest{}
+	mi := &file_qlab_v1_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForceNoShowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForceNoShowRequest) ProtoMessage() {}
+
+func (x *ForceNoShowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_qlab_v1_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForceNoShowRequest.ProtoReflect.Descriptor instead.
+func (*ForceNoShowRequest) Descriptor() ([]byte, []int) {
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ForceNoShowRequest) GetSlotId() string {
+	if x != nil {
+		return x.SlotId
+	}
+	return ""
+}
+
 // Most mutating RPCs return the recomputed schedule. They carry the same
 // RescheduleResult but are distinct types (one response per RPC) so the contract
 // can evolve per method without a breaking change rippling across all of them.
@@ -437,7 +487,7 @@ type CreateSlotResponse struct {
 
 func (x *CreateSlotResponse) Reset() {
 	*x = CreateSlotResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[8]
+	mi := &file_qlab_v1_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -449,7 +499,7 @@ func (x *CreateSlotResponse) String() string {
 func (*CreateSlotResponse) ProtoMessage() {}
 
 func (x *CreateSlotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[8]
+	mi := &file_qlab_v1_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -462,7 +512,7 @@ func (x *CreateSlotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSlotResponse.ProtoReflect.Descriptor instead.
 func (*CreateSlotResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{8}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CreateSlotResponse) GetResult() *RescheduleResult {
@@ -481,7 +531,7 @@ type ClockInResponse struct {
 
 func (x *ClockInResponse) Reset() {
 	*x = ClockInResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[9]
+	mi := &file_qlab_v1_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +543,7 @@ func (x *ClockInResponse) String() string {
 func (*ClockInResponse) ProtoMessage() {}
 
 func (x *ClockInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[9]
+	mi := &file_qlab_v1_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +556,7 @@ func (x *ClockInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClockInResponse.ProtoReflect.Descriptor instead.
 func (*ClockInResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{9}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ClockInResponse) GetResult() *RescheduleResult {
@@ -525,7 +575,7 @@ type ClockOutResponse struct {
 
 func (x *ClockOutResponse) Reset() {
 	*x = ClockOutResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[10]
+	mi := &file_qlab_v1_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -537,7 +587,7 @@ func (x *ClockOutResponse) String() string {
 func (*ClockOutResponse) ProtoMessage() {}
 
 func (x *ClockOutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[10]
+	mi := &file_qlab_v1_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -550,7 +600,7 @@ func (x *ClockOutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClockOutResponse.ProtoReflect.Descriptor instead.
 func (*ClockOutResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{10}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ClockOutResponse) GetResult() *RescheduleResult {
@@ -569,7 +619,7 @@ type CancelSlotResponse struct {
 
 func (x *CancelSlotResponse) Reset() {
 	*x = CancelSlotResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[11]
+	mi := &file_qlab_v1_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +631,7 @@ func (x *CancelSlotResponse) String() string {
 func (*CancelSlotResponse) ProtoMessage() {}
 
 func (x *CancelSlotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[11]
+	mi := &file_qlab_v1_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +644,7 @@ func (x *CancelSlotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelSlotResponse.ProtoReflect.Descriptor instead.
 func (*CancelSlotResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{11}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CancelSlotResponse) GetResult() *RescheduleResult {
@@ -613,7 +663,7 @@ type ForceClockOutResponse struct {
 
 func (x *ForceClockOutResponse) Reset() {
 	*x = ForceClockOutResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[12]
+	mi := &file_qlab_v1_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -625,7 +675,7 @@ func (x *ForceClockOutResponse) String() string {
 func (*ForceClockOutResponse) ProtoMessage() {}
 
 func (x *ForceClockOutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[12]
+	mi := &file_qlab_v1_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -638,10 +688,54 @@ func (x *ForceClockOutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForceClockOutResponse.ProtoReflect.Descriptor instead.
 func (*ForceClockOutResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{12}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ForceClockOutResponse) GetResult() *RescheduleResult {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+type ForceNoShowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        *RescheduleResult      `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForceNoShowResponse) Reset() {
+	*x = ForceNoShowResponse{}
+	mi := &file_qlab_v1_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForceNoShowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForceNoShowResponse) ProtoMessage() {}
+
+func (x *ForceNoShowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_qlab_v1_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForceNoShowResponse.ProtoReflect.Descriptor instead.
+func (*ForceNoShowResponse) Descriptor() ([]byte, []int) {
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ForceNoShowResponse) GetResult() *RescheduleResult {
 	if x != nil {
 		return x.Result
 	}
@@ -658,7 +752,7 @@ type PokeOccupantResponse struct {
 
 func (x *PokeOccupantResponse) Reset() {
 	*x = PokeOccupantResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[13]
+	mi := &file_qlab_v1_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -670,7 +764,7 @@ func (x *PokeOccupantResponse) String() string {
 func (*PokeOccupantResponse) ProtoMessage() {}
 
 func (x *PokeOccupantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[13]
+	mi := &file_qlab_v1_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -683,7 +777,7 @@ func (x *PokeOccupantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PokeOccupantResponse.ProtoReflect.Descriptor instead.
 func (*PokeOccupantResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{13}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{15}
 }
 
 var File_qlab_v1_service_proto protoreflect.FileDescriptor
@@ -710,6 +804,8 @@ const file_qlab_v1_service_proto_rawDesc = "" +
 	"\x13PokeOccupantRequest\x12 \n" +
 	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"8\n" +
 	"\x14ForceClockOutRequest\x12 \n" +
+	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"6\n" +
+	"\x12ForceNoShowRequest\x12 \n" +
 	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"G\n" +
 	"\x12CreateSlotResponse\x121\n" +
 	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"D\n" +
@@ -720,8 +816,10 @@ const file_qlab_v1_service_proto_rawDesc = "" +
 	"\x12CancelSlotResponse\x121\n" +
 	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"J\n" +
 	"\x15ForceClockOutResponse\x121\n" +
+	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"H\n" +
+	"\x13ForceNoShowResponse\x121\n" +
 	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"\x16\n" +
-	"\x14PokeOccupantResponse2\xfb\x03\n" +
+	"\x14PokeOccupantResponse2\xc5\x04\n" +
 	"\vQlabService\x12B\n" +
 	"\tListSlots\x12\x19.qlab.v1.ListSlotsRequest\x1a\x1a.qlab.v1.ListSlotsResponse\x12E\n" +
 	"\n" +
@@ -731,7 +829,8 @@ const file_qlab_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"CancelSlot\x12\x1a.qlab.v1.CancelSlotRequest\x1a\x1b.qlab.v1.CancelSlotResponse\x12K\n" +
 	"\fPokeOccupant\x12\x1c.qlab.v1.PokeOccupantRequest\x1a\x1d.qlab.v1.PokeOccupantResponse\x12N\n" +
-	"\rForceClockOut\x12\x1d.qlab.v1.ForceClockOutRequest\x1a\x1e.qlab.v1.ForceClockOutResponseB\x9b\x01\n" +
+	"\rForceClockOut\x12\x1d.qlab.v1.ForceClockOutRequest\x1a\x1e.qlab.v1.ForceClockOutResponse\x12H\n" +
+	"\vForceNoShow\x12\x1b.qlab.v1.ForceNoShowRequest\x1a\x1c.qlab.v1.ForceNoShowResponseB\x9b\x01\n" +
 	"\vcom.qlab.v1B\fServiceProtoP\x01ZAgithub.com/tallam99/qlab/backend/internal/protogen/qlab/v1;qlabv1\xa2\x02\x03QXX\xaa\x02\aQlab.V1\xca\x02\aQlab\\V1\xe2\x02\x13Qlab\\V1\\GPBMetadata\xea\x02\bQlab::V1b\x06proto3"
 
 var (
@@ -746,7 +845,7 @@ func file_qlab_v1_service_proto_rawDescGZIP() []byte {
 	return file_qlab_v1_service_proto_rawDescData
 }
 
-var file_qlab_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_qlab_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_qlab_v1_service_proto_goTypes = []any{
 	(*ListSlotsRequest)(nil),      // 0: qlab.v1.ListSlotsRequest
 	(*ListSlotsResponse)(nil),     // 1: qlab.v1.ListSlotsResponse
@@ -756,43 +855,48 @@ var file_qlab_v1_service_proto_goTypes = []any{
 	(*CancelSlotRequest)(nil),     // 5: qlab.v1.CancelSlotRequest
 	(*PokeOccupantRequest)(nil),   // 6: qlab.v1.PokeOccupantRequest
 	(*ForceClockOutRequest)(nil),  // 7: qlab.v1.ForceClockOutRequest
-	(*CreateSlotResponse)(nil),    // 8: qlab.v1.CreateSlotResponse
-	(*ClockInResponse)(nil),       // 9: qlab.v1.ClockInResponse
-	(*ClockOutResponse)(nil),      // 10: qlab.v1.ClockOutResponse
-	(*CancelSlotResponse)(nil),    // 11: qlab.v1.CancelSlotResponse
-	(*ForceClockOutResponse)(nil), // 12: qlab.v1.ForceClockOutResponse
-	(*PokeOccupantResponse)(nil),  // 13: qlab.v1.PokeOccupantResponse
-	(*Slot)(nil),                  // 14: qlab.v1.Slot
-	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
-	(*RescheduleResult)(nil),      // 16: qlab.v1.RescheduleResult
+	(*ForceNoShowRequest)(nil),    // 8: qlab.v1.ForceNoShowRequest
+	(*CreateSlotResponse)(nil),    // 9: qlab.v1.CreateSlotResponse
+	(*ClockInResponse)(nil),       // 10: qlab.v1.ClockInResponse
+	(*ClockOutResponse)(nil),      // 11: qlab.v1.ClockOutResponse
+	(*CancelSlotResponse)(nil),    // 12: qlab.v1.CancelSlotResponse
+	(*ForceClockOutResponse)(nil), // 13: qlab.v1.ForceClockOutResponse
+	(*ForceNoShowResponse)(nil),   // 14: qlab.v1.ForceNoShowResponse
+	(*PokeOccupantResponse)(nil),  // 15: qlab.v1.PokeOccupantResponse
+	(*Slot)(nil),                  // 16: qlab.v1.Slot
+	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(*RescheduleResult)(nil),      // 18: qlab.v1.RescheduleResult
 }
 var file_qlab_v1_service_proto_depIdxs = []int32{
-	14, // 0: qlab.v1.ListSlotsResponse.slots:type_name -> qlab.v1.Slot
-	15, // 1: qlab.v1.CreateSlotRequest.desired_start:type_name -> google.protobuf.Timestamp
-	16, // 2: qlab.v1.CreateSlotResponse.result:type_name -> qlab.v1.RescheduleResult
-	16, // 3: qlab.v1.ClockInResponse.result:type_name -> qlab.v1.RescheduleResult
-	16, // 4: qlab.v1.ClockOutResponse.result:type_name -> qlab.v1.RescheduleResult
-	16, // 5: qlab.v1.CancelSlotResponse.result:type_name -> qlab.v1.RescheduleResult
-	16, // 6: qlab.v1.ForceClockOutResponse.result:type_name -> qlab.v1.RescheduleResult
-	0,  // 7: qlab.v1.QlabService.ListSlots:input_type -> qlab.v1.ListSlotsRequest
-	2,  // 8: qlab.v1.QlabService.CreateSlot:input_type -> qlab.v1.CreateSlotRequest
-	3,  // 9: qlab.v1.QlabService.ClockIn:input_type -> qlab.v1.ClockInRequest
-	4,  // 10: qlab.v1.QlabService.ClockOut:input_type -> qlab.v1.ClockOutRequest
-	5,  // 11: qlab.v1.QlabService.CancelSlot:input_type -> qlab.v1.CancelSlotRequest
-	6,  // 12: qlab.v1.QlabService.PokeOccupant:input_type -> qlab.v1.PokeOccupantRequest
-	7,  // 13: qlab.v1.QlabService.ForceClockOut:input_type -> qlab.v1.ForceClockOutRequest
-	1,  // 14: qlab.v1.QlabService.ListSlots:output_type -> qlab.v1.ListSlotsResponse
-	8,  // 15: qlab.v1.QlabService.CreateSlot:output_type -> qlab.v1.CreateSlotResponse
-	9,  // 16: qlab.v1.QlabService.ClockIn:output_type -> qlab.v1.ClockInResponse
-	10, // 17: qlab.v1.QlabService.ClockOut:output_type -> qlab.v1.ClockOutResponse
-	11, // 18: qlab.v1.QlabService.CancelSlot:output_type -> qlab.v1.CancelSlotResponse
-	13, // 19: qlab.v1.QlabService.PokeOccupant:output_type -> qlab.v1.PokeOccupantResponse
-	12, // 20: qlab.v1.QlabService.ForceClockOut:output_type -> qlab.v1.ForceClockOutResponse
-	14, // [14:21] is the sub-list for method output_type
-	7,  // [7:14] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	16, // 0: qlab.v1.ListSlotsResponse.slots:type_name -> qlab.v1.Slot
+	17, // 1: qlab.v1.CreateSlotRequest.desired_start:type_name -> google.protobuf.Timestamp
+	18, // 2: qlab.v1.CreateSlotResponse.result:type_name -> qlab.v1.RescheduleResult
+	18, // 3: qlab.v1.ClockInResponse.result:type_name -> qlab.v1.RescheduleResult
+	18, // 4: qlab.v1.ClockOutResponse.result:type_name -> qlab.v1.RescheduleResult
+	18, // 5: qlab.v1.CancelSlotResponse.result:type_name -> qlab.v1.RescheduleResult
+	18, // 6: qlab.v1.ForceClockOutResponse.result:type_name -> qlab.v1.RescheduleResult
+	18, // 7: qlab.v1.ForceNoShowResponse.result:type_name -> qlab.v1.RescheduleResult
+	0,  // 8: qlab.v1.QlabService.ListSlots:input_type -> qlab.v1.ListSlotsRequest
+	2,  // 9: qlab.v1.QlabService.CreateSlot:input_type -> qlab.v1.CreateSlotRequest
+	3,  // 10: qlab.v1.QlabService.ClockIn:input_type -> qlab.v1.ClockInRequest
+	4,  // 11: qlab.v1.QlabService.ClockOut:input_type -> qlab.v1.ClockOutRequest
+	5,  // 12: qlab.v1.QlabService.CancelSlot:input_type -> qlab.v1.CancelSlotRequest
+	6,  // 13: qlab.v1.QlabService.PokeOccupant:input_type -> qlab.v1.PokeOccupantRequest
+	7,  // 14: qlab.v1.QlabService.ForceClockOut:input_type -> qlab.v1.ForceClockOutRequest
+	8,  // 15: qlab.v1.QlabService.ForceNoShow:input_type -> qlab.v1.ForceNoShowRequest
+	1,  // 16: qlab.v1.QlabService.ListSlots:output_type -> qlab.v1.ListSlotsResponse
+	9,  // 17: qlab.v1.QlabService.CreateSlot:output_type -> qlab.v1.CreateSlotResponse
+	10, // 18: qlab.v1.QlabService.ClockIn:output_type -> qlab.v1.ClockInResponse
+	11, // 19: qlab.v1.QlabService.ClockOut:output_type -> qlab.v1.ClockOutResponse
+	12, // 20: qlab.v1.QlabService.CancelSlot:output_type -> qlab.v1.CancelSlotResponse
+	15, // 21: qlab.v1.QlabService.PokeOccupant:output_type -> qlab.v1.PokeOccupantResponse
+	13, // 22: qlab.v1.QlabService.ForceClockOut:output_type -> qlab.v1.ForceClockOutResponse
+	14, // 23: qlab.v1.QlabService.ForceNoShow:output_type -> qlab.v1.ForceNoShowResponse
+	16, // [16:24] is the sub-list for method output_type
+	8,  // [8:16] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_qlab_v1_service_proto_init() }
@@ -807,7 +911,7 @@ func file_qlab_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_qlab_v1_service_proto_rawDesc), len(file_qlab_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

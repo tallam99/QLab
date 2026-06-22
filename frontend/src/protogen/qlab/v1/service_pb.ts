@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file qlab/v1/service.proto.
  */
 export const file_qlab_v1_service: GenFile = /*@__PURE__*/
-  fileDesc("ChVxbGFiL3YxL3NlcnZpY2UucHJvdG8SB3FsYWIudjEiNQoQTGlzdFNsb3RzUmVxdWVzdBIhChByZXNvdXJjZV9wb29sX2lkGAEgASgJQge6SARyAhABIjEKEUxpc3RTbG90c1Jlc3BvbnNlEhwKBXNsb3RzGAEgAygLMg0ucWxhYi52MS5TbG90Ir4BChFDcmVhdGVTbG90UmVxdWVzdBIhChByZXNvdXJjZV9wb29sX2lkGAEgASgJQge6SARyAhABEjEKDWRlc2lyZWRfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiIKEWxvb2thaGVhZF9taW51dGVzGAMgASgFQge6SAQaAigAEiEKEGR1cmF0aW9uX21pbnV0ZXMYBCABKAVCB7pIBBoCIAASDAoEbm90ZRgFIAEoCSIqCg5DbG9ja0luUmVxdWVzdBIYCgdzbG90X2lkGAEgASgJQge6SARyAhABIisKD0Nsb2NrT3V0UmVxdWVzdBIYCgdzbG90X2lkGAEgASgJQge6SARyAhABIi0KEUNhbmNlbFNsb3RSZXF1ZXN0EhgKB3Nsb3RfaWQYASABKAlCB7pIBHICEAEiLwoTUG9rZU9jY3VwYW50UmVxdWVzdBIYCgdzbG90X2lkGAEgASgJQge6SARyAhABIjAKFEZvcmNlQ2xvY2tPdXRSZXF1ZXN0EhgKB3Nsb3RfaWQYASABKAlCB7pIBHICEAEiPwoSQ3JlYXRlU2xvdFJlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCI8Cg9DbG9ja0luUmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0Ij0KEENsb2NrT3V0UmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0Ij8KEkNhbmNlbFNsb3RSZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQiQgoVRm9yY2VDbG9ja091dFJlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCIWChRQb2tlT2NjdXBhbnRSZXNwb25zZTL7AwoLUWxhYlNlcnZpY2USQgoJTGlzdFNsb3RzEhkucWxhYi52MS5MaXN0U2xvdHNSZXF1ZXN0GhoucWxhYi52MS5MaXN0U2xvdHNSZXNwb25zZRJFCgpDcmVhdGVTbG90EhoucWxhYi52MS5DcmVhdGVTbG90UmVxdWVzdBobLnFsYWIudjEuQ3JlYXRlU2xvdFJlc3BvbnNlEjwKB0Nsb2NrSW4SFy5xbGFiLnYxLkNsb2NrSW5SZXF1ZXN0GhgucWxhYi52MS5DbG9ja0luUmVzcG9uc2USPwoIQ2xvY2tPdXQSGC5xbGFiLnYxLkNsb2NrT3V0UmVxdWVzdBoZLnFsYWIudjEuQ2xvY2tPdXRSZXNwb25zZRJFCgpDYW5jZWxTbG90EhoucWxhYi52MS5DYW5jZWxTbG90UmVxdWVzdBobLnFsYWIudjEuQ2FuY2VsU2xvdFJlc3BvbnNlEksKDFBva2VPY2N1cGFudBIcLnFsYWIudjEuUG9rZU9jY3VwYW50UmVxdWVzdBodLnFsYWIudjEuUG9rZU9jY3VwYW50UmVzcG9uc2USTgoNRm9yY2VDbG9ja091dBIdLnFsYWIudjEuRm9yY2VDbG9ja091dFJlcXVlc3QaHi5xbGFiLnYxLkZvcmNlQ2xvY2tPdXRSZXNwb25zZUKbAQoLY29tLnFsYWIudjFCDFNlcnZpY2VQcm90b1ABWkFnaXRodWIuY29tL3RhbGxhbTk5L3FsYWIvYmFja2VuZC9pbnRlcm5hbC9wcm90b2dlbi9xbGFiL3YxO3FsYWJ2MaICA1FYWKoCB1FsYWIuVjHKAgdRbGFiXFYx4gITUWxhYlxWMVxHUEJNZXRhZGF0YeoCCFFsYWI6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_timestamp, file_qlab_v1_types]);
+  fileDesc("ChVxbGFiL3YxL3NlcnZpY2UucHJvdG8SB3FsYWIudjEiNQoQTGlzdFNsb3RzUmVxdWVzdBIhChByZXNvdXJjZV9wb29sX2lkGAEgASgJQge6SARyAhABIjEKEUxpc3RTbG90c1Jlc3BvbnNlEhwKBXNsb3RzGAEgAygLMg0ucWxhYi52MS5TbG90Ir4BChFDcmVhdGVTbG90UmVxdWVzdBIhChByZXNvdXJjZV9wb29sX2lkGAEgASgJQge6SARyAhABEjEKDWRlc2lyZWRfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiIKEWxvb2thaGVhZF9taW51dGVzGAMgASgFQge6SAQaAigAEiEKEGR1cmF0aW9uX21pbnV0ZXMYBCABKAVCB7pIBBoCIAASDAoEbm90ZRgFIAEoCSIqCg5DbG9ja0luUmVxdWVzdBIYCgdzbG90X2lkGAEgASgJQge6SARyAhABIisKD0Nsb2NrT3V0UmVxdWVzdBIYCgdzbG90X2lkGAEgASgJQge6SARyAhABIi0KEUNhbmNlbFNsb3RSZXF1ZXN0EhgKB3Nsb3RfaWQYASABKAlCB7pIBHICEAEiLwoTUG9rZU9jY3VwYW50UmVxdWVzdBIYCgdzbG90X2lkGAEgASgJQge6SARyAhABIjAKFEZvcmNlQ2xvY2tPdXRSZXF1ZXN0EhgKB3Nsb3RfaWQYASABKAlCB7pIBHICEAEiLgoSRm9yY2VOb1Nob3dSZXF1ZXN0EhgKB3Nsb3RfaWQYASABKAlCB7pIBHICEAEiPwoSQ3JlYXRlU2xvdFJlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCI8Cg9DbG9ja0luUmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0Ij0KEENsb2NrT3V0UmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0Ij8KEkNhbmNlbFNsb3RSZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQiQgoVRm9yY2VDbG9ja091dFJlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCJAChNGb3JjZU5vU2hvd1Jlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCIWChRQb2tlT2NjdXBhbnRSZXNwb25zZTLFBAoLUWxhYlNlcnZpY2USQgoJTGlzdFNsb3RzEhkucWxhYi52MS5MaXN0U2xvdHNSZXF1ZXN0GhoucWxhYi52MS5MaXN0U2xvdHNSZXNwb25zZRJFCgpDcmVhdGVTbG90EhoucWxhYi52MS5DcmVhdGVTbG90UmVxdWVzdBobLnFsYWIudjEuQ3JlYXRlU2xvdFJlc3BvbnNlEjwKB0Nsb2NrSW4SFy5xbGFiLnYxLkNsb2NrSW5SZXF1ZXN0GhgucWxhYi52MS5DbG9ja0luUmVzcG9uc2USPwoIQ2xvY2tPdXQSGC5xbGFiLnYxLkNsb2NrT3V0UmVxdWVzdBoZLnFsYWIudjEuQ2xvY2tPdXRSZXNwb25zZRJFCgpDYW5jZWxTbG90EhoucWxhYi52MS5DYW5jZWxTbG90UmVxdWVzdBobLnFsYWIudjEuQ2FuY2VsU2xvdFJlc3BvbnNlEksKDFBva2VPY2N1cGFudBIcLnFsYWIudjEuUG9rZU9jY3VwYW50UmVxdWVzdBodLnFsYWIudjEuUG9rZU9jY3VwYW50UmVzcG9uc2USTgoNRm9yY2VDbG9ja091dBIdLnFsYWIudjEuRm9yY2VDbG9ja091dFJlcXVlc3QaHi5xbGFiLnYxLkZvcmNlQ2xvY2tPdXRSZXNwb25zZRJICgtGb3JjZU5vU2hvdxIbLnFsYWIudjEuRm9yY2VOb1Nob3dSZXF1ZXN0GhwucWxhYi52MS5Gb3JjZU5vU2hvd1Jlc3BvbnNlQpsBCgtjb20ucWxhYi52MUIMU2VydmljZVByb3RvUAFaQWdpdGh1Yi5jb20vdGFsbGFtOTkvcWxhYi9iYWNrZW5kL2ludGVybmFsL3Byb3RvZ2VuL3FsYWIvdjE7cWxhYnYxogIDUVhYqgIHUWxhYi5WMcoCB1FsYWJcVjHiAhNRbGFiXFYxXEdQQk1ldGFkYXRh6gIIUWxhYjo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_timestamp, file_qlab_v1_types]);
 
 /**
  * @generated from message qlab.v1.ListSlotsRequest
@@ -196,6 +196,30 @@ export const ForceClockOutRequestSchema: GenMessage<ForceClockOutRequest> = /*@_
   messageDesc(file_qlab_v1_service, 7);
 
 /**
+ * ForceNoShow reclaims a slot whose clock-in grace lapsed (settles it NO_SHOW and
+ * frees its place), then reschedules. The sibling of ForceClockOut for the no-show
+ * case — but with NO prior poke, because the grace period was the implicit warning.
+ * Called by the next-in-line user; the engine never no-shows anyone automatically.
+ * Authorization (caller is next-in-line, target is SCHEDULED with grace lapsed) is
+ * enforced server-side.
+ *
+ * @generated from message qlab.v1.ForceNoShowRequest
+ */
+export type ForceNoShowRequest = Message<"qlab.v1.ForceNoShowRequest"> & {
+  /**
+   * @generated from field: string slot_id = 1;
+   */
+  slotId: string;
+};
+
+/**
+ * Describes the message qlab.v1.ForceNoShowRequest.
+ * Use `create(ForceNoShowRequestSchema)` to create a new message.
+ */
+export const ForceNoShowRequestSchema: GenMessage<ForceNoShowRequest> = /*@__PURE__*/
+  messageDesc(file_qlab_v1_service, 8);
+
+/**
  * Most mutating RPCs return the recomputed schedule. They carry the same
  * RescheduleResult but are distinct types (one response per RPC) so the contract
  * can evolve per method without a breaking change rippling across all of them.
@@ -214,7 +238,7 @@ export type CreateSlotResponse = Message<"qlab.v1.CreateSlotResponse"> & {
  * Use `create(CreateSlotResponseSchema)` to create a new message.
  */
 export const CreateSlotResponseSchema: GenMessage<CreateSlotResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 8);
+  messageDesc(file_qlab_v1_service, 9);
 
 /**
  * @generated from message qlab.v1.ClockInResponse
@@ -231,7 +255,7 @@ export type ClockInResponse = Message<"qlab.v1.ClockInResponse"> & {
  * Use `create(ClockInResponseSchema)` to create a new message.
  */
 export const ClockInResponseSchema: GenMessage<ClockInResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 9);
+  messageDesc(file_qlab_v1_service, 10);
 
 /**
  * @generated from message qlab.v1.ClockOutResponse
@@ -248,7 +272,7 @@ export type ClockOutResponse = Message<"qlab.v1.ClockOutResponse"> & {
  * Use `create(ClockOutResponseSchema)` to create a new message.
  */
 export const ClockOutResponseSchema: GenMessage<ClockOutResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 10);
+  messageDesc(file_qlab_v1_service, 11);
 
 /**
  * @generated from message qlab.v1.CancelSlotResponse
@@ -265,7 +289,7 @@ export type CancelSlotResponse = Message<"qlab.v1.CancelSlotResponse"> & {
  * Use `create(CancelSlotResponseSchema)` to create a new message.
  */
 export const CancelSlotResponseSchema: GenMessage<CancelSlotResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 11);
+  messageDesc(file_qlab_v1_service, 12);
 
 /**
  * @generated from message qlab.v1.ForceClockOutResponse
@@ -282,7 +306,24 @@ export type ForceClockOutResponse = Message<"qlab.v1.ForceClockOutResponse"> & {
  * Use `create(ForceClockOutResponseSchema)` to create a new message.
  */
 export const ForceClockOutResponseSchema: GenMessage<ForceClockOutResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 12);
+  messageDesc(file_qlab_v1_service, 13);
+
+/**
+ * @generated from message qlab.v1.ForceNoShowResponse
+ */
+export type ForceNoShowResponse = Message<"qlab.v1.ForceNoShowResponse"> & {
+  /**
+   * @generated from field: qlab.v1.RescheduleResult result = 1;
+   */
+  result?: RescheduleResult | undefined;
+};
+
+/**
+ * Describes the message qlab.v1.ForceNoShowResponse.
+ * Use `create(ForceNoShowResponseSchema)` to create a new message.
+ */
+export const ForceNoShowResponseSchema: GenMessage<ForceNoShowResponse> = /*@__PURE__*/
+  messageDesc(file_qlab_v1_service, 14);
 
 /**
  * PokeOccupant only sends a nudge, so it changes no schedule state and its response
@@ -298,15 +339,16 @@ export type PokeOccupantResponse = Message<"qlab.v1.PokeOccupantResponse"> & {
  * Use `create(PokeOccupantResponseSchema)` to create a new message.
  */
 export const PokeOccupantResponseSchema: GenMessage<PokeOccupantResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 13);
+  messageDesc(file_qlab_v1_service, 15);
 
 /**
  * QlabService is the data API. Every method requires a Firebase JWT (Phase 8) and
- * is scoped to the caller's lab. Two engine events have no RPC because the backend
- * drives them itself: the no-show sweep, and the schedule effect of an overrun
- * (an active slot's projected end sliding past its scheduled end as people behind
- * shift). Reclaiming an overrunning resource, by contrast, is user-driven —
- * PokeOccupant then ForceClockOut, both called by the next-in-line user.
+ * is scoped to the caller's lab. The backend never removes a slot on its own: the
+ * schedule effect of an overrun (an active slot's projected end sliding past its
+ * scheduled end as people behind shift) is observed internally with no RPC, but
+ * reclaiming a held resource is always user-driven by the next-in-line user —
+ * PokeOccupant then ForceClockOut for an overrun, or ForceNoShow when a slot's
+ * clock-in grace has lapsed (no poke there; the grace was the warning).
  *
  * @generated from service qlab.v1.QlabService
  */
@@ -366,6 +408,14 @@ export const QlabService: GenService<{
     methodKind: "unary";
     input: typeof ForceClockOutRequestSchema;
     output: typeof ForceClockOutResponseSchema;
+  },
+  /**
+   * @generated from rpc qlab.v1.QlabService.ForceNoShow
+   */
+  forceNoShow: {
+    methodKind: "unary";
+    input: typeof ForceNoShowRequestSchema;
+    output: typeof ForceNoShowResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_qlab_v1_service, 0);

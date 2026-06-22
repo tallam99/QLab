@@ -19,7 +19,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file qlab/v1/types.proto.
  */
 export const file_qlab_v1_types: GenFile = /*@__PURE__*/
-  fileDesc("ChNxbGFiL3YxL3R5cGVzLnByb3RvEgdxbGFiLnYxIh8KA0xhYhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIkgKBFVzZXISCgoCaWQYASABKAkSDQoFZW1haWwYAiABKAkSEgoKZmlyc3RfbmFtZRgDIAEoCRIRCglsYXN0X25hbWUYBCABKAkiTQoKTWVtYmVyc2hpcBIOCgZsYWJfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIeCgRyb2xlGAMgASgOMhAucWxhYi52MS5MYWJSb2xlIl0KDFJlc291cmNlUG9vbBIKCgJpZBgBIAEoCRIOCgZsYWJfaWQYAiABKAkSIwoEa2luZBgDIAEoDjIVLnFsYWIudjEuUmVzb3VyY2VLaW5kEgwKBG5hbWUYBCABKAkicwoIUmVzb3VyY2USCgoCaWQYASABKAkSGAoQcmVzb3VyY2VfcG9vbF9pZBgCIAEoCRIOCgZsYWJfaWQYAyABKAkSIwoEa2luZBgEIAEoDjIVLnFsYWIudjEuUmVzb3VyY2VLaW5kEgwKBG5hbWUYBSABKAkilgMKBFNsb3QSCgoCaWQYASABKAkSDgoGbGFiX2lkGAIgASgJEg8KB3VzZXJfaWQYAyABKAkSGAoQcmVzb3VyY2VfcG9vbF9pZBgEIAEoCRIcChRhc3NpZ25lZF9yZXNvdXJjZV9pZBgFIAEoCRIVCg1zbG90X3ByaW9yaXR5GAYgASgFEiMKBnN0YXR1cxgHIAEoDjITLnFsYWIudjEuU2xvdFN0YXR1cxIxCg1kZXNpcmVkX3N0YXJ0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIiChFsb29rYWhlYWRfbWludXRlcxgJIAEoBUIHukgEGgIoABIhChBkdXJhdGlvbl9taW51dGVzGAogASgFQge6SAQaAiAAEjMKD2NvbW1pdHRlZF9zdGFydBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMYWN0dWFsX3N0YXJ0GAwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRub3RlGA0gASgJIqcBCgxTbG90UG9zaXRpb24SDwoHc2xvdF9pZBgBIAEoCRIhCgdvdXRjb21lGAIgASgOMhAucWxhYi52MS5PdXRjb21lEjAKDGFjdHVhbF9zdGFydBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHAoUYXNzaWduZWRfcmVzb3VyY2VfaWQYBCABKAkSEwoLcmVjb21taXR0ZWQYBSABKAgidAoQUmVzY2hlZHVsZVJlc3VsdBIYChByZXNvdXJjZV9wb29sX2lkGAEgASgJEhwKBXNsb3RzGAIgAygLMg0ucWxhYi52MS5TbG90EigKCXBvc2l0aW9ucxgDIAMoCzIVLnFsYWIudjEuU2xvdFBvc2l0aW9uIrkBCgpRdWV1ZUV2ZW50Eg4KBmxhYl9pZBgBIAEoCRIYChByZXNvdXJjZV9wb29sX2lkGAIgASgJEiUKBHR5cGUYAyABKA4yFy5xbGFiLnYxLlF1ZXVlRXZlbnRUeXBlEi8KC29jY3VycmVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIpCgZyZXN1bHQYBSABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQqSwoHTGFiUm9sZRIYChRMQUJfUk9MRV9VTlNQRUNJRklFRBAAEhEKDUxBQl9ST0xFX0hFQUQQARITCg9MQUJfUk9MRV9NRU1CRVIQAipKCgxSZXNvdXJjZUtpbmQSHQoZUkVTT1VSQ0VfS0lORF9VTlNQRUNJRklFRBAAEhsKF1JFU09VUkNFX0tJTkRfVkVOVF9IT09EEAEqqgEKClNsb3RTdGF0dXMSGwoXU0xPVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIZChVTTE9UX1NUQVRVU19TQ0hFRFVMRUQQARIWChJTTE9UX1NUQVRVU19BQ1RJVkUQAhIYChRTTE9UX1NUQVRVU19DT01QTEVURRADEhkKFVNMT1RfU1RBVFVTX0NBTkNFTExFRBAEEhcKE1NMT1RfU1RBVFVTX05PX1NIT1cQBSpLCgdPdXRjb21lEhcKE09VVENPTUVfVU5TUEVDSUZJRUQQABISCg5PVVRDT01FX1BMQUNFRBABEhMKD09VVENPTUVfTk9fU0hPVxACKvQBCg5RdWV1ZUV2ZW50VHlwZRIgChxRVUVVRV9FVkVOVF9UWVBFX1VOU1BFQ0lGSUVEEAASIQodUVVFVUVfRVZFTlRfVFlQRV9TTE9UX0NSRUFURUQQARIfChtRVUVVRV9FVkVOVF9UWVBFX0NMT0NLRURfSU4QAhIgChxRVUVVRV9FVkVOVF9UWVBFX0NMT0NLRURfT1VUEAMSHgoaUVVFVUVfRVZFTlRfVFlQRV9DQU5DRUxMRUQQBBIcChhRVUVVRV9FVkVOVF9UWVBFX09WRVJSVU4QBRIcChhRVUVVRV9FVkVOVF9UWVBFX05PX1NIT1cQBkKZAQoLY29tLnFsYWIudjFCClR5cGVzUHJvdG9QAVpBZ2l0aHViLmNvbS90YWxsYW05OS9xbGFiL2JhY2tlbmQvaW50ZXJuYWwvcHJvdG9nZW4vcWxhYi92MTtxbGFidjGiAgNRWFiqAgdRbGFiLlYxygIHUWxhYlxWMeICE1FsYWJcVjFcR1BCTWV0YWRhdGHqAghRbGFiOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp]);
+  fileDesc("ChNxbGFiL3YxL3R5cGVzLnByb3RvEgdxbGFiLnYxIh8KA0xhYhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIkgKBFVzZXISCgoCaWQYASABKAkSDQoFZW1haWwYAiABKAkSEgoKZmlyc3RfbmFtZRgDIAEoCRIRCglsYXN0X25hbWUYBCABKAkiTQoKTWVtYmVyc2hpcBIOCgZsYWJfaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIeCgRyb2xlGAMgASgOMhAucWxhYi52MS5MYWJSb2xlIl0KDFJlc291cmNlUG9vbBIKCgJpZBgBIAEoCRIOCgZsYWJfaWQYAiABKAkSIwoEa2luZBgDIAEoDjIVLnFsYWIudjEuUmVzb3VyY2VLaW5kEgwKBG5hbWUYBCABKAkicwoIUmVzb3VyY2USCgoCaWQYASABKAkSGAoQcmVzb3VyY2VfcG9vbF9pZBgCIAEoCRIOCgZsYWJfaWQYAyABKAkSIwoEa2luZBgEIAEoDjIVLnFsYWIudjEuUmVzb3VyY2VLaW5kEgwKBG5hbWUYBSABKAkilgMKBFNsb3QSCgoCaWQYASABKAkSDgoGbGFiX2lkGAIgASgJEg8KB3VzZXJfaWQYAyABKAkSGAoQcmVzb3VyY2VfcG9vbF9pZBgEIAEoCRIcChRhc3NpZ25lZF9yZXNvdXJjZV9pZBgFIAEoCRIVCg1zbG90X3ByaW9yaXR5GAYgASgFEiMKBnN0YXR1cxgHIAEoDjITLnFsYWIudjEuU2xvdFN0YXR1cxIxCg1kZXNpcmVkX3N0YXJ0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIiChFsb29rYWhlYWRfbWludXRlcxgJIAEoBUIHukgEGgIoABIhChBkdXJhdGlvbl9taW51dGVzGAogASgFQge6SAQaAiAAEjMKD2NvbW1pdHRlZF9zdGFydBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMYWN0dWFsX3N0YXJ0GAwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRub3RlGA0gASgJIpkBCgxTbG90UG9zaXRpb24SDwoHc2xvdF9pZBgBIAEoCRIwCgxhY3R1YWxfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhwKFGFzc2lnbmVkX3Jlc291cmNlX2lkGAMgASgJEhMKC3JlY29tbWl0dGVkGAQgASgIEhMKC3JlY2xhaW1hYmxlGAUgASgIInQKEFJlc2NoZWR1bGVSZXN1bHQSGAoQcmVzb3VyY2VfcG9vbF9pZBgBIAEoCRIcCgVzbG90cxgCIAMoCzINLnFsYWIudjEuU2xvdBIoCglwb3NpdGlvbnMYAyADKAsyFS5xbGFiLnYxLlNsb3RQb3NpdGlvbiK5AQoKUXVldWVFdmVudBIOCgZsYWJfaWQYASABKAkSGAoQcmVzb3VyY2VfcG9vbF9pZBgCIAEoCRIlCgR0eXBlGAMgASgOMhcucWxhYi52MS5RdWV1ZUV2ZW50VHlwZRIvCgtvY2N1cnJlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKQoGcmVzdWx0GAUgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0KksKB0xhYlJvbGUSGAoUTEFCX1JPTEVfVU5TUEVDSUZJRUQQABIRCg1MQUJfUk9MRV9IRUFEEAESEwoPTEFCX1JPTEVfTUVNQkVSEAIqSgoMUmVzb3VyY2VLaW5kEh0KGVJFU09VUkNFX0tJTkRfVU5TUEVDSUZJRUQQABIbChdSRVNPVVJDRV9LSU5EX1ZFTlRfSE9PRBABKqoBCgpTbG90U3RhdHVzEhsKF1NMT1RfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGQoVU0xPVF9TVEFUVVNfU0NIRURVTEVEEAESFgoSU0xPVF9TVEFUVVNfQUNUSVZFEAISGAoUU0xPVF9TVEFUVVNfQ09NUExFVEUQAxIZChVTTE9UX1NUQVRVU19DQU5DRUxMRUQQBBIXChNTTE9UX1NUQVRVU19OT19TSE9XEAUq9AEKDlF1ZXVlRXZlbnRUeXBlEiAKHFFVRVVFX0VWRU5UX1RZUEVfVU5TUEVDSUZJRUQQABIhCh1RVUVVRV9FVkVOVF9UWVBFX1NMT1RfQ1JFQVRFRBABEh8KG1FVRVVFX0VWRU5UX1RZUEVfQ0xPQ0tFRF9JThACEiAKHFFVRVVFX0VWRU5UX1RZUEVfQ0xPQ0tFRF9PVVQQAxIeChpRVUVVRV9FVkVOVF9UWVBFX0NBTkNFTExFRBAEEhwKGFFVRVVFX0VWRU5UX1RZUEVfT1ZFUlJVThAFEhwKGFFVRVVFX0VWRU5UX1RZUEVfTk9fU0hPVxAGQpkBCgtjb20ucWxhYi52MUIKVHlwZXNQcm90b1ABWkFnaXRodWIuY29tL3RhbGxhbTk5L3FsYWIvYmFja2VuZC9pbnRlcm5hbC9wcm90b2dlbi9xbGFiL3YxO3FsYWJ2MaICA1FYWKoCB1FsYWIuVjHKAgdRbGFiXFYx4gITUWxhYlxWMVxHUEJNZXRhZGF0YeoCCFFsYWI6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_timestamp]);
 
 /**
  * Lab is one tenant.
@@ -282,8 +282,8 @@ export const SlotSchema: GenMessage<Slot> = /*@__PURE__*/
 
 /**
  * SlotPosition is the engine's decision for one slot in a reschedule (mirrors
- * dynamicqueue.SlotPosition). For OUTCOME_PLACED the placement fields are set; for
- * OUTCOME_NO_SHOW they are empty (the slot was freed, not placed).
+ * dynamicqueue.SlotPosition). Every SCHEDULED slot is placed — the schedule never
+ * fails (§8), so there is no "freed"/"no-show" outcome.
  *
  * @generated from message qlab.v1.SlotPosition
  */
@@ -294,27 +294,32 @@ export type SlotPosition = Message<"qlab.v1.SlotPosition"> & {
   slotId: string;
 
   /**
-   * @generated from field: qlab.v1.Outcome outcome = 2;
-   */
-  outcome: Outcome;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp actual_start = 3;
+   * @generated from field: google.protobuf.Timestamp actual_start = 2;
    */
   actualStart?: Timestamp | undefined;
 
   /**
-   * @generated from field: string assigned_resource_id = 4;
+   * @generated from field: string assigned_resource_id = 3;
    */
   assignedResourceId: string;
 
   /**
-   * True when the slot was placed and its start changed from the committed start —
-   * the signal to notify the user of the new start (earlier or later).
+   * True when the slot's start changed from the committed start — the signal to
+   * notify the user of the new start (earlier or later).
    *
-   * @generated from field: bool recommitted = 5;
+   * @generated from field: bool recommitted = 4;
    */
   recommitted: boolean;
+
+  /**
+   * True when the slot's clock-in grace has lapsed and it hasn't clocked in. The
+   * engine keeps it in place (it never auto-frees a no-show); this flags it so the
+   * next-in-line user may reclaim the resource via ForceNoShow. The terminal
+   * NO_SHOW status is set by that human action.
+   *
+   * @generated from field: bool reclaimable = 5;
+   */
+  reclaimable: boolean;
 };
 
 /**
@@ -512,41 +517,6 @@ export const SlotStatusSchema: GenEnum<SlotStatus> = /*@__PURE__*/
   enumDesc(file_qlab_v1_types, 2);
 
 /**
- * Outcome is the engine's verdict for one slot in a reschedule. There is no
- * "infeasible" outcome — the schedule never fails. Mirrors dynamicqueue.Outcome.
- *
- * @generated from enum qlab.v1.Outcome
- */
-export enum Outcome {
-  /**
-   * never valid
-   *
-   * @generated from enum value: OUTCOME_UNSPECIFIED = 0;
-   */
-  UNSPECIFIED = 0,
-
-  /**
-   * scheduled onto a resource at a start time
-   *
-   * @generated from enum value: OUTCOME_PLACED = 1;
-   */
-  PLACED = 1,
-
-  /**
-   * clock-in grace lapsed; freed
-   *
-   * @generated from enum value: OUTCOME_NO_SHOW = 2;
-   */
-  NO_SHOW = 2,
-}
-
-/**
- * Describes the enum qlab.v1.Outcome.
- */
-export const OutcomeSchema: GenEnum<Outcome> = /*@__PURE__*/
-  enumDesc(file_qlab_v1_types, 3);
-
-/**
  * QueueEventType identifies what triggered a queue change (the SSE envelope).
  *
  * @generated from enum qlab.v1.QueueEventType
@@ -594,5 +564,5 @@ export enum QueueEventType {
  * Describes the enum qlab.v1.QueueEventType.
  */
 export const QueueEventTypeSchema: GenEnum<QueueEventType> = /*@__PURE__*/
-  enumDesc(file_qlab_v1_types, 4);
+  enumDesc(file_qlab_v1_types, 3);
 

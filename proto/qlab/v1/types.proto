@@ -38,14 +38,6 @@ enum SlotStatus {
   SLOT_STATUS_NO_SHOW = 5; // clock-in grace lapsed; freed (engine output)
 }
 
-// Outcome is the engine's verdict for one slot in a reschedule. There is no
-// "infeasible" outcome — the schedule never fails. Mirrors dynamicqueue.Outcome.
-enum Outcome {
-  OUTCOME_UNSPECIFIED = 0; // never valid
-  OUTCOME_PLACED = 1; // scheduled onto a resource at a start time
-  OUTCOME_NO_SHOW = 2; // clock-in grace lapsed; freed
-}
-
 // Lab is one tenant.
 message Lab {
   string id = 1;
@@ -119,16 +111,20 @@ message Slot {
 }
 
 // SlotPosition is the engine's decision for one slot in a reschedule (mirrors
-// dynamicqueue.SlotPosition). For OUTCOME_PLACED the placement fields are set; for
-// OUTCOME_NO_SHOW they are empty (the slot was freed, not placed).
+// dynamicqueue.SlotPosition). Every SCHEDULED slot is placed — the schedule never
+// fails (§8), so there is no "freed"/"no-show" outcome.
 message SlotPosition {
   string slot_id = 1;
-  Outcome outcome = 2;
-  google.protobuf.Timestamp actual_start = 3;
-  string assigned_resource_id = 4;
-  // True when the slot was placed and its start changed from the committed start —
-  // the signal to notify the user of the new start (earlier or later).
-  bool recommitted = 5;
+  google.protobuf.Timestamp actual_start = 2;
+  string assigned_resource_id = 3;
+  // True when the slot's start changed from the committed start — the signal to
+  // notify the user of the new start (earlier or later).
+  bool recommitted = 4;
+  // True when the slot's clock-in grace has lapsed and it hasn't clocked in. The
+  // engine keeps it in place (it never auto-frees a no-show); this flags it so the
+  // next-in-line user may reclaim the resource via ForceNoShow. The terminal
+  // NO_SHOW status is set by that human action.
+  bool reclaimable = 5;
 }
 
 // RescheduleResult is a pool's schedule after an event: the current live slots

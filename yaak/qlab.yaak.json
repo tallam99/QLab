@@ -425,6 +425,38 @@
         },
         "bodyType": "application/json",
         "sortPriority": 8000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_forceNoShow",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "ForceNoShow",
+        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, reclaim a slot whose clock-in grace lapsed (settles it NO_SHOW, frees its place), then reschedule (pull-forward). Sibling of ForceClockOut for the no-show case, with no prior poke — the grace period was the warning. The engine never no-shows anyone automatically. Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/ForceNoShow",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 9000.0
       }
     ]
   }

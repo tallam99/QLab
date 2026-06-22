@@ -53,6 +53,8 @@ const (
 	// QlabServiceForceClockOutProcedure is the fully-qualified name of the QlabService's ForceClockOut
 	// RPC.
 	QlabServiceForceClockOutProcedure = "/qlab.v1.QlabService/ForceClockOut"
+	// QlabServiceForceNoShowProcedure is the fully-qualified name of the QlabService's ForceNoShow RPC.
+	QlabServiceForceNoShowProcedure = "/qlab.v1.QlabService/ForceNoShow"
 )
 
 // QlabServiceClient is a client for the qlab.v1.QlabService service.
@@ -64,6 +66,7 @@ type QlabServiceClient interface {
 	CancelSlot(context.Context, *connect.Request[v1.CancelSlotRequest]) (*connect.Response[v1.CancelSlotResponse], error)
 	PokeOccupant(context.Context, *connect.Request[v1.PokeOccupantRequest]) (*connect.Response[v1.PokeOccupantResponse], error)
 	ForceClockOut(context.Context, *connect.Request[v1.ForceClockOutRequest]) (*connect.Response[v1.ForceClockOutResponse], error)
+	ForceNoShow(context.Context, *connect.Request[v1.ForceNoShowRequest]) (*connect.Response[v1.ForceNoShowResponse], error)
 }
 
 // NewQlabServiceClient constructs a client for the qlab.v1.QlabService service. By default, it uses
@@ -119,6 +122,12 @@ func NewQlabServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(qlabServiceMethods.ByName("ForceClockOut")),
 			connect.WithClientOptions(opts...),
 		),
+		forceNoShow: connect.NewClient[v1.ForceNoShowRequest, v1.ForceNoShowResponse](
+			httpClient,
+			baseURL+QlabServiceForceNoShowProcedure,
+			connect.WithSchema(qlabServiceMethods.ByName("ForceNoShow")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -131,6 +140,7 @@ type qlabServiceClient struct {
 	cancelSlot    *connect.Client[v1.CancelSlotRequest, v1.CancelSlotResponse]
 	pokeOccupant  *connect.Client[v1.PokeOccupantRequest, v1.PokeOccupantResponse]
 	forceClockOut *connect.Client[v1.ForceClockOutRequest, v1.ForceClockOutResponse]
+	forceNoShow   *connect.Client[v1.ForceNoShowRequest, v1.ForceNoShowResponse]
 }
 
 // ListSlots calls qlab.v1.QlabService.ListSlots.
@@ -168,6 +178,11 @@ func (c *qlabServiceClient) ForceClockOut(ctx context.Context, req *connect.Requ
 	return c.forceClockOut.CallUnary(ctx, req)
 }
 
+// ForceNoShow calls qlab.v1.QlabService.ForceNoShow.
+func (c *qlabServiceClient) ForceNoShow(ctx context.Context, req *connect.Request[v1.ForceNoShowRequest]) (*connect.Response[v1.ForceNoShowResponse], error) {
+	return c.forceNoShow.CallUnary(ctx, req)
+}
+
 // QlabServiceHandler is an implementation of the qlab.v1.QlabService service.
 type QlabServiceHandler interface {
 	ListSlots(context.Context, *connect.Request[v1.ListSlotsRequest]) (*connect.Response[v1.ListSlotsResponse], error)
@@ -177,6 +192,7 @@ type QlabServiceHandler interface {
 	CancelSlot(context.Context, *connect.Request[v1.CancelSlotRequest]) (*connect.Response[v1.CancelSlotResponse], error)
 	PokeOccupant(context.Context, *connect.Request[v1.PokeOccupantRequest]) (*connect.Response[v1.PokeOccupantResponse], error)
 	ForceClockOut(context.Context, *connect.Request[v1.ForceClockOutRequest]) (*connect.Response[v1.ForceClockOutResponse], error)
+	ForceNoShow(context.Context, *connect.Request[v1.ForceNoShowRequest]) (*connect.Response[v1.ForceNoShowResponse], error)
 }
 
 // NewQlabServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -228,6 +244,12 @@ func NewQlabServiceHandler(svc QlabServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(qlabServiceMethods.ByName("ForceClockOut")),
 		connect.WithHandlerOptions(opts...),
 	)
+	qlabServiceForceNoShowHandler := connect.NewUnaryHandler(
+		QlabServiceForceNoShowProcedure,
+		svc.ForceNoShow,
+		connect.WithSchema(qlabServiceMethods.ByName("ForceNoShow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/qlab.v1.QlabService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QlabServiceListSlotsProcedure:
@@ -244,6 +266,8 @@ func NewQlabServiceHandler(svc QlabServiceHandler, opts ...connect.HandlerOption
 			qlabServicePokeOccupantHandler.ServeHTTP(w, r)
 		case QlabServiceForceClockOutProcedure:
 			qlabServiceForceClockOutHandler.ServeHTTP(w, r)
+		case QlabServiceForceNoShowProcedure:
+			qlabServiceForceNoShowHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -279,4 +303,8 @@ func (UnimplementedQlabServiceHandler) PokeOccupant(context.Context, *connect.Re
 
 func (UnimplementedQlabServiceHandler) ForceClockOut(context.Context, *connect.Request[v1.ForceClockOutRequest]) (*connect.Response[v1.ForceClockOutResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.ForceClockOut is not implemented"))
+}
+
+func (UnimplementedQlabServiceHandler) ForceNoShow(context.Context, *connect.Request[v1.ForceNoShowRequest]) (*connect.Response[v1.ForceNoShowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.ForceNoShow is not implemented"))
 }

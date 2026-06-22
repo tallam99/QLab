@@ -59,6 +59,16 @@ message ForceClockOutRequest {
   string slot_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
+// ForceNoShow reclaims a slot whose clock-in grace lapsed (settles it NO_SHOW and
+// frees its place), then reschedules. The sibling of ForceClockOut for the no-show
+// case — but with NO prior poke, because the grace period was the implicit warning.
+// Called by the next-in-line user; the engine never no-shows anyone automatically.
+// Authorization (caller is next-in-line, target is SCHEDULED with grace lapsed) is
+// enforced server-side.
+message ForceNoShowRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
 // Most mutating RPCs return the recomputed schedule. They carry the same
 // RescheduleResult but are distinct types (one response per RPC) so the contract
 // can evolve per method without a breaking change rippling across all of them.
@@ -82,16 +92,21 @@ message ForceClockOutResponse {
   RescheduleResult result = 1;
 }
 
+message ForceNoShowResponse {
+  RescheduleResult result = 1;
+}
+
 // PokeOccupant only sends a nudge, so it changes no schedule state and its response
 // is empty.
 message PokeOccupantResponse {}
 
 // QlabService is the data API. Every method requires a Firebase JWT (Phase 8) and
-// is scoped to the caller's lab. Two engine events have no RPC because the backend
-// drives them itself: the no-show sweep, and the schedule effect of an overrun
-// (an active slot's projected end sliding past its scheduled end as people behind
-// shift). Reclaiming an overrunning resource, by contrast, is user-driven —
-// PokeOccupant then ForceClockOut, both called by the next-in-line user.
+// is scoped to the caller's lab. The backend never removes a slot on its own: the
+// schedule effect of an overrun (an active slot's projected end sliding past its
+// scheduled end as people behind shift) is observed internally with no RPC, but
+// reclaiming a held resource is always user-driven by the next-in-line user —
+// PokeOccupant then ForceClockOut for an overrun, or ForceNoShow when a slot's
+// clock-in grace has lapsed (no poke there; the grace was the warning).
 service QlabService {
   rpc ListSlots(ListSlotsRequest) returns (ListSlotsResponse);
   rpc CreateSlot(CreateSlotRequest) returns (CreateSlotResponse);
@@ -100,4 +115,5 @@ service QlabService {
   rpc CancelSlot(CancelSlotRequest) returns (CancelSlotResponse);
   rpc PokeOccupant(PokeOccupantRequest) returns (PokeOccupantResponse);
   rpc ForceClockOut(ForceClockOutRequest) returns (ForceClockOutResponse);
+  rpc ForceNoShow(ForceNoShowRequest) returns (ForceNoShowResponse);
 }

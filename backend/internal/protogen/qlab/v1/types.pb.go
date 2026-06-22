@@ -190,57 +190,6 @@ func (SlotStatus) EnumDescriptor() ([]byte, []int) {
 	return file_qlab_v1_types_proto_rawDescGZIP(), []int{2}
 }
 
-// Outcome is the engine's verdict for one slot in a reschedule. There is no
-// "infeasible" outcome — the schedule never fails. Mirrors dynamicqueue.Outcome.
-type Outcome int32
-
-const (
-	Outcome_OUTCOME_UNSPECIFIED Outcome = 0 // never valid
-	Outcome_OUTCOME_PLACED      Outcome = 1 // scheduled onto a resource at a start time
-	Outcome_OUTCOME_NO_SHOW     Outcome = 2 // clock-in grace lapsed; freed
-)
-
-// Enum value maps for Outcome.
-var (
-	Outcome_name = map[int32]string{
-		0: "OUTCOME_UNSPECIFIED",
-		1: "OUTCOME_PLACED",
-		2: "OUTCOME_NO_SHOW",
-	}
-	Outcome_value = map[string]int32{
-		"OUTCOME_UNSPECIFIED": 0,
-		"OUTCOME_PLACED":      1,
-		"OUTCOME_NO_SHOW":     2,
-	}
-)
-
-func (x Outcome) Enum() *Outcome {
-	p := new(Outcome)
-	*p = x
-	return p
-}
-
-func (x Outcome) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Outcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_qlab_v1_types_proto_enumTypes[3].Descriptor()
-}
-
-func (Outcome) Type() protoreflect.EnumType {
-	return &file_qlab_v1_types_proto_enumTypes[3]
-}
-
-func (x Outcome) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Outcome.Descriptor instead.
-func (Outcome) EnumDescriptor() ([]byte, []int) {
-	return file_qlab_v1_types_proto_rawDescGZIP(), []int{3}
-}
-
 // QueueEventType identifies what triggered a queue change (the SSE envelope).
 type QueueEventType int32
 
@@ -287,11 +236,11 @@ func (x QueueEventType) String() string {
 }
 
 func (QueueEventType) Descriptor() protoreflect.EnumDescriptor {
-	return file_qlab_v1_types_proto_enumTypes[4].Descriptor()
+	return file_qlab_v1_types_proto_enumTypes[3].Descriptor()
 }
 
 func (QueueEventType) Type() protoreflect.EnumType {
-	return &file_qlab_v1_types_proto_enumTypes[4]
+	return &file_qlab_v1_types_proto_enumTypes[3]
 }
 
 func (x QueueEventType) Number() protoreflect.EnumNumber {
@@ -300,7 +249,7 @@ func (x QueueEventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use QueueEventType.Descriptor instead.
 func (QueueEventType) EnumDescriptor() ([]byte, []int) {
-	return file_qlab_v1_types_proto_rawDescGZIP(), []int{4}
+	return file_qlab_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
 // Lab is one tenant.
@@ -787,17 +736,21 @@ func (x *Slot) GetNote() string {
 }
 
 // SlotPosition is the engine's decision for one slot in a reschedule (mirrors
-// dynamicqueue.SlotPosition). For OUTCOME_PLACED the placement fields are set; for
-// OUTCOME_NO_SHOW they are empty (the slot was freed, not placed).
+// dynamicqueue.SlotPosition). Every SCHEDULED slot is placed — the schedule never
+// fails (§8), so there is no "freed"/"no-show" outcome.
 type SlotPosition struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	SlotId             string                 `protobuf:"bytes,1,opt,name=slot_id,json=slotId,proto3" json:"slot_id,omitempty"`
-	Outcome            Outcome                `protobuf:"varint,2,opt,name=outcome,proto3,enum=qlab.v1.Outcome" json:"outcome,omitempty"`
-	ActualStart        *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=actual_start,json=actualStart,proto3" json:"actual_start,omitempty"`
-	AssignedResourceId string                 `protobuf:"bytes,4,opt,name=assigned_resource_id,json=assignedResourceId,proto3" json:"assigned_resource_id,omitempty"`
-	// True when the slot was placed and its start changed from the committed start —
-	// the signal to notify the user of the new start (earlier or later).
-	Recommitted   bool `protobuf:"varint,5,opt,name=recommitted,proto3" json:"recommitted,omitempty"`
+	ActualStart        *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=actual_start,json=actualStart,proto3" json:"actual_start,omitempty"`
+	AssignedResourceId string                 `protobuf:"bytes,3,opt,name=assigned_resource_id,json=assignedResourceId,proto3" json:"assigned_resource_id,omitempty"`
+	// True when the slot's start changed from the committed start — the signal to
+	// notify the user of the new start (earlier or later).
+	Recommitted bool `protobuf:"varint,4,opt,name=recommitted,proto3" json:"recommitted,omitempty"`
+	// True when the slot's clock-in grace has lapsed and it hasn't clocked in. The
+	// engine keeps it in place (it never auto-frees a no-show); this flags it so the
+	// next-in-line user may reclaim the resource via ForceNoShow. The terminal
+	// NO_SHOW status is set by that human action.
+	Reclaimable   bool `protobuf:"varint,5,opt,name=reclaimable,proto3" json:"reclaimable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -839,13 +792,6 @@ func (x *SlotPosition) GetSlotId() string {
 	return ""
 }
 
-func (x *SlotPosition) GetOutcome() Outcome {
-	if x != nil {
-		return x.Outcome
-	}
-	return Outcome_OUTCOME_UNSPECIFIED
-}
-
 func (x *SlotPosition) GetActualStart() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ActualStart
@@ -863,6 +809,13 @@ func (x *SlotPosition) GetAssignedResourceId() string {
 func (x *SlotPosition) GetRecommitted() bool {
 	if x != nil {
 		return x.Recommitted
+	}
+	return false
+}
+
+func (x *SlotPosition) GetReclaimable() bool {
+	if x != nil {
+		return x.Reclaimable
 	}
 	return false
 }
@@ -1053,13 +1006,13 @@ const file_qlab_v1_types_proto_rawDesc = "" +
 	" \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\x0fdurationMinutes\x12C\n" +
 	"\x0fcommitted_start\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0ecommittedStart\x12=\n" +
 	"\factual_start\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vactualStart\x12\x12\n" +
-	"\x04note\x18\r \x01(\tR\x04note\"\xe6\x01\n" +
+	"\x04note\x18\r \x01(\tR\x04note\"\xdc\x01\n" +
 	"\fSlotPosition\x12\x17\n" +
-	"\aslot_id\x18\x01 \x01(\tR\x06slotId\x12*\n" +
-	"\aoutcome\x18\x02 \x01(\x0e2\x10.qlab.v1.OutcomeR\aoutcome\x12=\n" +
-	"\factual_start\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vactualStart\x120\n" +
-	"\x14assigned_resource_id\x18\x04 \x01(\tR\x12assignedResourceId\x12 \n" +
-	"\vrecommitted\x18\x05 \x01(\bR\vrecommitted\"\x96\x01\n" +
+	"\aslot_id\x18\x01 \x01(\tR\x06slotId\x12=\n" +
+	"\factual_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vactualStart\x120\n" +
+	"\x14assigned_resource_id\x18\x03 \x01(\tR\x12assignedResourceId\x12 \n" +
+	"\vrecommitted\x18\x04 \x01(\bR\vrecommitted\x12 \n" +
+	"\vreclaimable\x18\x05 \x01(\bR\vreclaimable\"\x96\x01\n" +
 	"\x10RescheduleResult\x12(\n" +
 	"\x10resource_pool_id\x18\x01 \x01(\tR\x0eresourcePoolId\x12#\n" +
 	"\x05slots\x18\x02 \x03(\v2\r.qlab.v1.SlotR\x05slots\x123\n" +
@@ -1086,11 +1039,7 @@ const file_qlab_v1_types_proto_rawDesc = "" +
 	"\x12SLOT_STATUS_ACTIVE\x10\x02\x12\x18\n" +
 	"\x14SLOT_STATUS_COMPLETE\x10\x03\x12\x19\n" +
 	"\x15SLOT_STATUS_CANCELLED\x10\x04\x12\x17\n" +
-	"\x13SLOT_STATUS_NO_SHOW\x10\x05*K\n" +
-	"\aOutcome\x12\x17\n" +
-	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x12\n" +
-	"\x0eOUTCOME_PLACED\x10\x01\x12\x13\n" +
-	"\x0fOUTCOME_NO_SHOW\x10\x02*\xf4\x01\n" +
+	"\x13SLOT_STATUS_NO_SHOW\x10\x05*\xf4\x01\n" +
 	"\x0eQueueEventType\x12 \n" +
 	"\x1cQUEUE_EVENT_TYPE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dQUEUE_EVENT_TYPE_SLOT_CREATED\x10\x01\x12\x1f\n" +
@@ -1114,45 +1063,43 @@ func file_qlab_v1_types_proto_rawDescGZIP() []byte {
 	return file_qlab_v1_types_proto_rawDescData
 }
 
-var file_qlab_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_qlab_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_qlab_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_qlab_v1_types_proto_goTypes = []any{
 	(LabRole)(0),                  // 0: qlab.v1.LabRole
 	(ResourceKind)(0),             // 1: qlab.v1.ResourceKind
 	(SlotStatus)(0),               // 2: qlab.v1.SlotStatus
-	(Outcome)(0),                  // 3: qlab.v1.Outcome
-	(QueueEventType)(0),           // 4: qlab.v1.QueueEventType
-	(*Lab)(nil),                   // 5: qlab.v1.Lab
-	(*User)(nil),                  // 6: qlab.v1.User
-	(*Membership)(nil),            // 7: qlab.v1.Membership
-	(*ResourcePool)(nil),          // 8: qlab.v1.ResourcePool
-	(*Resource)(nil),              // 9: qlab.v1.Resource
-	(*Slot)(nil),                  // 10: qlab.v1.Slot
-	(*SlotPosition)(nil),          // 11: qlab.v1.SlotPosition
-	(*RescheduleResult)(nil),      // 12: qlab.v1.RescheduleResult
-	(*QueueEvent)(nil),            // 13: qlab.v1.QueueEvent
-	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
+	(QueueEventType)(0),           // 3: qlab.v1.QueueEventType
+	(*Lab)(nil),                   // 4: qlab.v1.Lab
+	(*User)(nil),                  // 5: qlab.v1.User
+	(*Membership)(nil),            // 6: qlab.v1.Membership
+	(*ResourcePool)(nil),          // 7: qlab.v1.ResourcePool
+	(*Resource)(nil),              // 8: qlab.v1.Resource
+	(*Slot)(nil),                  // 9: qlab.v1.Slot
+	(*SlotPosition)(nil),          // 10: qlab.v1.SlotPosition
+	(*RescheduleResult)(nil),      // 11: qlab.v1.RescheduleResult
+	(*QueueEvent)(nil),            // 12: qlab.v1.QueueEvent
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_qlab_v1_types_proto_depIdxs = []int32{
 	0,  // 0: qlab.v1.Membership.role:type_name -> qlab.v1.LabRole
 	1,  // 1: qlab.v1.ResourcePool.kind:type_name -> qlab.v1.ResourceKind
 	1,  // 2: qlab.v1.Resource.kind:type_name -> qlab.v1.ResourceKind
 	2,  // 3: qlab.v1.Slot.status:type_name -> qlab.v1.SlotStatus
-	14, // 4: qlab.v1.Slot.desired_start:type_name -> google.protobuf.Timestamp
-	14, // 5: qlab.v1.Slot.committed_start:type_name -> google.protobuf.Timestamp
-	14, // 6: qlab.v1.Slot.actual_start:type_name -> google.protobuf.Timestamp
-	3,  // 7: qlab.v1.SlotPosition.outcome:type_name -> qlab.v1.Outcome
-	14, // 8: qlab.v1.SlotPosition.actual_start:type_name -> google.protobuf.Timestamp
-	10, // 9: qlab.v1.RescheduleResult.slots:type_name -> qlab.v1.Slot
-	11, // 10: qlab.v1.RescheduleResult.positions:type_name -> qlab.v1.SlotPosition
-	4,  // 11: qlab.v1.QueueEvent.type:type_name -> qlab.v1.QueueEventType
-	14, // 12: qlab.v1.QueueEvent.occurred_at:type_name -> google.protobuf.Timestamp
-	12, // 13: qlab.v1.QueueEvent.result:type_name -> qlab.v1.RescheduleResult
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	13, // 4: qlab.v1.Slot.desired_start:type_name -> google.protobuf.Timestamp
+	13, // 5: qlab.v1.Slot.committed_start:type_name -> google.protobuf.Timestamp
+	13, // 6: qlab.v1.Slot.actual_start:type_name -> google.protobuf.Timestamp
+	13, // 7: qlab.v1.SlotPosition.actual_start:type_name -> google.protobuf.Timestamp
+	9,  // 8: qlab.v1.RescheduleResult.slots:type_name -> qlab.v1.Slot
+	10, // 9: qlab.v1.RescheduleResult.positions:type_name -> qlab.v1.SlotPosition
+	3,  // 10: qlab.v1.QueueEvent.type:type_name -> qlab.v1.QueueEventType
+	13, // 11: qlab.v1.QueueEvent.occurred_at:type_name -> google.protobuf.Timestamp
+	11, // 12: qlab.v1.QueueEvent.result:type_name -> qlab.v1.RescheduleResult
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_qlab_v1_types_proto_init() }
@@ -1165,7 +1112,7 @@ func file_qlab_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_qlab_v1_types_proto_rawDesc), len(file_qlab_v1_types_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      4,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
