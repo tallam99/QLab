@@ -24,7 +24,10 @@ const (
 	envExampleFile  = ".env.example.json"
 	migrationsDir   = "backend/migrations"
 	seedFile        = "backend/seed/seed.sql"
-	bufConfigFile   = "proto/buf.gen.yaml"
+	// protoDir is the buf module root; buf runs from here so buf.gen.yaml's
+	// relative output paths and the npm-pinned TS plugin resolve.
+	protoDir      = "proto"
+	bufConfigFile = "proto/buf.gen.yaml"
 	// schemaTestDir holds the DB-level schema tests (constraints/triggers/seed),
 	// tagged `database`; schemaTestDB is the throwaway database mage testSchema
 	// creates, migrates, and drops so the tests never touch dev data.
@@ -115,6 +118,16 @@ func run(name string, args ...string) error {
 func runWithEnv(env []string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
+// runIn is run with the working directory set to dir.
+func runIn(dir, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -365,12 +378,16 @@ func ClearMocks() error {
 	})
 }
 
-// GenProto regenerates Go + TS from the .proto contract via buf. The contract and
-// buf config land in Phase 6; until then this reports there's nothing to do.
+// GenProto regenerates Go + TS from the .proto contract via buf, run from the
+// proto/ module dir so buf.gen.yaml's relative output paths and the npm-pinned TS
+// plugin resolve. The Go plugins are the module's pinned `go tool` binaries.
 func GenProto() error {
 	if _, err := os.Stat(bufConfigFile); err != nil {
-		fmt.Printf("genproto: no buf config yet (%s lands in Phase 6)\n", bufConfigFile)
+		fmt.Printf("genproto: no buf config (%s) found\n", bufConfigFile)
 		return nil
 	}
-	return run("buf", "generate")
+	// --include-imports vendors the protovalidate dependency's types into our gen
+	// dirs (so both Go and TS are self-contained) while the well-known types stay
+	// external (no --include-wkt) — Go uses timestamppb, TS uses @bufbuild/protobuf.
+	return runIn(protoDir, "buf", "generate", "--include-imports")
 }

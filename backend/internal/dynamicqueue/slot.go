@@ -20,8 +20,8 @@ type SlotPriority int32
 
 // SlotStatus is the live lifecycle state the engine accepts. The zero value,
 // SlotStatusUnknown, is never valid. The engine sees only these two states:
-// COMPLETE/CANCELLED history is filtered out before the call, and NO_SHOW is an
-// output Outcome (queue.go), not an input status (§1.2, §10).
+// COMPLETE/CANCELLED/NO_SHOW history is filtered out before the call. NO_SHOW is a
+// terminal status a human reclaim records (§2.3), never an input here (§1.2, §10).
 type SlotStatus int
 
 const (

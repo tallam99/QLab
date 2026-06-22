@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _StepKindName = "UNKNOWNSEED_RESOURCENO_SHOWPLACEGAP_FILLRECOMMIT"
+const _StepKindName = "UNKNOWNSEED_RESOURCERECLAIMABLEPLACEGAP_FILLRECOMMIT"
 
-var _StepKindIndex = [...]uint8{0, 7, 20, 27, 32, 40, 48}
+var _StepKindIndex = [...]uint8{0, 7, 20, 31, 36, 44, 52}
 
-const _StepKindLowerName = "unknownseed_resourceno_showplacegap_fillrecommit"
+const _StepKindLowerName = "unknownseed_resourcereclaimableplacegap_fillrecommit"
 
 func (i StepKind) String() string {
 	if i < 0 || i >= StepKind(len(_StepKindIndex)-1) {
@@ -26,36 +26,36 @@ func _StepKindNoOp() {
 	var x [1]struct{}
 	_ = x[StepKindUnknown-(0)]
 	_ = x[StepKindSeedResource-(1)]
-	_ = x[StepKindNoShow-(2)]
+	_ = x[StepKindReclaimable-(2)]
 	_ = x[StepKindPlace-(3)]
 	_ = x[StepKindGapFill-(4)]
 	_ = x[StepKindRecommit-(5)]
 }
 
-var _StepKindValues = []StepKind{StepKindUnknown, StepKindSeedResource, StepKindNoShow, StepKindPlace, StepKindGapFill, StepKindRecommit}
+var _StepKindValues = []StepKind{StepKindUnknown, StepKindSeedResource, StepKindReclaimable, StepKindPlace, StepKindGapFill, StepKindRecommit}
 
 var _StepKindNameToValueMap = map[string]StepKind{
 	_StepKindName[0:7]:        StepKindUnknown,
 	_StepKindLowerName[0:7]:   StepKindUnknown,
 	_StepKindName[7:20]:       StepKindSeedResource,
 	_StepKindLowerName[7:20]:  StepKindSeedResource,
-	_StepKindName[20:27]:      StepKindNoShow,
-	_StepKindLowerName[20:27]: StepKindNoShow,
-	_StepKindName[27:32]:      StepKindPlace,
-	_StepKindLowerName[27:32]: StepKindPlace,
-	_StepKindName[32:40]:      StepKindGapFill,
-	_StepKindLowerName[32:40]: StepKindGapFill,
-	_StepKindName[40:48]:      StepKindRecommit,
-	_StepKindLowerName[40:48]: StepKindRecommit,
+	_StepKindName[20:31]:      StepKindReclaimable,
+	_StepKindLowerName[20:31]: StepKindReclaimable,
+	_StepKindName[31:36]:      StepKindPlace,
+	_StepKindLowerName[31:36]: StepKindPlace,
+	_StepKindName[36:44]:      StepKindGapFill,
+	_StepKindLowerName[36:44]: StepKindGapFill,
+	_StepKindName[44:52]:      StepKindRecommit,
+	_StepKindLowerName[44:52]: StepKindRecommit,
 }
 
 var _StepKindNames = []string{
 	_StepKindName[0:7],
 	_StepKindName[7:20],
-	_StepKindName[20:27],
-	_StepKindName[27:32],
-	_StepKindName[32:40],
-	_StepKindName[40:48],
+	_StepKindName[20:31],
+	_StepKindName[31:36],
+	_StepKindName[36:44],
+	_StepKindName[44:52],
 }
 
 // StepKindString retrieves an enum value from the enum constants string name.

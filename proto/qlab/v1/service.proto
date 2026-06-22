@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+// Package qlab.v1 — the service surface. Each mutating RPC is one engine event
+// (docs/ALGORITHM.md §6): it mutates state, then runs the single reschedule, then
+// returns the recomputed schedule. Implemented in Phase 7; stubbed Unimplemented
+// for now.
+package qlab.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "qlab/v1/types.proto";
+
+message ListSlotsRequest {
+  string resource_pool_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListSlotsResponse {
+  repeated Slot slots = 1;
+}
+
+// CreateSlot books a slot. user_id comes from the authenticated caller (Phase 8)
+// and slot_priority is assigned by the service, so neither is on the request.
+message CreateSlotRequest {
+  string resource_pool_id = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Timestamp desired_start = 2;
+  int32 lookahead_minutes = 3 [(buf.validate.field).int32.gte = 0];
+  int32 duration_minutes = 4 [(buf.validate.field).int32.gt = 0];
+  string note = 5;
+}
+
+message ClockInRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ClockOut covers clock-out and early-finish (both settle the slot COMPLETE and
+// free its resource).
+message ClockOutRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message CancelSlotRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// PokeOccupant nudges the user holding an overrunning slot to wrap up (the backend
+// notifies them). It is the courtesy first step of a resource reclaim, called by
+// the next-in-line user — not the backend, which never pokes proactively. It
+// changes no schedule state.
+message PokeOccupantRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ForceClockOut boots the user holding an overrunning slot (settles it COMPLETE and
+// frees its resource), then reschedules. Called by the next-in-line user as the
+// escalation when a poke goes unheeded; the wait and the decision to escalate are
+// the users', not the backend's. Authorization (caller is next-in-line for that
+// resource, occupant is past their scheduled end) is enforced server-side.
+message ForceClockOutRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ForceNoShow reclaims a slot whose clock-in grace lapsed (settles it NO_SHOW and
+// frees its place), then reschedules. The sibling of ForceClockOut for the no-show
+// case — but with NO prior poke, because the grace period was the implicit warning.
+// Called by the next-in-line user; the engine never no-shows anyone automatically.
+// Authorization (caller is next-in-line, target is SCHEDULED with grace lapsed) is
+// enforced server-side.
+message ForceNoShowRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// Most mutating RPCs return the recomputed schedule. They carry the same
+// RescheduleResult but are distinct types (one response per RPC) so the contract
+// can evolve per method without a breaking change rippling across all of them.
+message CreateSlotResponse {
+  RescheduleResult result = 1;
+}
+
+message ClockInResponse {
+  RescheduleResult result = 1;
+}
+
+message ClockOutResponse {
+  RescheduleResult result = 1;
+}
+
+message CancelSlotResponse {
+  RescheduleResult result = 1;
+}
+
+message ForceClockOutResponse {
+  RescheduleResult result = 1;
+}
+
+message ForceNoShowResponse {
+  RescheduleResult result = 1;
+}
+
+// PokeOccupant only sends a nudge, so it changes no schedule state and its response
+// is empty.
+message PokeOccupantResponse {}
+
+// QlabService is the data API. Every method requires a Firebase JWT (Phase 8) and
+// is scoped to the caller's lab. The backend never removes a slot on its own: the
+// schedule effect of an overrun (an active slot's projected end sliding past its
+// scheduled end as people behind shift) is observed internally with no RPC, but
+// reclaiming a held resource is always user-driven by the next-in-line user —
+// PokeOccupant then ForceClockOut for an overrun, or ForceNoShow when a slot's
+// clock-in grace has lapsed (no poke there; the grace was the warning).
+service QlabService {
+  rpc ListSlots(ListSlotsRequest) returns (ListSlotsResponse);
+  rpc CreateSlot(CreateSlotRequest) returns (CreateSlotResponse);
+  rpc ClockIn(ClockInRequest) returns (ClockInResponse);
+  rpc ClockOut(ClockOutRequest) returns (ClockOutResponse);
+  rpc CancelSlot(CancelSlotRequest) returns (CancelSlotResponse);
+  rpc PokeOccupant(PokeOccupantRequest) returns (PokeOccupantResponse);
+  rpc ForceClockOut(ForceClockOutRequest) returns (ForceClockOutResponse);
+  rpc ForceNoShow(ForceNoShowRequest) returns (ForceNoShowResponse);
+}

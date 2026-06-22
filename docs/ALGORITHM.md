@@ -64,21 +64,24 @@ at or after that floor (§5).
 
 ### 1.2 Status semantics
 
-The engine's world is just two live states, plus one outcome it emits:
+The engine's world is just two live states:
 
 - **`SCHEDULED`** — a future booking the engine may place anywhere at or after its
-  earliest allowed start.
+  earliest allowed start. If its clock-in grace has lapsed (§2.3) the engine flags
+  its placement **reclaimable** but still places it — it does not free a no-show.
 - **`ACTIVE`** — someone has clocked in; running *now* on a specific resource.
   **Pinned**: the engine never moves or interrupts it. Its projected end seeds the
   reschedule.
-- **`NO_SHOW`** — an **output**: the engine marks a `SCHEDULED` slot whose clock-in
-  grace has lapsed (§2.3). It frees the slot's place (triggering re-flow) and is
-  recorded distinctly for analytics. The user must rebook.
 
-**`COMPLETE` / `CANCELLED`** are settled history owned by the service lifecycle.
-The engine **never sees them** — the caller filters history out before the call,
-so the engine always reasons about the current state of the world, not its past
-(§10).
+**`NO_SHOW`** is a terminal status, **not** an engine output: when a `SCHEDULED`
+slot's grace lapses the engine keeps it in place and flags it reclaimable; the
+**next-in-line user** then reclaims the resource (a `ForceNoShow` event), which is
+what records the slot `NO_SHOW` and re-flows the queue (§2.3). The user must rebook.
+
+**`COMPLETE` / `CANCELLED`** (and `NO_SHOW`, once recorded) are settled history
+owned by the service lifecycle. The engine **never sees them** — the caller filters
+history out before the call, so the engine always reasons about the current state of
+the world, not its past (§10).
 
 ### 1.3 Priority order vs. execution order — reordering is allowed
 
@@ -186,11 +189,20 @@ The deal with users, which the engine relies on:
   grace period is **injected by the service from configuration** — the engine reads
   it as a parameter, never a hardcoded constant (§10). If a `SCHEDULED` slot's
   `committedStart + CLOCK_IN_GRACE` is before `now` and it hasn't clocked in, the
-  **engine itself** marks it `NO_SHOW`, frees its place, and the others flow forward.
-  The user rebooks.
+  engine **flags its placement `reclaimable`** but **keeps it in place** — it does
+  not free it. Removal is a deliberate human act: the **next-in-line user** may
+  reclaim the resource (`ForceNoShow`), which records the slot `NO_SHOW` and re-flows
+  the queue. No prior poke is needed — the grace period was the implicit warning.
 
 This is the ethos: **flexible usage tracking, not rigid reservation.** The system
 optimizes for resources being used; it does not police who deserves what.
+
+> **Why not auto-free a no-show?** A user who forgot to clock in may still be
+> physically using the resource; auto-freeing would tell the next person it's
+> available when it isn't, desyncing the schedule from reality. Deferring removal to
+> a human who can *see* the resource keeps the two honest, at the cost of one manual
+> action — which only matters when someone is actually waiting, and that someone is
+> exactly the next-in-line user who is empowered to reclaim.
 
 ### 2.4 `lookahead == 0` means **no earliness**, not **anchored**
 
@@ -255,16 +267,13 @@ current world state, recompute the placement of all `SCHEDULED` slots. It runs a
 every event (§6); the difference between "a delay cascaded" and "a gap pulled people
 forward" is just which inputs changed.
 
-It is a **greedy, priority-ordered, multi-resource list scheduler with gap-fill**,
-preceded by a no-show sweep.
+It is a **greedy, priority-ordered, multi-resource list scheduler with gap-fill**.
 
 ```
 function reschedule(slots, resources, now, grace):
-    # 1. No-show sweep: free slots whose grace has lapsed, before placing anyone.
-    for slot in slots.filter(SCHEDULED):
-        if slot.committedStart != null and now > slot.committedStart + grace:
-            outcome[slot] = NO_SHOW            # freed; not placed
-    open = slots.filter(SCHEDULED and outcome != NO_SHOW)
+    # 1. Open slots are ALL scheduled slots. A no-show is NOT swept out — it keeps
+    #    its place and is flagged reclaimable below (§2.3).
+    open = slots.filter(SCHEDULED)
 
     # 2. Seed resource availability from pinned ACTIVE occupancy and now.
     #    free[r] = ordered free intervals [from, to) per resource r, with ACTIVE
@@ -281,15 +290,16 @@ function reschedule(slots, resources, now, grace):
                  of  t = max(interval.from, earliest)
                  subject to  t + slot.duration <= interval.to
                  tie-break: smaller t, then resource id
-        outcome[slot]         = PLACED
         slot.actualStart      = best.t
         slot.assignedResource = best.r
         carve [best.t, best.t + slot.duration) out of free[best.r]
 
-        # 4. Re-commit bookkeeping (§2.2):
+        # 4. Flags (§2.2, §2.3):
         if slot.committedStart == null or slot.actualStart != slot.committedStart:
             mark slot RE-COMMITTED (notify: new start)
-    return outcomes      # PLACED (with start + resource + re-commit flag) or NO_SHOW
+        if slot.committedStart != null and now > slot.committedStart + grace:
+            mark slot RECLAIMABLE (grace lapsed; next-in-line may ForceNoShow)
+    return positions    # every slot PLACED, with start + resource + re-commit + reclaimable
 ```
 
 ### 5.1 Why this satisfies the principles
@@ -303,7 +313,7 @@ function reschedule(slots, resources, now, grace):
   (invariant #4) and the availability contract (§2.3): nobody is pulled before their
   granted earliness, and nobody starts in the past.
 - Running it after *every* event ⇒ both "push back on overrun" and "pull forward on
-  early-finish/cancel/no-show" without two code paths.
+  early-finish / cancel / reclaim" without two code paths.
 
 ### 5.2 Cost note
 
@@ -324,12 +334,13 @@ Each event mutates state, then calls `reschedule`:
 | **Overrun** (active past its scheduled end) | active slot's projected end moves later | people behind on that resource shift; some may hop resources |
 | **Clock out / early finish** | `ACTIVE → COMPLETE`; resource frees (possibly early) | people pull forward to fill the freed time, down to their earliness floor |
 | **Cancel** | `SCHEDULED/ACTIVE → CANCELLED`; place frees | pull-forward to fill |
-| **No-show** | *engine-detected* in the sweep (§5 step 1): grace lapsed → `NO_SHOW` | pull-forward to fill (note 5/6) |
+| **Force-no-show** (next-in-line reclaims a grace-lapsed slot) | `SCHEDULED → NO_SHOW`; place frees | pull-forward to fill (note 5/6) |
 
-> **No-show needs a trigger:** because the engine only acts when called, *something*
-> must reschedule for a lapse to be noticed — a lightweight periodic check, or
-> evaluating it lazily on the next event/read. Pick one in the service layer; the
-> engine just needs `now` and `grace` to do the sweep (§10).
+> **No-show is user-triggered, not swept:** the engine never frees a no-show on its
+> own. While a slot's grace is lapsed the engine just **flags it `reclaimable`** on
+> each reschedule (it needs `now` and `grace` to do so); the next-in-line user
+> decides whether to actually remove it via `ForceNoShow`. So "noticing" a lapse is
+> not a backend job — the reclaimable flag surfaces it, and a human acts (§2.3, §10).
 >
 > **Overrun detection (⚠️ REVIEW):** recompute on a *live projection* (continuously,
 > as an active slot crosses its scheduled end, so downstream ETAs stay honest) vs.
@@ -408,7 +419,7 @@ Resource1.  A  ACTIVE 09:00 dur 60  → finishes ON TIME at 10:00
 - Contrast: with `lookahead 0`, B's floor would be 10:30, so it would sit at 10:30
   and leave Resource1 idle 10:00–10:30.
 
-### 7.5 No-show grace re-flows the queue (notes 5, 6)
+### 7.5 No-show grace flags a slot reclaimable; a human reclaims (notes 5, 6)
 
 ```
 Resource1.  B  committed 10:00 dur 60   — but B never clocks in
@@ -416,9 +427,13 @@ Resource1.  B  committed 10:00 dur 60   — but B never clocks in
 grace = 15 (injected from config)
 ```
 - At a reschedule with `now ≥ 10:15`, B's `committedStart 10:00 + grace 15 = 10:15`
-  is past → the engine marks B **`NO_SHOW`**; its place frees. **C** floor 10:30 →
-  pulled forward to **10:30** to fill. B's owner must rebook. No flag, no human
-  escalation required.
+  is past. The engine does **not** free B — B may have started without clocking in.
+  It keeps B in place (B holds Resource1 from `now`) and flags B **reclaimable**.
+  **C** stays behind B; it is **not** pulled forward.
+- If the next-in-line user (C's owner) sees the hood is actually free, they
+  **`ForceNoShow` B** — which records B `NO_SHOW`, frees its place, and reschedules:
+  **C** floor 10:30 → pulled forward to **10:30** to fill. B's owner must rebook.
+  The removal is the human's call; the grace lapse was its only warning.
 
 ---
 
@@ -433,7 +448,8 @@ a valid placement by pushing slots later as needed. There are no `OVERFLOW` /
 If cascading pushes someone's start to, say, midnight, the engine still schedules
 it. Resolution is entirely human/contractual:
 - the user **cancels** (frees the place → reschedule), or
-- the user **doesn't clock in** within grace → **`NO_SHOW`** (the engine frees the
+- the user **doesn't clock in** within grace → the slot is flagged **reclaimable**,
+  and the **next-in-line user** reclaims it (`ForceNoShow` → `NO_SHOW`, frees the
   place → reschedule).
 
 Either way the queue re-flows and resource usage stays maximized. It is the user's
@@ -472,7 +488,7 @@ others back. It is *priority*, not a wall-clock anchor:
 | Gap-fill promotes a lower-priority slot | Allowed iff it doesn't delay anyone ahead (guaranteed by priority-order processing). |
 | Promotion undone when a gap shrinks | Next reschedule re-places it behind (§7.3). |
 | Active slot overruns repeatedly | Each event reschedules from current state; durations never shrink. |
-| No-show | Engine detects via `committedStart + grace < now`, marks `NO_SHOW`, frees the place, reschedules (§7.5). |
+| No-show | Engine flags the slot `reclaimable` via `committedStart + grace < now` but keeps its place; the next-in-line user reclaims it (`ForceNoShow` → `NO_SHOW`, frees the place, reschedules) (§7.5). |
 | Cancel the active slot | `CANCELLED` upstream; resource frees from `now`, reschedule. |
 | Multi-resource, uneven durations | Backfill `argmin` handles it; assert per-resource no-overlap. |
 
@@ -486,12 +502,14 @@ others back. It is *priority*, not a wall-clock anchor:
   parameter wired from the service's environment, never a constant in the engine).
   Cascade and pull-forward are *the same call*.
 - **The engine sees only the live world.** The caller passes `SCHEDULED` and
-  `ACTIVE` slots; it filters `COMPLETE`/`CANCELLED` history out first. The engine
-  emits `NO_SHOW` itself (§2.3, §5).
-- **Output is per-slot outcomes**, not mutated input: each open slot resolves to
-  `PLACED` (with `actualStart`, `assignedResource`, and a re-commit flag) or
-  `NO_SHOW`. The caller applies these back to persisted rows and emits notifications
-  for re-committed and no-showed slots.
+  `ACTIVE` slots; it filters `COMPLETE`/`CANCELLED`/`NO_SHOW` history out first. The
+  engine never frees a no-show — it flags it `reclaimable` (§2.3, §5).
+- **Output is per-slot placements**, not mutated input: every open slot resolves to
+  a placement (`actualStart`, `assignedResource`, a re-commit flag, and a
+  `reclaimable` flag). The schedule never fails (§8), so there is no `NO_SHOW`
+  outcome. The caller applies these back to persisted rows and emits notifications
+  for re-committed slots; a `ForceNoShow` event (a human reclaim) is what records a
+  row `NO_SHOW`.
 - **Convert at the edges.** proto ⇄ domain and DB-row ⇄ domain conversions live in
   the handler/repository, never inside the engine.
 - **One transaction per event.** A reschedule touches many rows; the caller loads
@@ -507,7 +525,7 @@ others back. It is *priority*, not a wall-clock anchor:
   assigned-resource, not a hard `resource_id` at creation. This affects `docs/PLAN.md`
   Phase 5 — see the sync note when reviewing.
 - **Trace:** the algorithm interface returns, alongside the queue, an ordered
-  **trace** of the steps it took (seed, place, gap-fill, re-commit, no-show) so any
+  **trace** of the steps it took (seed, place, gap-fill, re-commit, reclaimable) so any
   run can be reconstructed for debugging. Defined at the interface so every
   implementation produces it; cheap at QLab's scale (runs are tiny). If it ever grew,
   switch the accumulating trace for an injected step sink.
@@ -521,7 +539,8 @@ others back. It is *priority*, not a wall-clock anchor:
 ## 11. Test matrix (drives the Phase 4 table-driven `testify` suite)
 
 Each row is one table-test case; expected output is the full resolved set of
-outcomes (per-slot `actualStart`, `assignedResource`, re-commit flag, or `NO_SHOW`).
+placements (per-slot `actualStart`, `assignedResource`, re-commit flag, reclaimable
+flag).
 
 **Single resource:**
 1. Empty queue / single active slot — no-op.
@@ -540,7 +559,7 @@ outcomes (per-slot `actualStart`, `assignedResource`, re-commit flag, or `NO_SHO
 11. Uneven durations across resources — per-resource no-overlap holds.
 
 **Lifecycle:**
-12. No-show after grace re-flows the queue (engine-detected) (§7.5).
+12. Grace lapsed flags a slot reclaimable; it keeps its place, not auto-freed (§7.5).
 13. Cancel a scheduled slot (filtered out upstream) — pull-forward.
 14. Clock-out / cancel the active slot — resource frees, reschedule.
 15. Booking inserts at the earliest feasible start within its reach.
@@ -564,9 +583,10 @@ This spec is the schema-of-record the engine implements.
    tolerance**, and **no ratchet** — every call recomputes from scratch. ✓
 2. **§2.2 — re-commit on any change.** A slot notifies whenever `actualStart`
    differs from `committedStart`, earlier or later. ✓
-3. **§2.3 / §5 — the engine detects no-shows.** A `SCHEDULED` slot with
-   `committedStart + CLOCK_IN_GRACE < now` is marked `NO_SHOW` by the engine. The
-   grace period is injected from configuration, not hardcoded. ✓
+3. **§2.3 / §5 — the engine flags no-shows reclaimable; it does not free them.** A
+   `SCHEDULED` slot with `committedStart + CLOCK_IN_GRACE < now` keeps its place and
+   is flagged `reclaimable`; the **next-in-line user** removes it (`ForceNoShow` →
+   `NO_SHOW`). The grace period is injected from configuration, not hardcoded. ✓
 4. **§1.3 / §4 — `slotPriority` is a unique total order** and the sole processing
    and tie-break key; `id` is identity only. ✓
 5. **§1.4 — resources are generalized and carry a kind** (enumerated; MVP: vent

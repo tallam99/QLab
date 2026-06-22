@@ -16,7 +16,7 @@ conversions happen at the edges (Phase 7), never here.
     ids.go          opaque id types (SlotID, ResourceID, …)
     slot.go         Slot, SlotStatus (SCHEDULED/ACTIVE), Minutes, SlotPriority
     resource.go     Resource, ResourceKind (MVP: vent hood)
-    queue.go        Queue (map[SlotID]SlotPosition), SlotPosition, Outcome
+    queue.go        Queue (map[SlotID]SlotPosition), SlotPosition (incl. Reclaimable)
     trace.go        Trace/Step — the per-run step log every Algorithm returns
     validate.go     Input.Validate (Reschedule runs it; callers don't)
     *_enumer.go     generated enum String()/parse (go generate)
@@ -29,8 +29,10 @@ conversions happen at the edges (Phase 7), never here.
   pushes later only when forced. No late window, no ratchet, no silent absorption.
 - Re-commit/notify fires whenever a placed slot's start differs from its
   `CommittedStart` (`SlotPosition.Recommitted`).
-- The engine detects no-shows itself (`CommittedStart + grace < Now`) and emits
-  `OutcomeNoShow`. Grace is constructor config (`basic.Config`), not world-state.
+- The engine never frees a no-show: when `CommittedStart + grace < Now` it keeps the
+  slot placed (holding its resource) and flags it `Reclaimable`; a human reclaim
+  (`ForceNoShow`, the next-in-line user) is what records the terminal `NO_SHOW`.
+  Grace is constructor config (`basic.Config`), not world-state.
 - `SlotPriority` is a unique total order and the sole processing/tie-break key;
   `id` is identity only.
 - The engine sees only `SCHEDULED` + `ACTIVE`; the caller filters history out.

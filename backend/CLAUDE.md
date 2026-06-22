@@ -5,11 +5,13 @@ single Go module rooted at the repo top (`github.com/tallam99/qlab`); this code
 lives under the `backend/` subtree, imported as `github.com/tallam99/qlab/backend/…`.
 
 Read the root `CLAUDE.md` and `docs/PLAN.md` first for the phase boundary and the
-local-vs-cloud rule. **Current status: Phase 5** — the HTTP service + local Compose
-stack (Phase 2), the pure scheduling engine (`internal/dynamicqueue`, Phase 4), and
-now the data model: goose migrations with a self-enforcing schema (`migrations/`),
-a local-only seed (`seed/seed.sql`, `mage seed`), the `store` query layer, and the
-`schema_test` suite (`mage testSchema`). The proto contract + API land next.
+local-vs-cloud rule. **Current status: Phase 6** — the HTTP service + local Compose
+stack (Phase 2), the pure scheduling engine (`internal/dynamicqueue`, Phase 4), the
+data model (goose migrations with a self-enforcing schema in `migrations/`, a
+local-only seed `seed/seed.sql`, the `store` query layer, and the `schema_test`
+suite, Phase 5), and now the proto contract: generated types in `internal/protogen` and
+a stubbed Connect service (`internal/api`) mounted on the router. The real API
+endpoints (wiring engine ⇄ store ⇄ Connect) land next.
 
 ## Key files
 
@@ -53,6 +55,15 @@ a local-only seed (`seed/seed.sql`, `mage seed`), the `store` query layer, and t
   (same-origin only) rather than the underlying library's "allow all" default;
   origins come from config (`CORS_ALLOWED_ORIGINS`, set per environment to the
   Firebase Hosting origin).
+- `internal/protogen/` — **generated** Go from the `proto/qlab/v1` contract (`mage
+  genProto`); committed, never hand-edited. `qlab/v1` holds the message types,
+  `qlab/v1/qlabv1connect` the Connect server/client stubs. The pure engine and the
+  store never import this — proto ⇄ domain conversions live in the handlers.
+- `internal/api/` — the Connect service implementation (`qlab.v1.QlabService`).
+  Currently a stub: it embeds the generated `UnimplementedQlabServiceHandler` so
+  every method returns `CodeUnimplemented`. `Service.Handler()` returns the mount
+  path + handler; `server.New` mounts it. Phase 7 overrides the methods to wire the
+  engine + store (one transaction per mutating call, then one `reschedule`).
 - `internal/server/` — the server: router, handlers (methods on `Server`), and the
   lifecycle. `New` returns a `*Server`; `Run(ctx)` serves immediately (so
   `/healthq` liveness is 200 at once), runs the registered dependency injectors

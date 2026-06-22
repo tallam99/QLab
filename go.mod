@@ -3,10 +3,12 @@ module github.com/tallam99/qlab
 go 1.26
 
 require (
+	connectrpc.com/connect v1.18.1
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/cors v1.2.2
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kelseyhightower/envconfig v1.4.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -14,7 +16,6 @@ require (
 	github.com/dmarkham/enumer v1.6.3 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -56,6 +57,8 @@ require (
 )
 
 tool (
+	connectrpc.com/connect/cmd/protoc-gen-connect-go
 	github.com/dmarkham/enumer
 	github.com/vektra/mockery/v2
+	google.golang.org/protobuf/cmd/protoc-gen-go
 )

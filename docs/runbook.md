@@ -52,11 +52,12 @@ same fields.
 | `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
-| `mage genProto` | `buf generate` (Go + TS from `.proto`; buf config lands in Phase 6) |
+| `mage genProto` | `buf generate` from `proto/`: Go → `backend/internal/protogen`, TS → `frontend/src/protogen`. Go plugins are the module's pinned `go tool` binaries; the TS plugin is `proto/package.json` (`npm install` in `proto/` first). Commit the regenerated output. |
 | `mage dbStringStaging` / `mage dbStringProd` | **user-run only** — print the human read-write Neon connection string from Secret Manager (for DBeaver). Claude never runs these (they invoke `gcloud`). See `docs/deploy.md`. |
 
-`genProto` is wired to its real tool but skips cleanly until the proto contract
-exists (Phase 6). `migrate`/`seed` now drive real content. Unit tests carry a
+`genProto` generates from the `proto/qlab/v1` contract; the committed output is
+verified up to date by a CI job (`buf lint` + `buf breaking` + a generate-and-diff
+check). `migrate`/`seed` now drive real content. Unit tests carry a
 `//go:build testunit` tag; the `database`-tagged schema tests need Postgres. `mage
 test` runs all three tiers, so it now needs the stack up. In CI each tier is its
 own job (the schema job runs against a Postgres service), and the deploy pipeline
@@ -83,6 +84,17 @@ runs the same CI gate before deploying — so schema tests also gate CD.
 > `/healthq`** (restarts only a genuinely wedged process). On boot the service
 > retries a transient DB failure a few times with backoff, then exits non-zero if
 > it can't connect.
+
+## Connect API
+
+The data API is mounted at `/qlab.v1.QlabService/<Method>` (Connect-RPC; speaks
+JSON or binary protobuf on the same path). The methods are stubs that return a
+Connect `unimplemented` error (HTTP 501) until they're wired to the engine + store.
+Drive them from the Yaak workspace, or with curl:
+
+    curl -s -X POST localhost:8090/qlab.v1.QlabService/ListSlots \
+      -H 'Content-Type: application/json' -d '{"resourcePoolId":"demo"}'
+    # → {"code":"unimplemented","message":"qlab.v1.QlabService.ListSlots is not implemented"}
 
 ## Debugging
 

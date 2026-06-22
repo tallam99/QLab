@@ -4,17 +4,23 @@ The committed **Yaak** workspace — our living, runnable catalogue of API behav
 The rule: every time we introduce a new behavior variation worth reproducing, add a
 Yaak request for it (each reschedule scenario, each auth state, each error case).
 
-> **Status:** workspace seeded in Phase 1 with the `/healthq` request and
-> `local` / `staging` / `production` environments. It grows as the API does
-> (Phases 5/7). See `docs/PLAN.md`.
+> **Status:** seeded in Phase 1 (`/healthq` + the `local` / `staging` /
+> `production` environments); now also carries `/readyq` and the Connect API
+> surface — `ListSlots` (read) plus the side-effecting RPCs (`CreateSlot`,
+> `ClockIn`, `ClockOut`, `CancelSlot`, and the reclaim pair `PokeOccupant` /
+> `ForceClockOut`) in the Danger folder. They return `unimplemented` until the
+> handlers are wired (Phase 7), at which point each becomes a real
+> reschedule-scenario request. See `docs/PLAN.md`.
 
 ## Contents
 
     qlab.yaak.json   exported workspace (versioned, shared)
 
 Requests use a `base_url` environment variable (`${[ base_url ]}/healthq`) so the
-same request runs against any environment. `staging` / `production` `base_url`s
-are placeholders until the Cloud Run URLs exist (Phase 3).
+same request runs against any environment. `base_url` points at the **Cloud Run
+API** origin (`https://api-<env>-<project-number>.us-east1.run.app`), *not* the
+Firebase Hosting URL — Yaak drives the data API, which is a separate origin from
+the static PWA (decision 0001).
 
 ## Environments & secrets
 

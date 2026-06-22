@@ -52,6 +52,18 @@
             "name": "auth_token",
             "value": "",
             "id": null
+          },
+          {
+            "enabled": true,
+            "name": "resource_pool_id",
+            "value": "",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "slot_id",
+            "value": "",
+            "id": null
           }
         ],
         "color": "#00C9A7",
@@ -70,12 +82,24 @@
           {
             "enabled": true,
             "name": "base_url",
-            "value": "https://REPLACE-WITH-CLOUD-RUN-STAGING-URL",
+            "value": "https://api-staging-967285697228.us-east1.run.app",
             "id": null
           },
           {
             "enabled": true,
             "name": "auth_token",
+            "value": "",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "resource_pool_id",
+            "value": "",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "slot_id",
             "value": "",
             "id": null
           }
@@ -96,12 +120,24 @@
           {
             "enabled": true,
             "name": "base_url",
-            "value": "https://REPLACE-WITH-CLOUD-RUN-PROD-URL",
+            "value": "https://api-prod-799882231604.us-east1.run.app",
             "id": null
           },
           {
             "enabled": true,
             "name": "auth_token",
+            "value": "",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "resource_pool_id",
+            "value": "",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "slot_id",
             "value": "",
             "id": null
           }
@@ -138,7 +174,7 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": null,
         "name": "healthq",
-        "description": "",
+        "description": "Liveness probe: is the process up? Always 200 once the server is listening, independent of dependencies.",
         "method": "GET",
         "url": "${[ base_url ]}/healthq",
         "headers": [],
@@ -148,6 +184,279 @@
         "body": {},
         "bodyType": null,
         "sortPriority": 0.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_readyqAAAAA",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": null,
+        "name": "readyq",
+        "description": "Readiness probe: 503 until dependencies (the database) are initialized, then 200. Distinct from liveness.",
+        "method": "GET",
+        "url": "${[ base_url ]}/readyq",
+        "headers": [],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {},
+        "bodyType": null,
+        "sortPriority": 1000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_listSlots00",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": null,
+        "name": "ListSlots",
+        "description": "Connect-RPC (JSON over HTTP): list a resource pool's slots. A read, so it lives outside the Danger folder. Until the handler is built it returns a Connect `unimplemented` error (HTTP 501) — that response is the Phase 6 acceptance check.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/ListSlots",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"resourcePoolId\": \"${[ resource_pool_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 2000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_createSlot0",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "CreateSlot",
+        "description": "Connect-RPC (JSON over HTTP): book a slot, then reschedule. Mutating, so it lives in the Danger folder. Returns the recomputed schedule once wired; currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/CreateSlot",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"resourcePoolId\": \"${[ resource_pool_id ]}\",\n  \"desiredStart\": \"2026-06-21T15:00:00Z\",\n  \"lookaheadMinutes\": 30,\n  \"durationMinutes\": 60,\n  \"note\": \"demo slot\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 3000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_clockInAAAA",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "ClockIn",
+        "description": "Connect-RPC (JSON over HTTP): clock a slot in (SCHEDULED → ACTIVE, pin to a resource), then reschedule. Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/ClockIn",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 4000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_clockOutAAA",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "ClockOut",
+        "description": "Connect-RPC (JSON over HTTP): clock out / early-finish (ACTIVE → COMPLETE, free the resource), then reschedule (pull-forward). Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/ClockOut",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 5000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_cancelSlot0",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "CancelSlot",
+        "description": "Connect-RPC (JSON over HTTP): cancel a slot (→ CANCELLED, free its place), then reschedule (pull-forward). Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/CancelSlot",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 6000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_pokeOccupnt",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "PokeOccupant",
+        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, nudge the occupant of an overrunning slot to wrap up (the backend notifies them). Step one of a resource reclaim; changes no schedule state. In the Danger folder because it triggers a real notification. Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/PokeOccupant",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 7000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_forceClkout",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "ForceClockOut",
+        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, boot the occupant of an overrunning slot (settles it COMPLETE, frees the resource), then reschedule (pull-forward). Step two of a reclaim, the escalation when a poke goes unheeded. Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/ForceClockOut",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 8000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_forceNoShow",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "ForceNoShow",
+        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, reclaim a slot whose clock-in grace lapsed (settles it NO_SHOW, frees its place), then reschedule (pull-forward). Sibling of ForceClockOut for the no-show case, with no prior poke — the grace period was the warning. The engine never no-shows anyone automatically. Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/ForceNoShow",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 9000.0
       }
     ]
   }
