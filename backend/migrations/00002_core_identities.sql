@@ -1,9 +1,11 @@
 -- Tenancy and identity: users, labs, and the labs_users join that ties a user to
 -- a lab with a role. Every tenant-scoped row elsewhere carries labs_id.
 --
--- users is created first so the audit columns (created_by / updated_by, present on
--- every table) can carry a foreign key to users(users_id) — including users' own,
--- which is self-referential and nullable (the first user is created_by NULL).
+-- The audit columns created_by / updated_by (on every table) are plain uuid, NOT
+-- foreign keys: they hold the authenticated principal that wrote the row — usually
+-- a users_id, but also system/automation actors that aren't users, and they must
+-- outlive a user's deletion. They're application-set (NULL for system/unattributed
+-- or seed data). See migrations/README → Conventions.
 
 -- +goose Up
 
@@ -26,8 +28,8 @@ CREATE TABLE users (
 
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
-    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL
+    created_by uuid,
+    updated_by uuid
 );
 
 CREATE TABLE labs (
@@ -35,8 +37,8 @@ CREATE TABLE labs (
     name       text NOT NULL CHECK (length(trim(name)) > 0),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
-    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL
+    created_by uuid,
+    updated_by uuid
 );
 
 CREATE TABLE labs_users (
@@ -45,8 +47,8 @@ CREATE TABLE labs_users (
     role       lab_role NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
-    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    created_by uuid,
+    updated_by uuid,
     -- One membership row per (lab, user); the leading labs_id also serves
     -- lab-scoped membership listing.
     PRIMARY KEY (labs_id, users_id)

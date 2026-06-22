@@ -29,8 +29,8 @@ CREATE TABLE outbox (
 
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
-    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL
+    created_by uuid,
+    updated_by uuid
 );
 
 -- The worker's drain query: pending messages whose backoff has elapsed, oldest

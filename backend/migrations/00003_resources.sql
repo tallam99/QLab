@@ -19,8 +19,8 @@ CREATE TABLE resource_pools (
     name       text NOT NULL CHECK (length(trim(name)) > 0),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
-    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    created_by uuid,
+    updated_by uuid,
     -- FK target: forces a child row's labs_id to equal this pool's labs_id.
     UNIQUE (resource_pools_id, labs_id),
     -- FK target: forces a child row's kind to equal this pool's kind. (resource_pools_id
@@ -39,8 +39,8 @@ CREATE TABLE resources (
     name              text NOT NULL CHECK (length(trim(name)) > 0),
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    created_by        uuid REFERENCES users(users_id) ON DELETE SET NULL,
-    updated_by        uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    created_by        uuid,
+    updated_by        uuid,
 
     -- The resource lives in a pool that belongs to the SAME lab: the composite FK
     -- can only resolve when resources.labs_id equals the pool's labs_id.

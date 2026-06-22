@@ -54,15 +54,6 @@ func TestConstraintsRejectBadRows(t *testing.T) {
 			},
 		},
 		{
-			name: "audit created_by must reference a real user",
-			code: codeForeignKeyViolation,
-			op: func(ctx context.Context, tx pgx.Tx, _ fixture) error {
-				_, err := tx.Exec(ctx,
-					`INSERT INTO labs (name, created_by) VALUES ('x', gen_random_uuid())`)
-				return err
-			},
-		},
-		{
 			name: "slot lab must match its pool's lab",
 			code: codeForeignKeyViolation,
 			op: func(ctx context.Context, tx pgx.Tx, f fixture) error {
@@ -201,6 +192,19 @@ func TestValidSlotInserts(t *testing.T) {
 			 desired_start, lookahead, duration, actual_start, status)
 			VALUES ($1, $2, $3, $4, 2, $5, 0, 60, $5, 'ACTIVE')`,
 			f.labID, f.userID, f.poolID, f.res1ID, base)
+		require.NoError(t, err)
+	})
+}
+
+// TestAuditColumnsAcceptAnyPrincipal documents the decision that created_by /
+// updated_by are plain uuid (the authenticated principal), NOT foreign keys to
+// users — so an arbitrary principal id (e.g. a system/automation actor that isn't
+// a user) is accepted rather than rejected.
+func TestAuditColumnsAcceptAnyPrincipal(t *testing.T) {
+	conn := connect(t)
+	withFixture(t, conn, func(ctx context.Context, tx pgx.Tx, _ fixture) {
+		_, err := tx.Exec(ctx,
+			`INSERT INTO labs (name, created_by, updated_by) VALUES ('audited', gen_random_uuid(), gen_random_uuid())`)
 		require.NoError(t, err)
 	})
 }

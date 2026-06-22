@@ -41,8 +41,8 @@ CREATE TABLE slots (
 
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    created_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
-    updated_by uuid REFERENCES users(users_id) ON DELETE SET NULL,
+    created_by uuid,
+    updated_by uuid,
 
     -- The slot's pool belongs to the slot's lab (cross-lab booking impossible).
     FOREIGN KEY (resource_pools_id, labs_id)
