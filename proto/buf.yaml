@@ -1,0 +1,12 @@
+# buf module config. The directory holding this file is the module root, so
+# imports are relative to proto/ (e.g. "qlab/v1/types.proto"). protovalidate
+# supplies the buf/validate/* options used for field validation rules.
+version: v2
+deps:
+  - buf.build/bufbuild/protovalidate
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

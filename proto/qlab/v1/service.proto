@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+// Package qlab.v1 — the service surface. Each mutating RPC is one engine event
+// (docs/ALGORITHM.md §6): it mutates state, then runs the single reschedule, then
+// returns the recomputed schedule. Implemented in Phase 7; stubbed Unimplemented
+// for now.
+package qlab.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "qlab/v1/types.proto";
+
+message ListSlotsRequest {
+  string resource_pool_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListSlotsResponse {
+  repeated Slot slots = 1;
+}
+
+// CreateSlot books a slot. user_id comes from the authenticated caller (Phase 8)
+// and slot_priority is assigned by the service, so neither is on the request.
+message CreateSlotRequest {
+  string resource_pool_id = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Timestamp desired_start = 2;
+  int32 lookahead_minutes = 3 [(buf.validate.field).int32.gte = 0];
+  int32 duration_minutes = 4 [(buf.validate.field).int32.gt = 0];
+  string note = 5;
+}
+
+message ClockInRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ClockOut covers clock-out and early-finish (both settle the slot COMPLETE and
+// free its resource).
+message ClockOutRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message CancelSlotRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// ReportOverrun extends an active slot's projected end (it is running past its
+// scheduled end), pushing the people behind it.
+message ReportOverrunRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Timestamp projected_end = 2;
+}
+
+// Every mutating RPC returns the recomputed schedule. They carry the same
+// RescheduleResult but are distinct types (one response per RPC) so the contract
+// can evolve per method without a breaking change rippling across all of them.
+message CreateSlotResponse {
+  RescheduleResult result = 1;
+}
+
+message ClockInResponse {
+  RescheduleResult result = 1;
+}
+
+message ClockOutResponse {
+  RescheduleResult result = 1;
+}
+
+message CancelSlotResponse {
+  RescheduleResult result = 1;
+}
+
+message ReportOverrunResponse {
+  RescheduleResult result = 1;
+}
+
+// QlabService is the data API. Every method requires a Firebase JWT (Phase 8) and
+// is scoped to the caller's lab. The no-show sweep is engine-internal (triggered
+// in the service layer), not an RPC.
+service QlabService {
+  rpc ListSlots(ListSlotsRequest) returns (ListSlotsResponse);
+  rpc CreateSlot(CreateSlotRequest) returns (CreateSlotResponse);
+  rpc ClockIn(ClockInRequest) returns (ClockInResponse);
+  rpc ClockOut(ClockOutRequest) returns (ClockOutResponse);
+  rpc CancelSlot(CancelSlotRequest) returns (CancelSlotResponse);
+  rpc ReportOverrun(ReportOverrunRequest) returns (ReportOverrunResponse);
+}

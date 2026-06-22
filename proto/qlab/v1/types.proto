@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+// Package qlab.v1 is the API + SSE contract of record. Go server stubs and
+// TypeScript client types are generated from it (see proto/README.md); the wire
+// types are never hand-written. Messages mirror the pure scheduling-engine domain
+// (backend/internal/dynamicqueue) and the persisted schema (backend/migrations) so
+// proto <-> domain <-> row conversions stay mechanical at the edges.
+package qlab.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// LabRole is a member's role within a lab. Mirrors the lab_role DB enum.
+enum LabRole {
+  LAB_ROLE_UNSPECIFIED = 0; // never valid; reject when decoding input
+  LAB_ROLE_HEAD = 1;
+  LAB_ROLE_MEMBER = 2;
+}
+
+// ResourceKind identifies what a resource is. The engine is kind-agnostic; the
+// kind models which equipment a queue feeds. MVP ships exactly one kind. Mirrors
+// the resource_kind DB enum and dynamicqueue.ResourceKind.
+enum ResourceKind {
+  RESOURCE_KIND_UNSPECIFIED = 0; // never valid
+  RESOURCE_KIND_VENT_HOOD = 1;
+}
+
+// SlotStatus is a slot's full persisted lifecycle state. The engine itself only
+// ever sees SCHEDULED + ACTIVE (history is filtered out before a call, and NO_SHOW
+// is an engine output, not an input) — but the API surfaces the whole lifecycle.
+// Mirrors the slot_status DB enum.
+enum SlotStatus {
+  SLOT_STATUS_UNSPECIFIED = 0; // never valid
+  SLOT_STATUS_SCHEDULED = 1; // waiting; the engine places it
+  SLOT_STATUS_ACTIVE = 2; // clocked in, running now; pinned to a resource
+  SLOT_STATUS_COMPLETE = 3; // finished (settled history)
+  SLOT_STATUS_CANCELLED = 4; // cancelled (settled history)
+  SLOT_STATUS_NO_SHOW = 5; // clock-in grace lapsed; freed (engine output)
+}
+
+// Outcome is the engine's verdict for one slot in a reschedule. There is no
+// "infeasible" outcome — the schedule never fails. Mirrors dynamicqueue.Outcome.
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0; // never valid
+  OUTCOME_PLACED = 1; // scheduled onto a resource at a start time
+  OUTCOME_NO_SHOW = 2; // clock-in grace lapsed; freed
+}
+
+// Lab is one tenant.
+message Lab {
+  string id = 1;
+  string name = 2;
+}
+
+// User is a person who can hold slots. Identity (firebase_uid) is server-side and
+// not exposed on the wire.
+message User {
+  string id = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+}
+
+// Membership ties a user to a lab with a role.
+message Membership {
+  string lab_id = 1;
+  string user_id = 2;
+  LabRole role = 3;
+}
+
+// ResourcePool is a set of interchangeable resources a single queue fans out
+// across.
+message ResourcePool {
+  string id = 1;
+  string lab_id = 2;
+  ResourceKind kind = 3;
+  string name = 4;
+}
+
+// Resource is one interchangeable machine within a pool.
+message Resource {
+  string id = 1;
+  string resource_pool_id = 2;
+  string lab_id = 3;
+  ResourceKind kind = 4;
+  string name = 5;
+}
+
+// Slot is one booking. Mirrors dynamicqueue.Slot and the slots row. Which fields
+// are meaningful depends on status: a SCHEDULED slot's placement
+// (assigned_resource_id, actual_start) is recomputed every reschedule; an ACTIVE
+// slot's placement is pinned.
+message Slot {
+  string id = 1;
+  string lab_id = 2;
+  string user_id = 3;
+  string resource_pool_id = 4;
+  // The specific resource the slot is pinned to; empty until it clocks in.
+  string assigned_resource_id = 5;
+
+  // Unique total order across the pool's live slots; lower runs ahead.
+  int32 slot_priority = 6;
+  SlotStatus status = 7;
+
+  // Booked start: the reference point for earliness.
+  google.protobuf.Timestamp desired_start = 8;
+  // How far before desired_start the engine may pull the slot. Earliest start =
+  // desired_start - lookahead; 0 means no earliness. Whole minutes, >= 0.
+  int32 lookahead_minutes = 9 [(buf.validate.field).int32.gte = 0];
+  // How long the slot runs. Inviolable. Whole minutes, > 0.
+  int32 duration_minutes = 10 [(buf.validate.field).int32.gt = 0];
+
+  // The start the user was last notified of; empty until first committed.
+  google.protobuf.Timestamp committed_start = 11;
+  // Where the current schedule places the slot; empty until placed.
+  google.protobuf.Timestamp actual_start = 12;
+
+  string note = 13;
+}
+
+// SlotPosition is the engine's decision for one slot in a reschedule (mirrors
+// dynamicqueue.SlotPosition). For OUTCOME_PLACED the placement fields are set; for
+// OUTCOME_NO_SHOW they are empty (the slot was freed, not placed).
+message SlotPosition {
+  string slot_id = 1;
+  Outcome outcome = 2;
+  google.protobuf.Timestamp actual_start = 3;
+  string assigned_resource_id = 4;
+  // True when the slot was placed and its start changed from the committed start —
+  // the signal to notify the user of the new start (earlier or later).
+  bool recommitted = 5;
+}
+
+// RescheduleResult is a pool's schedule after an event: the current live slots
+// plus the per-slot verdicts the engine emitted this run. Mirrors the engine's
+// Result.Queue, flattened to a list.
+message RescheduleResult {
+  string resource_pool_id = 1;
+  repeated Slot slots = 2;
+  repeated SlotPosition positions = 3;
+}
+
+// QueueEventType identifies what triggered a queue change (the SSE envelope).
+enum QueueEventType {
+  QUEUE_EVENT_TYPE_UNSPECIFIED = 0; // never valid
+  QUEUE_EVENT_TYPE_SLOT_CREATED = 1;
+  QUEUE_EVENT_TYPE_CLOCKED_IN = 2;
+  QUEUE_EVENT_TYPE_CLOCKED_OUT = 3;
+  QUEUE_EVENT_TYPE_CANCELLED = 4;
+  QUEUE_EVENT_TYPE_OVERRUN = 5;
+  QUEUE_EVENT_TYPE_NO_SHOW = 6;
+}
+
+// QueueEvent is the SSE event envelope pushed to subscribed clients when a pool's
+// schedule changes. It is JSON-encoded over the text SSE stream; the shared schema
+// is what gives the frontend typed handling without a separate contract.
+message QueueEvent {
+  string lab_id = 1;
+  string resource_pool_id = 2;
+  QueueEventType type = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+  RescheduleResult result = 5;
+}

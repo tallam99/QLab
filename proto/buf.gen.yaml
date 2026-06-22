@@ -1,0 +1,27 @@
+# Codegen targets. Run via `mage genProto` (`buf generate`), executed from this
+# directory, so all paths below are relative to proto/.
+#
+# Managed mode stamps the Go import path (go_package) onto every file so the
+# .proto need not carry a go_package option. Go plugins run through the module's
+# pinned `go tool` binaries (go.mod tool directives) for a hermetic, version-locked
+# build; the TS plugin is the npm package pinned in proto/package.json.
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/tallam99/qlab/backend/internal/gen
+plugins:
+  # Go message types.
+  - local: ["go", "tool", "protoc-gen-go"]
+    out: ../backend/internal/gen
+    opt: paths=source_relative
+  # Go Connect-RPC server/client stubs.
+  - local: ["go", "tool", "protoc-gen-connect-go"]
+    out: ../backend/internal/gen
+    opt: paths=source_relative
+  # TypeScript message types + Connect service descriptors (Connect-ES v2 emits
+  # both from this one plugin). Consumed by the frontend via Connect-Query.
+  - local: node_modules/.bin/protoc-gen-es
+    out: ../frontend/src/gen
+    opt: target=ts
