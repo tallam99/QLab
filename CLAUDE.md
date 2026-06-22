@@ -4,11 +4,13 @@ QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-resource
 scheduling engine** that continuously re-flows a priority queue across
 interchangeable resources as experiments overrun, finish early, or get cancelled.
 
-**Current status:** Phase 3 (CI/CD). The Go service, a one-command local stack
-(Docker Compose + Postgres, `mage` targets), and the GitHub Actions pipeline
-(CI gate + deploy to Cloud Run + Firebase Hosting, both environments — see
-`docs/deploy.md`) are in place; the scheduling engine, data model, and API are next. Work
-proceeds through the phases in `docs/PLAN.md`.
+**Current status:** Phase 5 (database). The Go service, a one-command local stack
+(Docker Compose + Postgres, `mage` targets), the GitHub Actions pipeline (CI gate +
+deploy to Cloud Run + Firebase Hosting, both environments — see `docs/deploy.md`),
+the pure scheduling engine (`internal/dynamicqueue`, Phase 4), and the data model
+(goose migrations + a self-enforcing schema, seed, and the `schema_test` suite —
+Phase 5) are in place; the proto contract and API are next. Work proceeds through
+the phases in `docs/PLAN.md`.
 
 ## Read these first
 
@@ -45,7 +47,9 @@ This project is built with Claude as the primary engine, with a hard boundary:
   Trace; annotate spans with `lab_id`, `resource_pool_id`, `slot_id`, event type.
 - **Topology:** the public PWA (Firebase Hosting) and the data API (Cloud Run) are
   **separate origins**; every API endpoint requires a Firebase JWT. See decision 0001.
-- **Multi-tenancy:** every tenant-scoped row carries `lab_id`; scope every query by it.
+- **Multi-tenancy:** every tenant-scoped row carries `labs_id`; scope every query by
+  it. Row-level security enforces the same isolation at the DB (decision 0005): the
+  service sets `app.current_lab_id` per request and the app's DB role is RLS-bound.
 - **Docs:** live in `docs/`; root `README.md` is the entry point; subfolders may have
   their own `docs/` and `CLAUDE.md`. Update docs as part of every phase.
 - **Cost:** stay within free tiers ($0/month).

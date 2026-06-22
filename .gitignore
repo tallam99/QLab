@@ -1,6 +1,10 @@
 # Go
 backend/bin/
 
+# Generated mocks (mockery). Not committed — regenerate with `mage genMocks`.
+# Every mock file is named <interface>_mock.go.
+*_mock.go
+
 # Node
 frontend/node_modules/
 frontend/.env.local

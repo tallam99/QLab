@@ -45,6 +45,14 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
 
@@ -52,6 +60,20 @@ jobs:
         run: |
           docker build -f backend/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
+
+      - name: Run database migrations
+        # Apply migrations BEFORE the new revision deploys, so the schema the new
+        # code expects is already in place. Uses the migrator (DDL-capable) role,
+        # fetched from Secret Manager via WIF — never a laptop, never the runtime
+        # app role. Migrations must be backward-compatible with the currently-live
+        # revision (expand/contract) since old code briefly runs against the new
+        # schema. A migration failure fails the deploy.
+        run: |
+          MIGRATE_DATABASE_URL="$(gcloud secrets versions access latest \
+            --secret='${{ vars.DATABASE_MIGRATOR_SECRET }}' \
+            --project='${{ vars.GCP_PROJECT_ID }}')"
+          export MIGRATE_DATABASE_URL
+          mage migrate
 
       - name: Deploy API to Cloud Run
         run: |

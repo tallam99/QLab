@@ -10,7 +10,15 @@
 // implementation: the real Postgres store, or a stub in tests.
 package store
 
-// Store is the data store the service reads and writes its data model through. It
-// is intentionally empty today; the business-domain methods land with the schema
-// in Phase 5.
-type Store interface{}
+import "context"
+
+//go:generate go tool mockery
+
+// Store is the data store the service reads and writes its data model through. The
+// full set of business-domain methods lands with the API in Phase 7; for now it
+// carries a single trivial read that proves the store connects and queries.
+type Store interface {
+	// CountLabs returns the number of labs. A connectivity/smoke query, not a
+	// product operation — the real lab/slot/membership methods arrive in Phase 7.
+	CountLabs(ctx context.Context) (int, error)
+}

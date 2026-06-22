@@ -15,8 +15,9 @@
 | `.github/workflows/deploy.yml` | push to `main` (i.e. after merge) | Run `ci.yml` as a gating job, then (only if green) deploy both surfaces to **staging** automatically, then to **production** behind a manual approval. Calls the reusable `_deploy.yml` once per environment. |
 
 `_deploy.yml` for one environment: build the backend image → push to Artifact
-Registry → deploy to Cloud Run → build the hello-world frontend with the live
-Cloud Run URL injected → deploy to Firebase Hosting.
+Registry → **run database migrations** (`mage migrate` against the migrator secret,
+before the new revision) → deploy to Cloud Run → build the hello-world frontend with
+the live Cloud Run URL injected → deploy to Firebase Hosting.
 
 **Auth is Workload Identity Federation (WIF) end to end** — GitHub mints a
 short-lived OIDC token that GCP trusts, so there is **no long-lived
@@ -123,6 +124,124 @@ Notes:
 - Neon scales to zero, so the first connection after an idle period has a cold
   start; the service's boot retry rides it out, and the Phase 11 weekly cron
   doubles as a keep-alive.
+
+---
+
+## Database roles & access (Phase 5)
+
+> ✅ **Done (2026-06-21)** for both `qlab-staging` and `qlab-production`, by Claude
+> under a one-time exception to the local/cloud boundary (the user explicitly
+> authorized the role + Secret Manager setup). Each branch uses a **dedicated
+> database** — `qlab-staging` / `qlab-production` (not the default `neondb`); all
+> connection strings point at it. Created on each Neon branch: roles
+> `qlab_app` (NOSUPERUSER NOBYPASSRLS), `qlab_human_rw`, `qlab_human_ro`, with
+> grants + `ALTER DEFAULT PRIVILEGES` so future migration-created tables are
+> reachable. Secrets per project: `db-url-<env>` rotated to the `qlab_app` string;
+> new `db-url-<env>-migrator` (the Neon owner string; deployer SA has
+> `secretAccessor`), `db-url-<env>-readwrite`, `db-url-<env>-readonly`. The
+> `DATABASE_MIGRATOR_SECRET` env variable is set for both GitHub Environments. All
+> three roles were verified to authenticate via the pooled endpoint. The commands
+> below are kept for reference/recreation; Claude does not resume running cloud
+> commands — this was a one-off.
+
+The service must **not** connect as the Neon owner, and humans must **not** need the
+owner password. Per branch (staging, production) create three least-privilege roles
+and give each its own Secret Manager secret. The Neon **owner** is reserved for
+migrations: its string lives in a separate `db-url-<env>-migrator` secret that only
+the **CI deployer** can read (the pipeline runs migrations before each deploy).
+
+### 1. Create the roles (run in Neon's SQL editor, on each branch)
+
+```sql
+-- App runtime role: DML only, no DDL, no superuser, and NOBYPASSRLS so the
+-- row-level-security tenant isolation (decision 0005) actually binds it.
+CREATE ROLE qlab_app       LOGIN PASSWORD '<generate-a-strong-password>' NOSUPERUSER NOBYPASSRLS;
+-- Human ad-hoc read-write.
+CREATE ROLE qlab_human_rw  LOGIN PASSWORD '<generate-a-strong-password>';
+-- Human read-only inspection. Optionally grant BYPASSRLS for cross-lab visibility
+-- (otherwise it, too, is RLS-bound and must set app.current_lab_id per session):
+--   ALTER ROLE qlab_human_ro BYPASSRLS;
+CREATE ROLE qlab_human_ro  LOGIN PASSWORD '<generate-a-strong-password>';
+
+-- Grants on existing objects.
+GRANT USAGE ON SCHEMA public TO qlab_app, qlab_human_rw, qlab_human_ro;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO qlab_app, qlab_human_rw;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO qlab_app, qlab_human_rw;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO qlab_human_ro;
+
+-- Future tables (created by later migrations as the owner) are reachable too.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO qlab_app, qlab_human_rw;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO qlab_app, qlab_human_rw;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON TABLES TO qlab_human_ro;
+```
+
+### 2. Store each role's connection string in Secret Manager
+
+Build each string from Neon's **pooled** host for that branch and the role's
+password (`postgres://<role>:<password>@<pooled-host>/<db>?sslmode=require`).
+
+| Secret (staging project / prod project) | Holds the string for |
+|------------------------------------------|----------------------|
+| `db-url-staging` / `db-url-production` | `qlab_app` — **the Cloud Run runtime** (existing secret; rotate its value to the app role) |
+| `db-url-staging-migrator` / `db-url-production-migrator` | the Neon **owner** — used by **CI** to run migrations before each deploy |
+| `db-url-staging-readwrite` / `db-url-production-readwrite` | `qlab_human_rw` — DBeaver ad-hoc writes |
+| `db-url-staging-readonly` / `db-url-production-readonly` | `qlab_human_ro` — read-only inspection |
+
+```sh
+# Rotate the runtime secret to the app role (Cloud Run picks up :latest on next deploy):
+printf '%s' 'postgres://qlab_app:PASSWORD@HOST/DB?sslmode=require' \
+  | gcloud secrets versions add db-url-staging --data-file=- --project qlab-staging
+
+# Migrator secret = the Neon owner string; ONLY the CI deployer SA may read it.
+printf '%s' 'postgres://OWNER:PASSWORD@HOST/DB?sslmode=require' \
+  | gcloud secrets create db-url-staging-migrator --data-file=- --project qlab-staging
+gcloud secrets add-iam-policy-binding db-url-staging-migrator \
+  --member="serviceAccount:qlab-deployer@qlab-staging.iam.gserviceaccount.com" \
+  --role=roles/secretmanager.secretAccessor --project qlab-staging
+
+# Create the human secrets and let the runtime SA stay out of them (humans use their
+# own gcloud identity to read these; only the app secret is granted to qlab-api):
+printf '%s' 'postgres://qlab_human_rw:PASSWORD@HOST/DB?sslmode=require' \
+  | gcloud secrets create db-url-staging-readwrite --data-file=- --project qlab-staging
+printf '%s' 'postgres://qlab_human_ro:PASSWORD@HOST/DB?sslmode=require' \
+  | gcloud secrets create db-url-staging-readonly  --data-file=- --project qlab-staging
+```
+
+### 3. Connect with DBeaver
+
+Fetch the string on demand (don't save the owner password anywhere):
+
+```sh
+mage dbStringStaging   # prints the staging human read-write string
+mage dbStringProd      # prints the production human read-write string
+```
+
+These run `gcloud secrets versions access` as **your** logged-in identity and print
+the string to paste into DBeaver. They are **user-run only** — Claude never invokes
+`gcloud`. (A read-only variant target can be added later; for now read the
+`*-readonly` secret directly if you want read-only.)
+
+> **RLS in DBeaver:** the human roles are `NOBYPASSRLS`, so until you set a tenant
+> context you'll see no lab-scoped rows. Either scope your session —
+> `SELECT set_config('app.current_lab_id', '<lab-uuid>', false);` — or grant the
+> read-only role `BYPASSRLS` (above) for cross-lab inspection. The migrator (owner)
+> credential bypasses RLS entirely.
+
+### Applying migrations to staging/prod
+
+Migrations are **not** run against Neon from a local machine (by you or Claude).
+The deploy pipeline (`_deploy.yml`) runs `mage migrate` against the target branch
+**before** deploying the new Cloud Run revision, using the migrator (owner) secret
+fetched via WIF — so the owner credential never touches a laptop. A migration
+failure fails the deploy.
+
+Because the old revision briefly runs against the new schema (migrate-then-deploy),
+keep migrations **backward-compatible** with the currently-live code
+(expand/contract): add columns/tables before the code uses them; drop only after no
+live revision references them.
 
 ---
 
@@ -311,7 +430,8 @@ Variables), one set for `staging` and one for `production`.
 | `CLOUD_RUN_SERVICE` | `api-staging` | `api-prod` for production |
 | `CORS_ALLOWED_ORIGINS` | `https://qlab-staging.web.app,https://qlab-staging.firebaseapp.com` | the Hosting origin(s); comma-separate if more than one |
 | `FIREBASE_PROJECT_ID` | `qlab-staging` | |
-| `DATABASE_SECRET` | `db-url-staging` | name of the Secret Manager secret holding the DB URL (`db-url-production` for prod) |
+| `DATABASE_SECRET` | `db-url-staging` | name of the Secret Manager secret holding the app DB URL (`db-url-production` for prod) |
+| `DATABASE_MIGRATOR_SECRET` | `db-url-staging-migrator` | name of the secret holding the migrator (owner) DB URL the pipeline runs migrations with (`db-url-production-migrator` for prod) |
 
 The DB connection string itself is **not** here — only the *name* of its Secret
 Manager secret is. The value lives in Secret Manager (step 4).

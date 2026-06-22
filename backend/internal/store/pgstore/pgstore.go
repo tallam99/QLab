@@ -34,3 +34,13 @@ func (s *Store) Close() error {
 	s.pool.Close()
 	return nil
 }
+
+// CountLabs returns the number of labs — a trivial query proving the store reaches
+// the database and reads. Real domain queries land in Phase 7.
+func (s *Store) CountLabs(ctx context.Context) (int, error) {
+	var n int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM labs`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count labs: %w", err)
+	}
+	return n, nil
+}

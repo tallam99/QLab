@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,9 +15,11 @@ import (
 	"github.com/tallam99/qlab/backend/internal/logging"
 )
 
-// fakeStore is a store.Store stub for tests. The interface is business-domain only
-// (and currently empty), so it needs no methods.
+// fakeStore is a store.Store stub for these lifecycle tests, which only need a
+// non-nil dependency to attach — they never call its methods.
 type fakeStore struct{}
+
+func (fakeStore) CountLabs(context.Context) (int, error) { return 0, nil }
 
 // TestReadyq verifies the readiness probe gates on startup: 503 until the server
 // is marked ready, 200 afterward. Liveness (/healthq) is independent — see

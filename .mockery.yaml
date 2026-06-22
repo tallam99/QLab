@@ -1,0 +1,26 @@
+# mockery (v2) config. Generates testify mocks for the service's interfaces so
+# tests can assert interactions. Run via `mage genMocks` (or `go generate
+# ./backend/...` — the //go:generate directive lives on the interface, or `go tool
+# mockery` from the repo root).
+#
+# Mocks are NOT committed (they're gitignored). Generate them with `mage genMocks`
+# before building/testing code that imports one, then `go mod tidy` to pull the mock
+# runtime deps; `mage clearMocks` removes them.
+#
+# dir uses {{.InterfaceDir}} so the output lands next to the interface regardless
+# of the working directory `go generate` runs mockery from. Every mock file is
+# named <interface>_mock.go so a single `*_mock.go` rule covers them in .gitignore
+# and `mage clearMocks`.
+with-expecter: true
+dir: "{{.InterfaceDir}}/mocks"
+outpkg: "mocks"
+mockname: "Mock{{.InterfaceName}}"
+filename: "{{.InterfaceName | snakecase}}_mock.go"
+# Opt in to the v3 defaults now to silence v2 deprecation warnings.
+resolve-type-alias: false
+disable-version-string: true
+issue-845-fix: true
+packages:
+  github.com/tallam99/qlab/backend/internal/store:
+    interfaces:
+      Store:
