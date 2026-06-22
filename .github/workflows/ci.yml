@@ -98,6 +98,56 @@ jobs:
       - name: Schema tests
         run: mage testSchema
 
+  # Proto contract checks: lint the schema, guard against backwards-incompatible
+  # changes once it exists on main, and prove the committed generated code matches
+  # the .proto (we commit codegen rather than generating in the consumer builds, so
+  # CI is what keeps it honest). Mirrors `mage genProto`.
+  proto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          # Pinned to the version validated locally; bump deliberately.
+          version: 1.71.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: buf lint
+        run: buf lint proto
+      - name: buf breaking against main
+        # buf breaking needs a baseline; proto/ has no module on main until this
+        # lands, so only run the check once it's there (first merge seeds it).
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/proto/buf.yaml?ref=main")
+          if [ "$status" = "200" ]; then
+            buf breaking proto --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto"
+          else
+            echo "proto/buf.yaml not on main yet (HTTP $status); breaking check begins after this merges"
+          fi
+      - name: Install TS codegen plugin
+        run: npm --prefix proto ci
+      - name: Verify generated code is up to date
+        # Regenerate and fail if the committed output drifts from the .proto.
+        # --porcelain catches added/removed files too, not just modifications.
+        run: |
+          mage genProto
+          changes=$(git status --porcelain -- backend/internal/gen frontend/src/gen)
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::generated code is stale — run 'mage genProto' and commit"
+            exit 1
+          fi
+
   lint:
     runs-on: ubuntu-latest
     steps:
