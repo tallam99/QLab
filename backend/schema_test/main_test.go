@@ -18,11 +18,12 @@ import (
 
 // SQLSTATE codes asserted by the constraint/trigger tests, named for readability.
 const (
-	codeForeignKeyViolation   = "23503"
-	codeUniqueViolation       = "23505"
-	codeCheckViolation        = "23514"
-	codeExclusionViolation    = "23P01"
-	codeInsufficientPrivilege = "42501" // raised by an RLS policy violation
+	codeForeignKeyViolation       = "23503"
+	codeUniqueViolation           = "23505"
+	codeCheckViolation            = "23514"
+	codeExclusionViolation        = "23P01"
+	codeInsufficientPrivilege     = "42501" // raised by an RLS policy violation
+	codeInvalidTextRepresentation = "22P02" // e.g. casting a non-UUID string to uuid
 )
 
 // Coordinates injected by `mage testSchema` (the only supported way to run these).

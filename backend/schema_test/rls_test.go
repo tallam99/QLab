@@ -55,6 +55,19 @@ func TestRLSReadIsolation(t *testing.T) {
 		assert.Equal(t, 0, appScalar(t, ctx, conn, "SELECT count(*) FROM slots"))
 		assert.Equal(t, 0, appScalar(t, ctx, conn, "SELECT count(*) FROM labs"))
 	})
+
+	// An *unset* GUC fails closed via NULL (the case above); a *blank* one is
+	// different — the policy casts current_setting(...)::uuid, so '' raises 22P02
+	// rather than matching zero rows. Either way no other lab's rows leak, which is
+	// the contract we pin here: the per-request setter (Phase 7) must SET a real
+	// UUID or leave the GUC unset, never blank.
+	t.Run("blank lab context errors, never leaks (fail-closed)", func(t *testing.T) {
+		conn := connectAsApp(t)
+		setLab(t, ctx, conn, "")
+		var n int
+		err := conn.QueryRow(ctx, "SELECT count(*) FROM slots").Scan(&n)
+		requirePgCode(t, err, codeInvalidTextRepresentation)
+	})
 }
 
 // TestRLSWriteRespectsTenant checks the WITH CHECK side: the app role can write
