@@ -9,11 +9,17 @@ import (
 )
 
 // Reschedule recomputes the resource pool's queue (ALGORITHM §5). It validates the
-// input, sweeps no-shows, seeds each resource's availability from pinned ACTIVE
-// occupancy, then places the remaining open slots in SlotPriority order at the
-// earliest feasible start across resources. It is pure and deterministic, and the
-// schedule is never infeasible (§8): every resource has an open-ended tail, so a
-// placement always exists. The error is reserved for malformed input.
+// input, seeds each resource's availability from pinned ACTIVE occupancy, then
+// places the open slots in SlotPriority order at the earliest feasible start across
+// resources. It is pure and deterministic, and the schedule is never infeasible
+// (§8): every resource has an open-ended tail, so a placement always exists. The
+// error is reserved for malformed input.
+//
+// A slot whose clock-in grace has lapsed is NOT freed — the engine keeps it in
+// place (so it still holds its resource) and flags its placement Reclaimable, since
+// the user may simply have forgotten to clock in while using the resource. Removing
+// a no-show is a deliberate human act (the next-in-line user's ForceNoShow), not an
+// automatic sweep (§2.3).
 func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 	if err := in.Validate(); err != nil {
 		return dynamicqueue.Result{}, err
@@ -22,25 +28,13 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 	queue := make(dynamicqueue.Queue, len(in.Slots))
 	var trace dynamicqueue.Trace
 
-	// 1. No-show sweep: free scheduled slots whose grace has lapsed, before placing
-	//    anyone, so the freed capacity is available to the rest (§5 step 1).
+	// 1. Collect the open (SCHEDULED) slots to place. ACTIVE slots seed availability
+	//    (below); history never reaches the engine.
 	open := make([]dynamicqueue.Slot, 0, len(in.Slots))
 	for _, s := range in.Slots {
-		if !s.Status.IsOpen() {
-			continue // ACTIVE seeds availability (below); history never reaches here
+		if s.Status.IsOpen() {
+			open = append(open, s)
 		}
-		if e.lapsed(s, in.Now) {
-			queue[s.ID] = dynamicqueue.SlotPosition{Outcome: dynamicqueue.OutcomeNoShow}
-			trace = append(trace, dynamicqueue.Step{
-				Kind: dynamicqueue.StepKindNoShow,
-				Slot: s.ID,
-				At:   in.Now,
-				Detail: fmt.Sprintf("no-show: committed %s + %dm grace lapsed by %s",
-					fmtTime(s.CommittedStart), e.clockInGrace, fmtTime(in.Now)),
-			})
-			continue
-		}
-		open = append(open, s)
 	}
 
 	// 2. Seed each resource's free intervals from now and pinned ACTIVE occupancy.
@@ -66,11 +60,12 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 		carve(free, resource, start, s.Duration)
 
 		recommitted := !start.Equal(s.CommittedStart)
+		reclaimable := e.lapsed(s, in.Now)
 		queue[s.ID] = dynamicqueue.SlotPosition{
-			Outcome:          dynamicqueue.OutcomePlaced,
 			ActualStart:      start,
 			AssignedResource: resource,
 			Recommitted:      recommitted,
+			Reclaimable:      reclaimable,
 		}
 
 		kind := dynamicqueue.StepKindPlace
@@ -91,6 +86,17 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 				Slot:   s.ID,
 				At:     start,
 				Detail: fmt.Sprintf("start changed from %s to %s", fmtTime(s.CommittedStart), fmtTime(start)),
+			})
+		}
+		if reclaimable {
+			// Grace lapsed but the slot keeps its place; the next-in-line user may
+			// reclaim it (§2.3).
+			trace = append(trace, dynamicqueue.Step{
+				Kind: dynamicqueue.StepKindReclaimable,
+				Slot: s.ID,
+				At:   in.Now,
+				Detail: fmt.Sprintf("reclaimable: committed %s + %dm grace lapsed by %s",
+					fmtTime(s.CommittedStart), e.clockInGrace, fmtTime(in.Now)),
 			})
 		}
 	}

@@ -67,20 +67,25 @@ func resources(ids ...string) []dynamicqueue.Resource {
 	return rs
 }
 
-// want is the expected verdict for one slot. start/resource/recommitted apply
-// only when outcome is OutcomePlaced.
+// want is the expected verdict for one slot: its placement plus the recommit and
+// reclaimable flags. Every SCHEDULED slot is placed (the schedule never fails, §8).
 type want struct {
-	outcome     dynamicqueue.Outcome
 	start       int
 	resource    string
 	recommitted bool
+	reclaimable bool
 }
 
 func placed(start int, resource string, recommitted bool) want {
-	return want{dynamicqueue.OutcomePlaced, start, resource, recommitted}
+	return want{start: start, resource: resource, recommitted: recommitted}
 }
 
-var noShow = want{outcome: dynamicqueue.OutcomeNoShow}
+// reclaimableAt is a placed slot whose clock-in grace has lapsed: it keeps its
+// place (the engine never auto-frees a no-show) but is flagged for the next-in-line
+// user to reclaim (§2.3).
+func reclaimableAt(start int, resource string, recommitted bool) want {
+	return want{start: start, resource: resource, recommitted: recommitted, reclaimable: true}
+}
 
 type tc struct {
 	name      string
@@ -206,17 +211,19 @@ func TestReschedule(t *testing.T) {
 		},
 		// ---- lifecycle ----
 		{
-			name:      "no-show after grace re-flows the queue",
+			name:      "grace lapsed flags a slot reclaimable but keeps its place",
 			grace:     15,
 			now:       20, // 09:20
 			resources: resources("r1"),
 			slots: []dynamicqueue.Slot{
 				sched("b", 1, 0, 60, 0, 0),    // committed 09:00; grace lapsed at 09:15
-				sched("c", 2, 90, 60, 30, 90), // desired 10:30, floor 10:00
+				sched("c", 2, 90, 60, 30, 90), // desired 10:30, floor 10:00, committed 10:30
 			},
 			want: map[string]want{
-				"b": noShow,
-				"c": placed(60, "r1", true), // pulled forward to 10:00
+				// b is NOT freed: it holds r1 from 09:20 (clamped to now), flagged
+				// reclaimable. c therefore waits behind it (10:20), not pulled to 10:00.
+				"b": reclaimableAt(20, "r1", true),
+				"c": placed(80, "r1", true),
 			},
 		},
 		{
@@ -254,17 +261,19 @@ func TestReschedule(t *testing.T) {
 		},
 		// ---- interactions (multiple mechanisms at once) ----
 		{
-			name:      "no-show frees capacity and the next slot pulls forward",
+			name:      "a reclaimable slot holds its resource; a free resource absorbs the next",
 			grace:     15,
 			now:       20, // 09:20
-			resources: resources("r1"),
+			resources: resources("r1", "r2"),
 			slots: []dynamicqueue.Slot{
-				sched("b", 1, 0, 60, 0, 0),    // committed 09:00; grace lapsed at 09:15 -> no-show
-				sched("c", 2, 30, 60, 30, 90), // floor 09:00, clamped to now; pulled forward
+				sched("b", 1, 0, 60, 0, 0),    // committed 09:00; grace lapsed -> reclaimable, holds r1
+				sched("c", 2, 30, 60, 30, -1), // brand-new booking, floor 09:00, clamped to now
 			},
 			want: map[string]want{
-				"b": noShow,
-				"c": placed(20, "r1", true), // 09:20
+				// b keeps r1 (not freed); c hops to the free r2 rather than waiting —
+				// reclaim doesn't stall multi-resource flow.
+				"b": reclaimableAt(20, "r1", true),
+				"c": placed(20, "r2", true),
 			},
 		},
 		{
@@ -308,7 +317,7 @@ func TestReschedule(t *testing.T) {
 			res, err := eng.Reschedule(in)
 			require.NoError(t, err)
 			checkQueue(t, c.want, res.Queue)
-			assertInvariants(t, in, res)
+			assertInvariants(t, in, res, dynamicqueue.Minutes(c.grace))
 
 			// Determinism (§4 invariant 6): identical input -> identical output.
 			res2, err := eng.Reschedule(in)
@@ -325,18 +334,15 @@ func checkQueue(t *testing.T, want map[string]want, got dynamicqueue.Queue) {
 	for id, w := range want {
 		pos, ok := got[dynamicqueue.SlotID(id)]
 		require.Truef(t, ok, "slot %q missing from queue", id)
-		assert.Equalf(t, w.outcome, pos.Outcome, "slot %q outcome", id)
-		if w.outcome != dynamicqueue.OutcomePlaced {
-			continue
-		}
 		assert.Truef(t, at(w.start).Equal(pos.ActualStart), "slot %q start: want %s got %s", id, at(w.start), pos.ActualStart)
 		assert.Equalf(t, dynamicqueue.ResourceID(w.resource), pos.AssignedResource, "slot %q resource", id)
 		assert.Equalf(t, w.recommitted, pos.Recommitted, "slot %q recommit flag", id)
+		assert.Equalf(t, w.reclaimable, pos.Reclaimable, "slot %q reclaimable flag", id)
 	}
 }
 
 // assertInvariants checks the §4 post-conditions of a result against its input.
-func assertInvariants(t *testing.T, in dynamicqueue.Input, res dynamicqueue.Result) {
+func assertInvariants(t *testing.T, in dynamicqueue.Input, res dynamicqueue.Result, grace dynamicqueue.Minutes) {
 	t.Helper()
 	byID := make(map[dynamicqueue.SlotID]dynamicqueue.Slot, len(in.Slots))
 	for _, s := range in.Slots {
@@ -354,21 +360,19 @@ func assertInvariants(t *testing.T, in dynamicqueue.Input, res dynamicqueue.Resu
 		require.Truef(t, ok, "queue references unknown slot %q", id)
 		assert.Truef(t, s.Status.IsOpen(), "queue includes non-scheduled slot %q", id)
 
-		switch pos.Outcome {
-		case dynamicqueue.OutcomePlaced:
-			// earliness floor + no time travel (invariants 4, 7).
-			assert.Falsef(t, pos.ActualStart.Before(s.EarliestStart()), "slot %q starts before its earliness floor", id)
-			assert.Falsef(t, pos.ActualStart.Before(in.Now), "slot %q starts before now", id)
-			assert.Truef(t, pos.AssignedResource.IsAssigned(), "placed slot %q has no resource", id)
-			// recommit flag is exactly "start changed from committed" (§2.2).
-			assert.Equalf(t, !pos.ActualStart.Equal(s.CommittedStart), pos.Recommitted, "slot %q recommit flag", id)
-			end := pos.ActualStart.Add(s.Duration.Duration()) // durations inviolable (invariant 3)
-			occupied[pos.AssignedResource] = append(occupied[pos.AssignedResource], span{pos.ActualStart, end, id})
-		case dynamicqueue.OutcomeNoShow:
-			assert.Falsef(t, pos.AssignedResource.IsAssigned(), "no-show slot %q has a resource", id)
-		default:
-			t.Fatalf("slot %q has unknown outcome %v", id, pos.Outcome)
-		}
+		// Every queued slot is placed — the schedule never fails (§8).
+		// Earliness floor + no time travel (invariants 4, 7).
+		assert.Falsef(t, pos.ActualStart.Before(s.EarliestStart()), "slot %q starts before its earliness floor", id)
+		assert.Falsef(t, pos.ActualStart.Before(in.Now), "slot %q starts before now", id)
+		assert.Truef(t, pos.AssignedResource.IsAssigned(), "placed slot %q has no resource", id)
+		// recommit flag is exactly "start changed from committed" (§2.2).
+		assert.Equalf(t, !pos.ActualStart.Equal(s.CommittedStart), pos.Recommitted, "slot %q recommit flag", id)
+		// reclaimable flag is exactly "committed start + grace has lapsed" (§2.3): a
+		// no-show keeps its place, flagged, rather than being freed.
+		wantReclaimable := !s.CommittedStart.IsZero() && in.Now.After(s.CommittedStart.Add(grace.Duration()))
+		assert.Equalf(t, wantReclaimable, pos.Reclaimable, "slot %q reclaimable flag", id)
+		end := pos.ActualStart.Add(s.Duration.Duration()) // durations inviolable (invariant 3)
+		occupied[pos.AssignedResource] = append(occupied[pos.AssignedResource], span{pos.ActualStart, end, id})
 	}
 
 	// ACTIVE slots are untouched (invariant 5): absent from the queue, and their

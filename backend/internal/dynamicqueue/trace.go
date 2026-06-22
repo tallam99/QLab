@@ -11,7 +11,7 @@ type StepKind int
 const (
 	StepKindUnknown      StepKind = iota
 	StepKindSeedResource          // seeded a resource's availability from active occupancy / now
-	StepKindNoShow                // swept a scheduled slot to NO_SHOW (grace lapsed)
+	StepKindReclaimable           // flagged a placed slot reclaimable (clock-in grace lapsed)
 	StepKindPlace                 // placed a slot at a start on a resource
 	StepKindGapFill               // placed a slot by backfilling an earlier gap
 	StepKindRecommit              // a placed slot's start changed from its committed start
