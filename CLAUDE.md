@@ -68,7 +68,7 @@ the `magefile.go` shares it, and `backend/` is a subtree, not a separate module.
 
     backend/    Go API + scheduling engine (internal/dynamicqueue is pure: no DB/HTTP/clock)
     frontend/   React PWA (scaffolded in a later phase)
-    proto/      .proto contract (buf; generated Go → backend/internal/gen, TS → frontend/src/gen)
+    proto/      .proto contract (buf; generated Go → backend/internal/protogen, TS → frontend/src/protogen)
     docs/       project docs
 
 Per-area `CLAUDE.md` files live with their directories.

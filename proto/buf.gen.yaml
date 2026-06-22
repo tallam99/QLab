@@ -10,18 +10,18 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/tallam99/qlab/backend/internal/gen
+      value: github.com/tallam99/qlab/backend/internal/protogen
 plugins:
   # Go message types.
   - local: ["go", "tool", "protoc-gen-go"]
-    out: ../backend/internal/gen
+    out: ../backend/internal/protogen
     opt: paths=source_relative
   # Go Connect-RPC server/client stubs.
   - local: ["go", "tool", "protoc-gen-connect-go"]
-    out: ../backend/internal/gen
+    out: ../backend/internal/protogen
     opt: paths=source_relative
   # TypeScript message types + Connect service descriptors (Connect-ES v2 emits
   # both from this one plugin). Consumed by the frontend via Connect-Query.
   - local: node_modules/.bin/protoc-gen-es
-    out: ../frontend/src/gen
+    out: ../frontend/src/protogen
     opt: target=ts

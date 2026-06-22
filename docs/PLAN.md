@@ -489,11 +489,13 @@ Connect service compiles and serves.
   `assigned_resource`, and a re-commit/notify flag, or a `NO_SHOW` outcome, per
   `docs/ALGORITHM.md` §5). There is **no** overflow/
   infeasible result — the schedule never fails (`docs/ALGORITHM.md` §8).
-- Define the service methods (list slots, create slot, clock in/out, cancel,
-  overrun) — stub them; implement in Phase 7.
+- Define the service methods (list slots, create slot, clock in/out, cancel, and
+  the user-driven resource-reclaim pair: poke an overrunning occupant, then
+  force-clock-out) — stub them; implement in Phase 7. Overrun's *schedule* effect
+  and the no-show sweep are backend-internal, not RPCs.
 - `buf.yaml` + `buf.gen.yaml`; wire `buf lint`, `buf breaking`, `buf generate` into
   the mage targets + CI. Add **`protovalidate`** rules (e.g. `lookahead ≥ 0`).
-- Generate Go stubs into `backend/internal/gen`, TS into `frontend/src/gen`.
+- Generate Go stubs into `backend/internal/protogen`, TS into `frontend/src/protogen`.
 - Mount the generated Connect handlers on the existing server; return
   `Unimplemented` for now.
 

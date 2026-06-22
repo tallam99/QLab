@@ -11,7 +11,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/tallam99/qlab/backend/internal/gen/qlab/v1/qlabv1connect"
+	"github.com/tallam99/qlab/backend/internal/protogen/qlab/v1/qlabv1connect"
 )
 
 // Service implements qlabv1connect.QlabServiceHandler. The embedded

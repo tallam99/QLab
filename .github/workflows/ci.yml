@@ -141,7 +141,7 @@ jobs:
         # --porcelain catches added/removed files too, not just modifications.
         run: |
           mage genProto
-          changes=$(git status --porcelain -- backend/internal/gen frontend/src/gen)
+          changes=$(git status --porcelain -- backend/internal/protogen frontend/src/protogen)
           if [ -n "$changes" ]; then
             echo "$changes"
             echo "::error::generated code is stale — run 'mage genProto' and commit"

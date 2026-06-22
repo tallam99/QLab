@@ -6,10 +6,11 @@ Yaak request for it (each reschedule scenario, each auth state, each error case)
 
 > **Status:** seeded in Phase 1 (`/healthq` + the `local` / `staging` /
 > `production` environments); now also carries `/readyq` and the Connect API
-> surface — `ListSlots` (read) plus the mutating RPCs (`CreateSlot`, `ClockIn`,
-> `ClockOut`, `CancelSlot`, `ReportOverrun`) in the Danger folder. The mutating
-> calls return `unimplemented` until the handlers are wired (Phase 7), at which
-> point each becomes a real reschedule-scenario request. See `docs/PLAN.md`.
+> surface — `ListSlots` (read) plus the side-effecting RPCs (`CreateSlot`,
+> `ClockIn`, `ClockOut`, `CancelSlot`, and the reclaim pair `PokeOccupant` /
+> `ForceClockOut`) in the Danger folder. They return `unimplemented` until the
+> handlers are wired (Phase 7), at which point each becomes a real
+> reschedule-scenario request. See `docs/PLAN.md`.
 
 ## Contents
 

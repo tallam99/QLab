@@ -364,13 +364,13 @@
       },
       {
         "model": "http_request",
-        "id": "rq_overrunAAAA",
+        "id": "rq_pokeOccupnt",
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
-        "name": "ReportOverrun",
-        "description": "Connect-RPC (JSON over HTTP): extend an active slot's projected end (it is running past its scheduled end), then reschedule (push people behind). Currently a Connect `unimplemented` error.",
+        "name": "PokeOccupant",
+        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, nudge the occupant of an overrunning slot to wrap up (the backend notifies them). Step one of a resource reclaim; changes no schedule state. In the Danger folder because it triggers a real notification. Currently a Connect `unimplemented` error.",
         "method": "POST",
-        "url": "${[ base_url ]}/qlab.v1.QlabService/ReportOverrun",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/PokeOccupant",
         "headers": [
           {
             "enabled": true,
@@ -389,10 +389,42 @@
         "authentication": {},
         "authenticationType": null,
         "body": {
-          "text": "{\n  \"slotId\": \"${[ slot_id ]}\",\n  \"projectedEnd\": \"2026-06-21T16:30:00Z\"\n}"
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
         },
         "bodyType": "application/json",
         "sortPriority": 7000.0
+      },
+      {
+        "model": "http_request",
+        "id": "rq_forceClkout",
+        "workspaceId": "wk_igZobFKXDr",
+        "folderId": "fl_FVRufW7bBP",
+        "name": "ForceClockOut",
+        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, boot the occupant of an overrunning slot (settles it COMPLETE, frees the resource), then reschedule (pull-forward). Step two of a reclaim, the escalation when a poke goes unheeded. Currently a Connect `unimplemented` error.",
+        "method": "POST",
+        "url": "${[ base_url ]}/qlab.v1.QlabService/ForceClockOut",
+        "headers": [
+          {
+            "enabled": true,
+            "name": "Content-Type",
+            "value": "application/json",
+            "id": null
+          },
+          {
+            "enabled": true,
+            "name": "Authorization",
+            "value": "Bearer ${[ auth_token ]}",
+            "id": null
+          }
+        ],
+        "urlParameters": [],
+        "authentication": {},
+        "authenticationType": null,
+        "body": {
+          "text": "{\n  \"slotId\": \"${[ slot_id ]}\"\n}"
+        },
+        "bodyType": "application/json",
+        "sortPriority": 8000.0
       }
     ]
   }

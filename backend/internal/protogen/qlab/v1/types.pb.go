@@ -13,7 +13,7 @@
 package qlabv1
 
 import (
-	_ "github.com/tallam99/qlab/backend/internal/gen/buf/validate"
+	_ "github.com/tallam99/qlab/backend/internal/protogen/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1098,9 +1098,9 @@ const file_qlab_v1_types_proto_rawDesc = "" +
 	"\x1cQUEUE_EVENT_TYPE_CLOCKED_OUT\x10\x03\x12\x1e\n" +
 	"\x1aQUEUE_EVENT_TYPE_CANCELLED\x10\x04\x12\x1c\n" +
 	"\x18QUEUE_EVENT_TYPE_OVERRUN\x10\x05\x12\x1c\n" +
-	"\x18QUEUE_EVENT_TYPE_NO_SHOW\x10\x06B\x94\x01\n" +
+	"\x18QUEUE_EVENT_TYPE_NO_SHOW\x10\x06B\x99\x01\n" +
 	"\vcom.qlab.v1B\n" +
-	"TypesProtoP\x01Z<github.com/tallam99/qlab/backend/internal/gen/qlab/v1;qlabv1\xa2\x02\x03QXX\xaa\x02\aQlab.V1\xca\x02\aQlab\\V1\xe2\x02\x13Qlab\\V1\\GPBMetadata\xea\x02\bQlab::V1b\x06proto3"
+	"TypesProtoP\x01ZAgithub.com/tallam99/qlab/backend/internal/protogen/qlab/v1;qlabv1\xa2\x02\x03QXX\xaa\x02\aQlab.V1\xca\x02\aQlab\\V1\xe2\x02\x13Qlab\\V1\\GPBMetadata\xea\x02\bQlab::V1b\x06proto3"
 
 var (
 	file_qlab_v1_types_proto_rawDescOnce sync.Once

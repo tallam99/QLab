@@ -9,7 +9,7 @@ local-vs-cloud rule. **Current status: Phase 6** — the HTTP service + local Co
 stack (Phase 2), the pure scheduling engine (`internal/dynamicqueue`, Phase 4), the
 data model (goose migrations with a self-enforcing schema in `migrations/`, a
 local-only seed `seed/seed.sql`, the `store` query layer, and the `schema_test`
-suite, Phase 5), and now the proto contract: generated types in `internal/gen` and
+suite, Phase 5), and now the proto contract: generated types in `internal/protogen` and
 a stubbed Connect service (`internal/api`) mounted on the router. The real API
 endpoints (wiring engine ⇄ store ⇄ Connect) land next.
 
@@ -55,7 +55,7 @@ endpoints (wiring engine ⇄ store ⇄ Connect) land next.
   (same-origin only) rather than the underlying library's "allow all" default;
   origins come from config (`CORS_ALLOWED_ORIGINS`, set per environment to the
   Firebase Hosting origin).
-- `internal/gen/` — **generated** Go from the `proto/qlab/v1` contract (`mage
+- `internal/protogen/` — **generated** Go from the `proto/qlab/v1` contract (`mage
   genProto`); committed, never hand-edited. `qlab/v1` holds the message types,
   `qlab/v1/qlabv1connect` the Connect server/client stubs. The pure engine and the
   store never import this — proto ⇄ domain conversions live in the handlers.

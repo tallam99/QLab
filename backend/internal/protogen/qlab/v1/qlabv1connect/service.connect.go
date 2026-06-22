@@ -12,7 +12,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/tallam99/qlab/backend/internal/gen/qlab/v1"
+	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	http "net/http"
 	strings "strings"
 )
@@ -47,9 +47,12 @@ const (
 	QlabServiceClockOutProcedure = "/qlab.v1.QlabService/ClockOut"
 	// QlabServiceCancelSlotProcedure is the fully-qualified name of the QlabService's CancelSlot RPC.
 	QlabServiceCancelSlotProcedure = "/qlab.v1.QlabService/CancelSlot"
-	// QlabServiceReportOverrunProcedure is the fully-qualified name of the QlabService's ReportOverrun
+	// QlabServicePokeOccupantProcedure is the fully-qualified name of the QlabService's PokeOccupant
 	// RPC.
-	QlabServiceReportOverrunProcedure = "/qlab.v1.QlabService/ReportOverrun"
+	QlabServicePokeOccupantProcedure = "/qlab.v1.QlabService/PokeOccupant"
+	// QlabServiceForceClockOutProcedure is the fully-qualified name of the QlabService's ForceClockOut
+	// RPC.
+	QlabServiceForceClockOutProcedure = "/qlab.v1.QlabService/ForceClockOut"
 )
 
 // QlabServiceClient is a client for the qlab.v1.QlabService service.
@@ -59,7 +62,8 @@ type QlabServiceClient interface {
 	ClockIn(context.Context, *connect.Request[v1.ClockInRequest]) (*connect.Response[v1.ClockInResponse], error)
 	ClockOut(context.Context, *connect.Request[v1.ClockOutRequest]) (*connect.Response[v1.ClockOutResponse], error)
 	CancelSlot(context.Context, *connect.Request[v1.CancelSlotRequest]) (*connect.Response[v1.CancelSlotResponse], error)
-	ReportOverrun(context.Context, *connect.Request[v1.ReportOverrunRequest]) (*connect.Response[v1.ReportOverrunResponse], error)
+	PokeOccupant(context.Context, *connect.Request[v1.PokeOccupantRequest]) (*connect.Response[v1.PokeOccupantResponse], error)
+	ForceClockOut(context.Context, *connect.Request[v1.ForceClockOutRequest]) (*connect.Response[v1.ForceClockOutResponse], error)
 }
 
 // NewQlabServiceClient constructs a client for the qlab.v1.QlabService service. By default, it uses
@@ -103,10 +107,16 @@ func NewQlabServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(qlabServiceMethods.ByName("CancelSlot")),
 			connect.WithClientOptions(opts...),
 		),
-		reportOverrun: connect.NewClient[v1.ReportOverrunRequest, v1.ReportOverrunResponse](
+		pokeOccupant: connect.NewClient[v1.PokeOccupantRequest, v1.PokeOccupantResponse](
 			httpClient,
-			baseURL+QlabServiceReportOverrunProcedure,
-			connect.WithSchema(qlabServiceMethods.ByName("ReportOverrun")),
+			baseURL+QlabServicePokeOccupantProcedure,
+			connect.WithSchema(qlabServiceMethods.ByName("PokeOccupant")),
+			connect.WithClientOptions(opts...),
+		),
+		forceClockOut: connect.NewClient[v1.ForceClockOutRequest, v1.ForceClockOutResponse](
+			httpClient,
+			baseURL+QlabServiceForceClockOutProcedure,
+			connect.WithSchema(qlabServiceMethods.ByName("ForceClockOut")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -119,7 +129,8 @@ type qlabServiceClient struct {
 	clockIn       *connect.Client[v1.ClockInRequest, v1.ClockInResponse]
 	clockOut      *connect.Client[v1.ClockOutRequest, v1.ClockOutResponse]
 	cancelSlot    *connect.Client[v1.CancelSlotRequest, v1.CancelSlotResponse]
-	reportOverrun *connect.Client[v1.ReportOverrunRequest, v1.ReportOverrunResponse]
+	pokeOccupant  *connect.Client[v1.PokeOccupantRequest, v1.PokeOccupantResponse]
+	forceClockOut *connect.Client[v1.ForceClockOutRequest, v1.ForceClockOutResponse]
 }
 
 // ListSlots calls qlab.v1.QlabService.ListSlots.
@@ -147,9 +158,14 @@ func (c *qlabServiceClient) CancelSlot(ctx context.Context, req *connect.Request
 	return c.cancelSlot.CallUnary(ctx, req)
 }
 
-// ReportOverrun calls qlab.v1.QlabService.ReportOverrun.
-func (c *qlabServiceClient) ReportOverrun(ctx context.Context, req *connect.Request[v1.ReportOverrunRequest]) (*connect.Response[v1.ReportOverrunResponse], error) {
-	return c.reportOverrun.CallUnary(ctx, req)
+// PokeOccupant calls qlab.v1.QlabService.PokeOccupant.
+func (c *qlabServiceClient) PokeOccupant(ctx context.Context, req *connect.Request[v1.PokeOccupantRequest]) (*connect.Response[v1.PokeOccupantResponse], error) {
+	return c.pokeOccupant.CallUnary(ctx, req)
+}
+
+// ForceClockOut calls qlab.v1.QlabService.ForceClockOut.
+func (c *qlabServiceClient) ForceClockOut(ctx context.Context, req *connect.Request[v1.ForceClockOutRequest]) (*connect.Response[v1.ForceClockOutResponse], error) {
+	return c.forceClockOut.CallUnary(ctx, req)
 }
 
 // QlabServiceHandler is an implementation of the qlab.v1.QlabService service.
@@ -159,7 +175,8 @@ type QlabServiceHandler interface {
 	ClockIn(context.Context, *connect.Request[v1.ClockInRequest]) (*connect.Response[v1.ClockInResponse], error)
 	ClockOut(context.Context, *connect.Request[v1.ClockOutRequest]) (*connect.Response[v1.ClockOutResponse], error)
 	CancelSlot(context.Context, *connect.Request[v1.CancelSlotRequest]) (*connect.Response[v1.CancelSlotResponse], error)
-	ReportOverrun(context.Context, *connect.Request[v1.ReportOverrunRequest]) (*connect.Response[v1.ReportOverrunResponse], error)
+	PokeOccupant(context.Context, *connect.Request[v1.PokeOccupantRequest]) (*connect.Response[v1.PokeOccupantResponse], error)
+	ForceClockOut(context.Context, *connect.Request[v1.ForceClockOutRequest]) (*connect.Response[v1.ForceClockOutResponse], error)
 }
 
 // NewQlabServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -199,10 +216,16 @@ func NewQlabServiceHandler(svc QlabServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(qlabServiceMethods.ByName("CancelSlot")),
 		connect.WithHandlerOptions(opts...),
 	)
-	qlabServiceReportOverrunHandler := connect.NewUnaryHandler(
-		QlabServiceReportOverrunProcedure,
-		svc.ReportOverrun,
-		connect.WithSchema(qlabServiceMethods.ByName("ReportOverrun")),
+	qlabServicePokeOccupantHandler := connect.NewUnaryHandler(
+		QlabServicePokeOccupantProcedure,
+		svc.PokeOccupant,
+		connect.WithSchema(qlabServiceMethods.ByName("PokeOccupant")),
+		connect.WithHandlerOptions(opts...),
+	)
+	qlabServiceForceClockOutHandler := connect.NewUnaryHandler(
+		QlabServiceForceClockOutProcedure,
+		svc.ForceClockOut,
+		connect.WithSchema(qlabServiceMethods.ByName("ForceClockOut")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/qlab.v1.QlabService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -217,8 +240,10 @@ func NewQlabServiceHandler(svc QlabServiceHandler, opts ...connect.HandlerOption
 			qlabServiceClockOutHandler.ServeHTTP(w, r)
 		case QlabServiceCancelSlotProcedure:
 			qlabServiceCancelSlotHandler.ServeHTTP(w, r)
-		case QlabServiceReportOverrunProcedure:
-			qlabServiceReportOverrunHandler.ServeHTTP(w, r)
+		case QlabServicePokeOccupantProcedure:
+			qlabServicePokeOccupantHandler.ServeHTTP(w, r)
+		case QlabServiceForceClockOutProcedure:
+			qlabServiceForceClockOutHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -248,6 +273,10 @@ func (UnimplementedQlabServiceHandler) CancelSlot(context.Context, *connect.Requ
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.CancelSlot is not implemented"))
 }
 
-func (UnimplementedQlabServiceHandler) ReportOverrun(context.Context, *connect.Request[v1.ReportOverrunRequest]) (*connect.Response[v1.ReportOverrunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.ReportOverrun is not implemented"))
+func (UnimplementedQlabServiceHandler) PokeOccupant(context.Context, *connect.Request[v1.PokeOccupantRequest]) (*connect.Response[v1.PokeOccupantResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.PokeOccupant is not implemented"))
+}
+
+func (UnimplementedQlabServiceHandler) ForceClockOut(context.Context, *connect.Request[v1.ForceClockOutRequest]) (*connect.Response[v1.ForceClockOutResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.ForceClockOut is not implemented"))
 }

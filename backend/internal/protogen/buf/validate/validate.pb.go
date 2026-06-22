@@ -8861,8 +8861,8 @@ const file_buf_validate_validate_proto_rawDesc = "" +
 	"\x05field\x12\x1d.google.protobuf.FieldOptions\x18\x87\t \x01(\v2\x18.buf.validate.FieldRulesR\x05field:]\n" +
 	"\n" +
 	"predefined\x12\x1d.google.protobuf.FieldOptions\x18\x88\t \x01(\v2\x1d.buf.validate.PredefinedRulesR\n" +
-	"predefinedB\xae\x01\n" +
-	"\x10com.buf.validateB\rValidateProtoP\x01Z:github.com/tallam99/qlab/backend/internal/gen/buf/validate\xa2\x02\x03BVX\xaa\x02\fBuf.Validate\xca\x02\fBuf\\Validate\xe2\x02\x18Buf\\Validate\\GPBMetadata\xea\x02\rBuf::Validate"
+	"predefinedB\xb3\x01\n" +
+	"\x10com.buf.validateB\rValidateProtoP\x01Z?github.com/tallam99/qlab/backend/internal/protogen/buf/validate\xa2\x02\x03BVX\xaa\x02\fBuf.Validate\xca\x02\fBuf\\Validate\xe2\x02\x18Buf\\Validate\\GPBMetadata\xea\x02\rBuf::Validate"
 
 var (
 	file_buf_validate_validate_proto_rawDescOnce sync.Once

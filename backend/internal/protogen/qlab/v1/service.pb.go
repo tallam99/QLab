@@ -12,7 +12,7 @@
 package qlabv1
 
 import (
-	_ "github.com/tallam99/qlab/backend/internal/gen/buf/validate"
+	_ "github.com/tallam99/qlab/backend/internal/protogen/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -328,30 +328,31 @@ func (x *CancelSlotRequest) GetSlotId() string {
 	return ""
 }
 
-// ReportOverrun extends an active slot's projected end (it is running past its
-// scheduled end), pushing the people behind it.
-type ReportOverrunRequest struct {
+// PokeOccupant nudges the user holding an overrunning slot to wrap up (the backend
+// notifies them). It is the courtesy first step of a resource reclaim, called by
+// the next-in-line user — not the backend, which never pokes proactively. It
+// changes no schedule state.
+type PokeOccupantRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SlotId        string                 `protobuf:"bytes,1,opt,name=slot_id,json=slotId,proto3" json:"slot_id,omitempty"`
-	ProjectedEnd  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=projected_end,json=projectedEnd,proto3" json:"projected_end,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ReportOverrunRequest) Reset() {
-	*x = ReportOverrunRequest{}
+func (x *PokeOccupantRequest) Reset() {
+	*x = PokeOccupantRequest{}
 	mi := &file_qlab_v1_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ReportOverrunRequest) String() string {
+func (x *PokeOccupantRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ReportOverrunRequest) ProtoMessage() {}
+func (*PokeOccupantRequest) ProtoMessage() {}
 
-func (x *ReportOverrunRequest) ProtoReflect() protoreflect.Message {
+func (x *PokeOccupantRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_qlab_v1_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -363,26 +364,68 @@ func (x *ReportOverrunRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReportOverrunRequest.ProtoReflect.Descriptor instead.
-func (*ReportOverrunRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use PokeOccupantRequest.ProtoReflect.Descriptor instead.
+func (*PokeOccupantRequest) Descriptor() ([]byte, []int) {
 	return file_qlab_v1_service_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ReportOverrunRequest) GetSlotId() string {
+func (x *PokeOccupantRequest) GetSlotId() string {
 	if x != nil {
 		return x.SlotId
 	}
 	return ""
 }
 
-func (x *ReportOverrunRequest) GetProjectedEnd() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ProjectedEnd
-	}
-	return nil
+// ForceClockOut boots the user holding an overrunning slot (settles it COMPLETE and
+// frees its resource), then reschedules. Called by the next-in-line user as the
+// escalation when a poke goes unheeded; the wait and the decision to escalate are
+// the users', not the backend's. Authorization (caller is next-in-line for that
+// resource, occupant is past their scheduled end) is enforced server-side.
+type ForceClockOutRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SlotId        string                 `protobuf:"bytes,1,opt,name=slot_id,json=slotId,proto3" json:"slot_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-// Every mutating RPC returns the recomputed schedule. They carry the same
+func (x *ForceClockOutRequest) Reset() {
+	*x = ForceClockOutRequest{}
+	mi := &file_qlab_v1_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForceClockOutRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForceClockOutRequest) ProtoMessage() {}
+
+func (x *ForceClockOutRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_qlab_v1_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForceClockOutRequest.ProtoReflect.Descriptor instead.
+func (*ForceClockOutRequest) Descriptor() ([]byte, []int) {
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ForceClockOutRequest) GetSlotId() string {
+	if x != nil {
+		return x.SlotId
+	}
+	return ""
+}
+
+// Most mutating RPCs return the recomputed schedule. They carry the same
 // RescheduleResult but are distinct types (one response per RPC) so the contract
 // can evolve per method without a breaking change rippling across all of them.
 type CreateSlotResponse struct {
@@ -394,7 +437,7 @@ type CreateSlotResponse struct {
 
 func (x *CreateSlotResponse) Reset() {
 	*x = CreateSlotResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[7]
+	mi := &file_qlab_v1_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -406,7 +449,7 @@ func (x *CreateSlotResponse) String() string {
 func (*CreateSlotResponse) ProtoMessage() {}
 
 func (x *CreateSlotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[7]
+	mi := &file_qlab_v1_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -419,7 +462,7 @@ func (x *CreateSlotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSlotResponse.ProtoReflect.Descriptor instead.
 func (*CreateSlotResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{7}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CreateSlotResponse) GetResult() *RescheduleResult {
@@ -438,7 +481,7 @@ type ClockInResponse struct {
 
 func (x *ClockInResponse) Reset() {
 	*x = ClockInResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[8]
+	mi := &file_qlab_v1_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -450,7 +493,7 @@ func (x *ClockInResponse) String() string {
 func (*ClockInResponse) ProtoMessage() {}
 
 func (x *ClockInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[8]
+	mi := &file_qlab_v1_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -463,7 +506,7 @@ func (x *ClockInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClockInResponse.ProtoReflect.Descriptor instead.
 func (*ClockInResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{8}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ClockInResponse) GetResult() *RescheduleResult {
@@ -482,7 +525,7 @@ type ClockOutResponse struct {
 
 func (x *ClockOutResponse) Reset() {
 	*x = ClockOutResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[9]
+	mi := &file_qlab_v1_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -494,7 +537,7 @@ func (x *ClockOutResponse) String() string {
 func (*ClockOutResponse) ProtoMessage() {}
 
 func (x *ClockOutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[9]
+	mi := &file_qlab_v1_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -507,7 +550,7 @@ func (x *ClockOutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClockOutResponse.ProtoReflect.Descriptor instead.
 func (*ClockOutResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{9}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ClockOutResponse) GetResult() *RescheduleResult {
@@ -526,7 +569,7 @@ type CancelSlotResponse struct {
 
 func (x *CancelSlotResponse) Reset() {
 	*x = CancelSlotResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[10]
+	mi := &file_qlab_v1_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -538,7 +581,7 @@ func (x *CancelSlotResponse) String() string {
 func (*CancelSlotResponse) ProtoMessage() {}
 
 func (x *CancelSlotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[10]
+	mi := &file_qlab_v1_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -551,7 +594,7 @@ func (x *CancelSlotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelSlotResponse.ProtoReflect.Descriptor instead.
 func (*CancelSlotResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{10}
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CancelSlotResponse) GetResult() *RescheduleResult {
@@ -561,28 +604,28 @@ func (x *CancelSlotResponse) GetResult() *RescheduleResult {
 	return nil
 }
 
-type ReportOverrunResponse struct {
+type ForceClockOutResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Result        *RescheduleResult      `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ReportOverrunResponse) Reset() {
-	*x = ReportOverrunResponse{}
-	mi := &file_qlab_v1_service_proto_msgTypes[11]
+func (x *ForceClockOutResponse) Reset() {
+	*x = ForceClockOutResponse{}
+	mi := &file_qlab_v1_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ReportOverrunResponse) String() string {
+func (x *ForceClockOutResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ReportOverrunResponse) ProtoMessage() {}
+func (*ForceClockOutResponse) ProtoMessage() {}
 
-func (x *ReportOverrunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_qlab_v1_service_proto_msgTypes[11]
+func (x *ForceClockOutResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_qlab_v1_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -593,16 +636,54 @@ func (x *ReportOverrunResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReportOverrunResponse.ProtoReflect.Descriptor instead.
-func (*ReportOverrunResponse) Descriptor() ([]byte, []int) {
-	return file_qlab_v1_service_proto_rawDescGZIP(), []int{11}
+// Deprecated: Use ForceClockOutResponse.ProtoReflect.Descriptor instead.
+func (*ForceClockOutResponse) Descriptor() ([]byte, []int) {
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *ReportOverrunResponse) GetResult() *RescheduleResult {
+func (x *ForceClockOutResponse) GetResult() *RescheduleResult {
 	if x != nil {
 		return x.Result
 	}
 	return nil
+}
+
+// PokeOccupant only sends a nudge, so it changes no schedule state and its response
+// is empty.
+type PokeOccupantResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PokeOccupantResponse) Reset() {
+	*x = PokeOccupantResponse{}
+	mi := &file_qlab_v1_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PokeOccupantResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PokeOccupantResponse) ProtoMessage() {}
+
+func (x *PokeOccupantResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_qlab_v1_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PokeOccupantResponse.ProtoReflect.Descriptor instead.
+func (*PokeOccupantResponse) Descriptor() ([]byte, []int) {
+	return file_qlab_v1_service_proto_rawDescGZIP(), []int{13}
 }
 
 var File_qlab_v1_service_proto protoreflect.FileDescriptor
@@ -625,10 +706,11 @@ const file_qlab_v1_service_proto_rawDesc = "" +
 	"\x0fClockOutRequest\x12 \n" +
 	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"5\n" +
 	"\x11CancelSlotRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"y\n" +
-	"\x14ReportOverrunRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\x12?\n" +
-	"\rprojected_end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fprojectedEnd\"G\n" +
+	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"7\n" +
+	"\x13PokeOccupantRequest\x12 \n" +
+	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"8\n" +
+	"\x14ForceClockOutRequest\x12 \n" +
+	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"G\n" +
 	"\x12CreateSlotResponse\x121\n" +
 	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"D\n" +
 	"\x0fClockInResponse\x121\n" +
@@ -637,8 +719,9 @@ const file_qlab_v1_service_proto_rawDesc = "" +
 	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"G\n" +
 	"\x12CancelSlotResponse\x121\n" +
 	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"J\n" +
-	"\x15ReportOverrunResponse\x121\n" +
-	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result2\xae\x03\n" +
+	"\x15ForceClockOutResponse\x121\n" +
+	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"\x16\n" +
+	"\x14PokeOccupantResponse2\xfb\x03\n" +
 	"\vQlabService\x12B\n" +
 	"\tListSlots\x12\x19.qlab.v1.ListSlotsRequest\x1a\x1a.qlab.v1.ListSlotsResponse\x12E\n" +
 	"\n" +
@@ -646,9 +729,10 @@ const file_qlab_v1_service_proto_rawDesc = "" +
 	"\aClockIn\x12\x17.qlab.v1.ClockInRequest\x1a\x18.qlab.v1.ClockInResponse\x12?\n" +
 	"\bClockOut\x12\x18.qlab.v1.ClockOutRequest\x1a\x19.qlab.v1.ClockOutResponse\x12E\n" +
 	"\n" +
-	"CancelSlot\x12\x1a.qlab.v1.CancelSlotRequest\x1a\x1b.qlab.v1.CancelSlotResponse\x12N\n" +
-	"\rReportOverrun\x12\x1d.qlab.v1.ReportOverrunRequest\x1a\x1e.qlab.v1.ReportOverrunResponseB\x96\x01\n" +
-	"\vcom.qlab.v1B\fServiceProtoP\x01Z<github.com/tallam99/qlab/backend/internal/gen/qlab/v1;qlabv1\xa2\x02\x03QXX\xaa\x02\aQlab.V1\xca\x02\aQlab\\V1\xe2\x02\x13Qlab\\V1\\GPBMetadata\xea\x02\bQlab::V1b\x06proto3"
+	"CancelSlot\x12\x1a.qlab.v1.CancelSlotRequest\x1a\x1b.qlab.v1.CancelSlotResponse\x12K\n" +
+	"\fPokeOccupant\x12\x1c.qlab.v1.PokeOccupantRequest\x1a\x1d.qlab.v1.PokeOccupantResponse\x12N\n" +
+	"\rForceClockOut\x12\x1d.qlab.v1.ForceClockOutRequest\x1a\x1e.qlab.v1.ForceClockOutResponseB\x9b\x01\n" +
+	"\vcom.qlab.v1B\fServiceProtoP\x01ZAgithub.com/tallam99/qlab/backend/internal/protogen/qlab/v1;qlabv1\xa2\x02\x03QXX\xaa\x02\aQlab.V1\xca\x02\aQlab\\V1\xe2\x02\x13Qlab\\V1\\GPBMetadata\xea\x02\bQlab::V1b\x06proto3"
 
 var (
 	file_qlab_v1_service_proto_rawDescOnce sync.Once
@@ -662,7 +746,7 @@ func file_qlab_v1_service_proto_rawDescGZIP() []byte {
 	return file_qlab_v1_service_proto_rawDescData
 }
 
-var file_qlab_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_qlab_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_qlab_v1_service_proto_goTypes = []any{
 	(*ListSlotsRequest)(nil),      // 0: qlab.v1.ListSlotsRequest
 	(*ListSlotsResponse)(nil),     // 1: qlab.v1.ListSlotsResponse
@@ -670,42 +754,45 @@ var file_qlab_v1_service_proto_goTypes = []any{
 	(*ClockInRequest)(nil),        // 3: qlab.v1.ClockInRequest
 	(*ClockOutRequest)(nil),       // 4: qlab.v1.ClockOutRequest
 	(*CancelSlotRequest)(nil),     // 5: qlab.v1.CancelSlotRequest
-	(*ReportOverrunRequest)(nil),  // 6: qlab.v1.ReportOverrunRequest
-	(*CreateSlotResponse)(nil),    // 7: qlab.v1.CreateSlotResponse
-	(*ClockInResponse)(nil),       // 8: qlab.v1.ClockInResponse
-	(*ClockOutResponse)(nil),      // 9: qlab.v1.ClockOutResponse
-	(*CancelSlotResponse)(nil),    // 10: qlab.v1.CancelSlotResponse
-	(*ReportOverrunResponse)(nil), // 11: qlab.v1.ReportOverrunResponse
-	(*Slot)(nil),                  // 12: qlab.v1.Slot
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
-	(*RescheduleResult)(nil),      // 14: qlab.v1.RescheduleResult
+	(*PokeOccupantRequest)(nil),   // 6: qlab.v1.PokeOccupantRequest
+	(*ForceClockOutRequest)(nil),  // 7: qlab.v1.ForceClockOutRequest
+	(*CreateSlotResponse)(nil),    // 8: qlab.v1.CreateSlotResponse
+	(*ClockInResponse)(nil),       // 9: qlab.v1.ClockInResponse
+	(*ClockOutResponse)(nil),      // 10: qlab.v1.ClockOutResponse
+	(*CancelSlotResponse)(nil),    // 11: qlab.v1.CancelSlotResponse
+	(*ForceClockOutResponse)(nil), // 12: qlab.v1.ForceClockOutResponse
+	(*PokeOccupantResponse)(nil),  // 13: qlab.v1.PokeOccupantResponse
+	(*Slot)(nil),                  // 14: qlab.v1.Slot
+	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
+	(*RescheduleResult)(nil),      // 16: qlab.v1.RescheduleResult
 }
 var file_qlab_v1_service_proto_depIdxs = []int32{
-	12, // 0: qlab.v1.ListSlotsResponse.slots:type_name -> qlab.v1.Slot
-	13, // 1: qlab.v1.CreateSlotRequest.desired_start:type_name -> google.protobuf.Timestamp
-	13, // 2: qlab.v1.ReportOverrunRequest.projected_end:type_name -> google.protobuf.Timestamp
-	14, // 3: qlab.v1.CreateSlotResponse.result:type_name -> qlab.v1.RescheduleResult
-	14, // 4: qlab.v1.ClockInResponse.result:type_name -> qlab.v1.RescheduleResult
-	14, // 5: qlab.v1.ClockOutResponse.result:type_name -> qlab.v1.RescheduleResult
-	14, // 6: qlab.v1.CancelSlotResponse.result:type_name -> qlab.v1.RescheduleResult
-	14, // 7: qlab.v1.ReportOverrunResponse.result:type_name -> qlab.v1.RescheduleResult
-	0,  // 8: qlab.v1.QlabService.ListSlots:input_type -> qlab.v1.ListSlotsRequest
-	2,  // 9: qlab.v1.QlabService.CreateSlot:input_type -> qlab.v1.CreateSlotRequest
-	3,  // 10: qlab.v1.QlabService.ClockIn:input_type -> qlab.v1.ClockInRequest
-	4,  // 11: qlab.v1.QlabService.ClockOut:input_type -> qlab.v1.ClockOutRequest
-	5,  // 12: qlab.v1.QlabService.CancelSlot:input_type -> qlab.v1.CancelSlotRequest
-	6,  // 13: qlab.v1.QlabService.ReportOverrun:input_type -> qlab.v1.ReportOverrunRequest
+	14, // 0: qlab.v1.ListSlotsResponse.slots:type_name -> qlab.v1.Slot
+	15, // 1: qlab.v1.CreateSlotRequest.desired_start:type_name -> google.protobuf.Timestamp
+	16, // 2: qlab.v1.CreateSlotResponse.result:type_name -> qlab.v1.RescheduleResult
+	16, // 3: qlab.v1.ClockInResponse.result:type_name -> qlab.v1.RescheduleResult
+	16, // 4: qlab.v1.ClockOutResponse.result:type_name -> qlab.v1.RescheduleResult
+	16, // 5: qlab.v1.CancelSlotResponse.result:type_name -> qlab.v1.RescheduleResult
+	16, // 6: qlab.v1.ForceClockOutResponse.result:type_name -> qlab.v1.RescheduleResult
+	0,  // 7: qlab.v1.QlabService.ListSlots:input_type -> qlab.v1.ListSlotsRequest
+	2,  // 8: qlab.v1.QlabService.CreateSlot:input_type -> qlab.v1.CreateSlotRequest
+	3,  // 9: qlab.v1.QlabService.ClockIn:input_type -> qlab.v1.ClockInRequest
+	4,  // 10: qlab.v1.QlabService.ClockOut:input_type -> qlab.v1.ClockOutRequest
+	5,  // 11: qlab.v1.QlabService.CancelSlot:input_type -> qlab.v1.CancelSlotRequest
+	6,  // 12: qlab.v1.QlabService.PokeOccupant:input_type -> qlab.v1.PokeOccupantRequest
+	7,  // 13: qlab.v1.QlabService.ForceClockOut:input_type -> qlab.v1.ForceClockOutRequest
 	1,  // 14: qlab.v1.QlabService.ListSlots:output_type -> qlab.v1.ListSlotsResponse
-	7,  // 15: qlab.v1.QlabService.CreateSlot:output_type -> qlab.v1.CreateSlotResponse
-	8,  // 16: qlab.v1.QlabService.ClockIn:output_type -> qlab.v1.ClockInResponse
-	9,  // 17: qlab.v1.QlabService.ClockOut:output_type -> qlab.v1.ClockOutResponse
-	10, // 18: qlab.v1.QlabService.CancelSlot:output_type -> qlab.v1.CancelSlotResponse
-	11, // 19: qlab.v1.QlabService.ReportOverrun:output_type -> qlab.v1.ReportOverrunResponse
-	14, // [14:20] is the sub-list for method output_type
-	8,  // [8:14] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	8,  // 15: qlab.v1.QlabService.CreateSlot:output_type -> qlab.v1.CreateSlotResponse
+	9,  // 16: qlab.v1.QlabService.ClockIn:output_type -> qlab.v1.ClockInResponse
+	10, // 17: qlab.v1.QlabService.ClockOut:output_type -> qlab.v1.ClockOutResponse
+	11, // 18: qlab.v1.QlabService.CancelSlot:output_type -> qlab.v1.CancelSlotResponse
+	13, // 19: qlab.v1.QlabService.PokeOccupant:output_type -> qlab.v1.PokeOccupantResponse
+	12, // 20: qlab.v1.QlabService.ForceClockOut:output_type -> qlab.v1.ForceClockOutResponse
+	14, // [14:21] is the sub-list for method output_type
+	7,  // [7:14] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_qlab_v1_service_proto_init() }
@@ -720,7 +807,7 @@ func file_qlab_v1_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_qlab_v1_service_proto_rawDesc), len(file_qlab_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

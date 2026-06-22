@@ -42,14 +42,24 @@ message CancelSlotRequest {
   string slot_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
-// ReportOverrun extends an active slot's projected end (it is running past its
-// scheduled end), pushing the people behind it.
-message ReportOverrunRequest {
+// PokeOccupant nudges the user holding an overrunning slot to wrap up (the backend
+// notifies them). It is the courtesy first step of a resource reclaim, called by
+// the next-in-line user — not the backend, which never pokes proactively. It
+// changes no schedule state.
+message PokeOccupantRequest {
   string slot_id = 1 [(buf.validate.field).string.min_len = 1];
-  google.protobuf.Timestamp projected_end = 2;
 }
 
-// Every mutating RPC returns the recomputed schedule. They carry the same
+// ForceClockOut boots the user holding an overrunning slot (settles it COMPLETE and
+// frees its resource), then reschedules. Called by the next-in-line user as the
+// escalation when a poke goes unheeded; the wait and the decision to escalate are
+// the users', not the backend's. Authorization (caller is next-in-line for that
+// resource, occupant is past their scheduled end) is enforced server-side.
+message ForceClockOutRequest {
+  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// Most mutating RPCs return the recomputed schedule. They carry the same
 // RescheduleResult but are distinct types (one response per RPC) so the contract
 // can evolve per method without a breaking change rippling across all of them.
 message CreateSlotResponse {
@@ -68,18 +78,26 @@ message CancelSlotResponse {
   RescheduleResult result = 1;
 }
 
-message ReportOverrunResponse {
+message ForceClockOutResponse {
   RescheduleResult result = 1;
 }
 
+// PokeOccupant only sends a nudge, so it changes no schedule state and its response
+// is empty.
+message PokeOccupantResponse {}
+
 // QlabService is the data API. Every method requires a Firebase JWT (Phase 8) and
-// is scoped to the caller's lab. The no-show sweep is engine-internal (triggered
-// in the service layer), not an RPC.
+// is scoped to the caller's lab. Two engine events have no RPC because the backend
+// drives them itself: the no-show sweep, and the schedule effect of an overrun
+// (an active slot's projected end sliding past its scheduled end as people behind
+// shift). Reclaiming an overrunning resource, by contrast, is user-driven —
+// PokeOccupant then ForceClockOut, both called by the next-in-line user.
 service QlabService {
   rpc ListSlots(ListSlotsRequest) returns (ListSlotsResponse);
   rpc CreateSlot(CreateSlotRequest) returns (CreateSlotResponse);
   rpc ClockIn(ClockInRequest) returns (ClockInResponse);
   rpc ClockOut(ClockOutRequest) returns (ClockOutResponse);
   rpc CancelSlot(CancelSlotRequest) returns (CancelSlotResponse);
-  rpc ReportOverrun(ReportOverrunRequest) returns (ReportOverrunResponse);
+  rpc PokeOccupant(PokeOccupantRequest) returns (PokeOccupantResponse);
+  rpc ForceClockOut(ForceClockOutRequest) returns (ForceClockOutResponse);
 }

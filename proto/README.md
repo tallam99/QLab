@@ -10,13 +10,14 @@ shapes are never hand-written.
                               SlotPosition (reschedule outcome), QueueEvent (SSE
                               envelope), and the enums (LabRole, ResourceKind,
                               SlotStatus incl. NO_SHOW, Outcome, QueueEventType)
-    qlab/v1/service.proto   QlabService — ListSlots + the mutating RPCs
-                              (CreateSlot / ClockIn / ClockOut / CancelSlot /
-                              ReportOverrun), each one engine event (ALGORITHM §6)
+    qlab/v1/service.proto   QlabService — ListSlots + the side-effecting RPCs
+                              (CreateSlot / ClockIn / ClockOut / CancelSlot, plus
+                              the user-driven reclaim pair PokeOccupant /
+                              ForceClockOut)
     buf.yaml                module config: protovalidate dep, lint (STANDARD),
                               breaking (FILE)
-    buf.gen.yaml            codegen: Go (go-tool plugins) → backend/internal/gen,
-                              TS (npm protoc-gen-es) → frontend/src/gen
+    buf.gen.yaml            codegen: Go (go-tool plugins) → backend/internal/protogen,
+                              TS (npm protoc-gen-es) → frontend/src/protogen
     buf.lock                pinned dependency digests
     package.json            tooling-only: pins the TS codegen plugin (not the
                               frontend app — that lands in Phase 9)

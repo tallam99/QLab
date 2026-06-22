@@ -52,7 +52,7 @@ same fields.
 | `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
-| `mage genProto` | `buf generate` from `proto/`: Go → `backend/internal/gen`, TS → `frontend/src/gen`. Go plugins are the module's pinned `go tool` binaries; the TS plugin is `proto/package.json` (`npm install` in `proto/` first). Commit the regenerated output. |
+| `mage genProto` | `buf generate` from `proto/`: Go → `backend/internal/protogen`, TS → `frontend/src/protogen`. Go plugins are the module's pinned `go tool` binaries; the TS plugin is `proto/package.json` (`npm install` in `proto/` first). Commit the regenerated output. |
 | `mage dbStringStaging` / `mage dbStringProd` | **user-run only** — print the human read-write Neon connection string from Secret Manager (for DBeaver). Claude never runs these (they invoke `gcloud`). See `docs/deploy.md`. |
 
 `genProto` generates from the `proto/qlab/v1` contract; the committed output is
