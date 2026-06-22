@@ -47,7 +47,9 @@ This project is built with Claude as the primary engine, with a hard boundary:
   Trace; annotate spans with `lab_id`, `resource_pool_id`, `slot_id`, event type.
 - **Topology:** the public PWA (Firebase Hosting) and the data API (Cloud Run) are
   **separate origins**; every API endpoint requires a Firebase JWT. See decision 0001.
-- **Multi-tenancy:** every tenant-scoped row carries `lab_id`; scope every query by it.
+- **Multi-tenancy:** every tenant-scoped row carries `labs_id`; scope every query by
+  it. Row-level security enforces the same isolation at the DB (decision 0005): the
+  service sets `app.current_lab_id` per request and the app's DB role is RLS-bound.
 - **Docs:** live in `docs/`; root `README.md` is the entry point; subfolders may have
   their own `docs/` and `CLAUDE.md`. Update docs as part of every phase.
 - **Cost:** stay within free tiers ($0/month).

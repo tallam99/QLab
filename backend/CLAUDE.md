@@ -43,8 +43,10 @@ a local-only seed (`seed/seed.sql`, `mage seed`), the `store` query layer, and t
   the Compose container — no path to cloud). Reference data that must exist
   everywhere goes in a migration, never here.
 - `schema_test/` — `database`-tagged tests asserting the constraints reject bad
-  rows, triggers fire, enums and seed values are correct. Run via `mage testSchema`
-  (creates/migrates/seeds/drops a throwaway DB); not part of `mage test`.
+  rows, triggers fire, enums/seed values are correct, and **RLS tenant isolation**
+  holds (run as a dedicated non-privileged role, since superusers bypass RLS). Run
+  via `mage testSchema` (its `TestMain` creates/migrates/seeds/drops a throwaway DB
+  and the test role); part of `mage test`.
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
   (`RequestLogger`, `LoggerFromContext`), panic recovery (`Recoverer`), and CORS
   (`CORS`) for the cross-origin PWA. `CORS` fails closed on an empty allow-list

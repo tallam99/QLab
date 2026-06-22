@@ -141,11 +141,14 @@ the **CI deployer** can read (the pipeline runs migrations before each deploy).
 ### 1. Create the roles (run in Neon's SQL editor, on each branch)
 
 ```sql
--- App runtime role: DML only, no DDL, no superuser.
-CREATE ROLE qlab_app       LOGIN PASSWORD '<generate-a-strong-password>';
+-- App runtime role: DML only, no DDL, no superuser, and NOBYPASSRLS so the
+-- row-level-security tenant isolation (decision 0005) actually binds it.
+CREATE ROLE qlab_app       LOGIN PASSWORD '<generate-a-strong-password>' NOSUPERUSER NOBYPASSRLS;
 -- Human ad-hoc read-write.
 CREATE ROLE qlab_human_rw  LOGIN PASSWORD '<generate-a-strong-password>';
--- Human read-only inspection.
+-- Human read-only inspection. Optionally grant BYPASSRLS for cross-lab visibility
+-- (otherwise it, too, is RLS-bound and must set app.current_lab_id per session):
+--   ALTER ROLE qlab_human_ro BYPASSRLS;
 CREATE ROLE qlab_human_ro  LOGIN PASSWORD '<generate-a-strong-password>';
 
 -- Grants on existing objects.
@@ -208,6 +211,12 @@ These run `gcloud secrets versions access` as **your** logged-in identity and pr
 the string to paste into DBeaver. They are **user-run only** — Claude never invokes
 `gcloud`. (A read-only variant target can be added later; for now read the
 `*-readonly` secret directly if you want read-only.)
+
+> **RLS in DBeaver:** the human roles are `NOBYPASSRLS`, so until you set a tenant
+> context you'll see no lab-scoped rows. Either scope your session —
+> `SELECT set_config('app.current_lab_id', '<lab-uuid>', false);` — or grant the
+> read-only role `BYPASSRLS` (above) for cross-lab inspection. The migrator (owner)
+> credential bypasses RLS entirely.
 
 ### Applying migrations to staging/prod
 

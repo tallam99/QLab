@@ -52,10 +52,13 @@ Tenant-scoped by `labs_id`. Core tables: `users`, `labs`, `labs_users` (membersh
 The **database enforces the domain itself** (decision 0003): native enums,
 composite FKs (cross-lab / pool / kind consistency, member-only booking), CHECKs,
 a partial-unique live `slot_priority` order, a GiST per-resource no-overlap
-exclusion constraint, and triggers (ACTIVE immutability, `updated_at`). It connects
-as least-privilege roles, never the Neon owner (decision 0004). The schema lives in
-`backend/migrations` (goose), is applied to Neon by CI before each deploy, and is
-regression-tested by `backend/schema_test` (`mage testSchema`).
+exclusion constraint, and triggers (ACTIVE immutability, `updated_at`).
+**Tenant isolation is also enforced by row-level security** (decision 0005) behind
+the app's `labs_id` scoping: lab-scoped tables expose only the lab in the session's
+`app.current_lab_id` (set per request), fail-closed. The app connects as a
+least-privilege, non-`BYPASSRLS` role, never the Neon owner (decision 0004). The
+schema lives in `backend/migrations` (goose), is applied to Neon by CI before each
+deploy, and is regression-tested by `backend/schema_test` (`mage testSchema`).
 
 ## Live updates
 

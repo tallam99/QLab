@@ -16,6 +16,7 @@ migrate-up against a throwaway database on every run.
 | `00004_slots.sql` | `slots` (the priority queue) + the `slot_occupancy()` helper + no-overlap constraint |
 | `00005_outbox.sql` | `outbox` (transactional notification outbox; drained in Phase 11) |
 | `00006_triggers.sql` | `updated_at` touch trigger; the ACTIVE-pin immutability trigger |
+| `00007_rls.sql` | row-level security: tenant isolation on the lab-scoped tables (decision 0005) |
 
 The tables mirror the pure engine's domain types (`internal/dynamicqueue`,
 ALGORITHM §1). `slot_status` is intentionally broader than the engine's input
@@ -31,6 +32,12 @@ for the live `slot_priority` total order, a GiST exclusion constraint for
 per-resource no-overlap, and triggers for ACTIVE immutability. See **decision
 0003** for the rationale and `backend/schema_test/` for the suite that proves each
 one fires.
+
+**Tenant isolation** is additionally enforced by **row-level security** (decision
+0005): lab-scoped tables only expose rows for the lab in the session's
+`app.current_lab_id` setting, which the service sets per request. It's fail-closed
+(unset context → no rows). The owner (migrations) and superusers bypass RLS; the
+app connects as a non-`BYPASSRLS` role so it is bound by it.
 
 ## Conventions
 
@@ -52,8 +59,13 @@ one fires.
 - **Join tables are `table1_table2`** (alphabetical-ish, plural), e.g. `labs_users`.
 - **Audit columns on every table:** `created_at` / `updated_at` (timestamptz,
   defaulted; `updated_at` maintained by the `set_updated_at` trigger) and
-  `created_by` / `updated_by` (uuid → `users(users_id)`, nullable for
-  system/seed-origin rows; **application-set** — the DB can't know the acting user).
+  `created_by` / `updated_by` — **plain `uuid`, NOT foreign keys**. They hold the
+  authenticated principal that wrote the row (usually a `users_id`, but also
+  non-user system/automation actors), are **application-set**, and nullable for
+  system/seed-origin rows. Deliberately not an FK so audit history survives a
+  user's deletion and can record non-user principals (decision: audit is durable
+  observational metadata, not relational data). Read with `LEFT JOIN users` to
+  attribute when the principal is a user.
 - **Native enums** for closed sets, with labels matching the Go `enumer` strings.
 - **Times** are `timestamptz`; `duration` / `lookahead` are integer minutes.
 
