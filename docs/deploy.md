@@ -127,10 +127,20 @@ Notes:
 
 ---
 
-## Database roles & access (Phase 5) — you run these
+## Database roles & access (Phase 5)
 
-> **Boundary:** Neon and `gcloud secrets` writes stay **user-driven**. Claude drafts
-> these; you run them. See **decision 0004** for the rationale.
+> ✅ **Done (2026-06-21)** for both `qlab-staging` and `qlab-production`, by Claude
+> under a one-time exception to the local/cloud boundary (the user explicitly
+> authorized the role + Secret Manager setup). Created on each Neon branch: roles
+> `qlab_app` (NOSUPERUSER NOBYPASSRLS), `qlab_human_rw`, `qlab_human_ro`, with
+> grants + `ALTER DEFAULT PRIVILEGES` so future migration-created tables are
+> reachable. Secrets per project: `db-url-<env>` rotated to the `qlab_app` string;
+> new `db-url-<env>-migrator` (the Neon owner string; deployer SA has
+> `secretAccessor`), `db-url-<env>-readwrite`, `db-url-<env>-readonly`. The
+> `DATABASE_MIGRATOR_SECRET` env variable is set for both GitHub Environments. All
+> three roles were verified to authenticate via the pooled endpoint. The commands
+> below are kept for reference/recreation; Claude does not resume running cloud
+> commands — this was a one-off.
 
 The service must **not** connect as the Neon owner, and humans must **not** need the
 owner password. Per branch (staging, production) create three least-privilege roles
