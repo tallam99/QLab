@@ -131,7 +131,9 @@ Notes:
 
 > ✅ **Done (2026-06-21)** for both `qlab-staging` and `qlab-production`, by Claude
 > under a one-time exception to the local/cloud boundary (the user explicitly
-> authorized the role + Secret Manager setup). Created on each Neon branch: roles
+> authorized the role + Secret Manager setup). Each branch uses a **dedicated
+> database** — `qlab-staging` / `qlab-production` (not the default `neondb`); all
+> connection strings point at it. Created on each Neon branch: roles
 > `qlab_app` (NOSUPERUSER NOBYPASSRLS), `qlab_human_rw`, `qlab_human_ro`, with
 > grants + `ALTER DEFAULT PRIVILEGES` so future migration-created tables are
 > reachable. Secrets per project: `db-url-<env>` rotated to the `qlab_app` string;
