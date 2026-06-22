@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/tallam99/qlab/backend/internal/api"
 	"github.com/tallam99/qlab/backend/internal/clients/postgres"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/logging"
@@ -113,6 +114,12 @@ func New(opts Options) *Server {
 
 	r.Get(pathHealthq, s.healthq) // liveness: is the process up? (always 200)
 	r.Get(pathReadyq, s.readyq)   // readiness: have dependencies initialized?
+
+	// Mount the Connect-RPC data API. Every method returns Unimplemented until
+	// Phase 7; the handler matches the full procedure paths under apiPath, so it
+	// mounts cleanly alongside the health routes.
+	apiPath, apiHandler := api.New().Handler()
+	r.Mount(apiPath, apiHandler)
 
 	s.handler = r
 	s.httpServer = &http.Server{
