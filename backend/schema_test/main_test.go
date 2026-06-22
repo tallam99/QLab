@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -17,10 +18,11 @@ import (
 
 // SQLSTATE codes asserted by the constraint/trigger tests, named for readability.
 const (
-	codeForeignKeyViolation = "23503"
-	codeUniqueViolation     = "23505"
-	codeCheckViolation      = "23514"
-	codeExclusionViolation  = "23P01"
+	codeForeignKeyViolation   = "23503"
+	codeUniqueViolation       = "23505"
+	codeCheckViolation        = "23514"
+	codeExclusionViolation    = "23P01"
+	codeInsufficientPrivilege = "42501" // raised by an RLS policy violation
 )
 
 // Coordinates injected by `mage testSchema` (the only supported way to run these).
@@ -32,6 +34,17 @@ var (
 	seedFile        string // absolute path to backend/seed/seed.sql
 	goosePackage    string // go-run target for goose (pinned version)
 )
+
+// The non-privileged role the RLS tests connect as — a stand-in for the cloud
+// qlab_app role: a plain LOGIN role, NOSUPERUSER and NOBYPASSRLS, so row-level
+// security actually applies to it (superusers and the table owner bypass RLS).
+// TestMain creates it, grants it the same DML the app gets, and builds its config.
+const (
+	testAppRole     = "qlab_app_test"
+	testAppPassword = "schema_test_app"
+)
+
+var appRoleConfig *pgx.ConnConfig // connection config for testAppRole; set in setup
 
 // TestMain owns the throwaway database lifecycle: it creates a fresh DB, applies
 // every migration with the real goose, loads the demo seed, runs the suite, and
@@ -87,16 +100,25 @@ func setupDatabase() error {
 	if err != nil {
 		return fmt.Errorf("connect admin: %w", err)
 	}
+	defer conn.Close(ctx)
 	ident := pgx.Identifier{name}.Sanitize()
+	roleIdent := pgx.Identifier{testAppRole}.Sanitize()
+	// Drop the DB first (removes its grants), so dropping/recreating the global role
+	// has no leftover dependencies.
 	if _, err := conn.Exec(ctx, "DROP DATABASE IF EXISTS "+ident+" WITH (FORCE)"); err != nil {
-		_ = conn.Close(ctx)
 		return fmt.Errorf("drop test database: %w", err)
 	}
+	if _, err := conn.Exec(ctx, "DROP ROLE IF EXISTS "+roleIdent); err != nil {
+		return fmt.Errorf("drop test role: %w", err)
+	}
+	if _, err := conn.Exec(ctx, fmt.Sprintf(
+		"CREATE ROLE %s LOGIN PASSWORD %s NOSUPERUSER NOBYPASSRLS",
+		roleIdent, quoteLiteral(testAppPassword))); err != nil {
+		return fmt.Errorf("create test role: %w", err)
+	}
 	if _, err := conn.Exec(ctx, "CREATE DATABASE "+ident); err != nil {
-		_ = conn.Close(ctx)
 		return fmt.Errorf("create test database: %w", err)
 	}
-	_ = conn.Close(ctx)
 
 	// Apply migrations with the real goose, so the tests exercise the exact schema
 	// production gets.
@@ -106,19 +128,38 @@ func setupDatabase() error {
 		return fmt.Errorf("goose up: %w", err)
 	}
 
+	// Grant the app role the same DML it gets in cloud (decision 0004), then seed.
+	// Both run as the superuser owner, which bypasses RLS.
+	seedConn, err := pgx.Connect(ctx, testDatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect for grants/seed: %w", err)
+	}
+	defer seedConn.Close(ctx)
+	grants := fmt.Sprintf(`
+		GRANT USAGE ON SCHEMA public TO %[1]s;
+		GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %[1]s;
+		GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %[1]s;`, roleIdent)
+	if _, err := seedConn.Exec(ctx, grants); err != nil {
+		return fmt.Errorf("grant to app role: %w", err)
+	}
+
 	// Load the demo seed (multi-statement script via the simple protocol).
 	sql, err := os.ReadFile(seedFile)
 	if err != nil {
 		return fmt.Errorf("read seed: %w", err)
 	}
-	seedConn, err := pgx.Connect(ctx, testDatabaseURL)
-	if err != nil {
-		return fmt.Errorf("connect for seed: %w", err)
-	}
-	defer seedConn.Close(ctx)
 	if _, err := seedConn.Exec(ctx, string(sql)); err != nil {
 		return fmt.Errorf("apply seed: %w", err)
 	}
+
+	// Build the app-role connection config (same DB, non-privileged role).
+	appCfg, err := pgx.ParseConfig(testDatabaseURL)
+	if err != nil {
+		return fmt.Errorf("parse app role config: %w", err)
+	}
+	appCfg.User = testAppRole
+	appCfg.Password = testAppPassword
+	appRoleConfig = appCfg
 	return nil
 }
 
@@ -133,15 +174,36 @@ func dropDatabase() error {
 		return err
 	}
 	defer conn.Close(ctx)
-	_, err = conn.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
+	if _, err := conn.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)"); err != nil {
+		return err
+	}
+	// The DB (and its grants) is gone, so the global role has no dependencies left.
+	_, err = conn.Exec(ctx, "DROP ROLE IF EXISTS "+pgx.Identifier{testAppRole}.Sanitize())
 	return err
 }
 
-// connect opens a connection to the throwaway schema-test database. TestMain has
-// already validated the URL, so a failure here is a real error, not a skip.
+// quoteLiteral wraps a string as a SQL string literal (for DDL that can't take a
+// bind parameter, e.g. CREATE ROLE ... PASSWORD).
+func quoteLiteral(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// connect opens a connection to the throwaway schema-test database as the
+// superuser owner (which bypasses RLS). TestMain has already validated the URL, so
+// a failure here is a real error, not a skip.
 func connect(t *testing.T) *pgx.Conn {
 	t.Helper()
 	conn, err := pgx.Connect(context.Background(), testDatabaseURL)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close(context.Background()) })
+	return conn
+}
+
+// connectAsApp connects as the non-privileged app role, so RLS policies apply —
+// the connection used by the row-level-security tests.
+func connectAsApp(t *testing.T) *pgx.Conn {
+	t.Helper()
+	conn, err := pgx.ConnectConfig(context.Background(), appRoleConfig.Copy())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close(context.Background()) })
 	return conn
