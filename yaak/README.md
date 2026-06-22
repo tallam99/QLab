@@ -16,8 +16,10 @@ Yaak request for it (each reschedule scenario, each auth state, each error case)
     qlab.yaak.json   exported workspace (versioned, shared)
 
 Requests use a `base_url` environment variable (`${[ base_url ]}/healthq`) so the
-same request runs against any environment. `staging` / `production` `base_url`s
-are placeholders until the Cloud Run URLs exist (Phase 3).
+same request runs against any environment. `base_url` points at the **Cloud Run
+API** origin (`https://api-<env>-<project-number>.us-east1.run.app`), *not* the
+Firebase Hosting URL — Yaak drives the data API, which is a separate origin from
+the static PWA (decision 0001).
 
 ## Environments & secrets
 
