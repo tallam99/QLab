@@ -4,13 +4,14 @@ QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-resource
 scheduling engine** that continuously re-flows a priority queue across
 interchangeable resources as experiments overrun, finish early, or get cancelled.
 
-**Current status:** Phase 5 (database). The Go service, a one-command local stack
-(Docker Compose + Postgres, `mage` targets), the GitHub Actions pipeline (CI gate +
-deploy to Cloud Run + Firebase Hosting, both environments — see `docs/deploy.md`),
-the pure scheduling engine (`internal/dynamicqueue`, Phase 4), and the data model
-(goose migrations + a self-enforcing schema, seed, and the `schema_test` suite —
-Phase 5) are in place; the proto contract and API are next. Work proceeds through
-the phases in `docs/PLAN.md`.
+**Current status:** Phase 6 (contract layer). The Go service, a one-command local
+stack (Docker Compose + Postgres, `mage` targets), the GitHub Actions pipeline (CI
+gate + deploy to Cloud Run + Firebase Hosting, both environments — see
+`docs/deploy.md`), the pure scheduling engine (`internal/dynamicqueue`, Phase 4),
+the data model (goose migrations + a self-enforcing schema, seed, and the
+`schema_test` suite — Phase 5), and now the proto contract (`proto/qlab/v1`, with
+generated Go + TS and a stubbed Connect service mounted on the router) are in place;
+the real API endpoints are next. Work proceeds through the phases in `docs/PLAN.md`.
 
 ## Read these first
 
@@ -67,7 +68,7 @@ the `magefile.go` shares it, and `backend/` is a subtree, not a separate module.
 
     backend/    Go API + scheduling engine (internal/dynamicqueue is pure: no DB/HTTP/clock)
     frontend/   React PWA (scaffolded in a later phase)
-    proto/      .proto contract (buf; lands Phase 6)
+    proto/      .proto contract (buf; generated Go → backend/internal/gen, TS → frontend/src/gen)
     docs/       project docs
 
 Per-area `CLAUDE.md` files live with their directories.
