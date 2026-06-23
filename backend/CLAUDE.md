@@ -5,17 +5,23 @@ single Go module rooted at the repo top (`github.com/tallam99/qlab`); this code
 lives under the `backend/` subtree, imported as `github.com/tallam99/qlab/backend/…`.
 
 Read the root `CLAUDE.md` and `docs/PLAN.md` first for the phase boundary and the
-local-vs-cloud rule. **Current status: Phase 7** — the HTTP service + local Compose
-stack (Phase 2), the pure scheduling engine (`internal/dynamicqueue`, Phase 4), the
-data model (goose migrations with a self-enforcing schema in `migrations/`, a
-local-only seed `seed/seed.sql`, the `store` query layer, and the `schema_test`
-suite, Phase 5), the proto contract (generated types in `internal/protogen`, Phase
-6), and now the **real Connect API**: the eight RPCs in `internal/api` are wired —
-through a domain scheduling service (`internal/scheduling`) reached over interfaces —
-to the engine and the expanded `store` (one transaction per event, `FOR UPDATE`,
-outbox enqueue), exercised end to end by `backend/integration_test`. Auth is still a
-dev-header stand-in (`internal/principal` + `httpmw.DevPrincipal`); real Firebase
-JWT verification is Phase 8.
+local-vs-cloud rule. **Current status: Phase 8 (auth — core landed)** — the HTTP
+service + local Compose stack (Phase 2), the pure scheduling engine
+(`internal/dynamicqueue`, Phase 4), the data model (goose migrations with a
+self-enforcing schema in `migrations/`, a local-only seed `seed/seed.sql`, the
+`store` query layer, and the `schema_test` suite, Phase 5), the proto contract
+(generated types in `internal/protogen`, Phase 6), the **real Connect API**: the
+eight RPCs in `internal/api` are wired — through a domain scheduling service
+(`internal/services/scheduling`) reached over interfaces — to the engine and the
+expanded `store` (one transaction per event, `FOR UPDATE`, outbox enqueue), exercised
+end to end by `backend/integration_test`. **Now real auth** (Phase 8): every RPC runs
+behind an auth Connect interceptor that verifies a Firebase ID token
+(`internal/auth` seam + `auth/firebaseauth` over the Admin SDK; the Auth emulator
+locally) and resolves it to a user via `services/authentication` (invite-only
+first-login provisioning), populating the same `internal/principal` seam. A
+staging/local `internal/devlogin` endpoint mints usable tokens, production-guarded
+(decision 0007). The follow-up auth slice (head-only invite RPC, lab state-export)
+is still to come.
 
 ## Key files
 
@@ -30,8 +36,8 @@ JWT verification is Phase 8.
   `store`/`store/pgstore`). The server and middleware depend on the interface, so a
   fake/alternate backend swaps in.
 - `internal/clients/` — external client-tech *connection* setup only (no data
-  access). `clients/postgres` builds the pgx pool; Firebase/storage clients become
-  siblings later.
+  access). `clients/postgres` builds the pgx pool; `clients/firebase` builds the Auth
+  client (storage clients become siblings later).
 - `internal/store/` — the data store: the business `Store` interface
   (`interface.go`), implemented by `store/pgstore`. Ids are `uuid.UUID` end to end
   (the columns are `uuid`); it speaks the persistence domain
@@ -67,10 +73,24 @@ JWT verification is Phase 8.
     carries no notification format. The row is still written in the event's own tx
     (transactional outbox); delivery is Phase 11.
 - `internal/principal/` — the caller identity (`UserID` + `LabID`, both `uuid.UUID`)
-  carried in request context; the seam auth populates. Phase 7 fills it from a dev
-  header (`httpmw.DevPrincipal`, `X-QLab-User`/`X-QLab-Lab`, parsed to uuids);
-  Phase 8 swaps in JWT verification populating the same shape. Lab is carried (not
-  derived) because RLS is fail-closed; membership is still checked in the app layer.
+  carried in request context; the seam auth populates. The auth Connect interceptor
+  (`internal/api/auth.go`) fills it from a verified `Authorization: Bearer` token +
+  the `X-QLab-Lab` selected-lab header. Lab is carried (not derived) because RLS is
+  fail-closed; membership is still checked in the app layer.
+- `internal/auth/` — the `TokenVerifier` seam (`Verify(rawToken) -> Identity`) +
+  `auth/firebaseauth` over the Firebase Admin SDK. One verify path for every
+  environment; locally it points at the Auth emulator (signature check skipped). A
+  bad token is `auth.ErrInvalidToken`.
+- `internal/services/authentication/` — resolves a verified token to a local `users`
+  row, provisioning invited users on first login by linking `firebase_uid` (matched
+  by verified email; invite-only, no self-signup). `ErrUnauthenticated` (bad token)
+  vs `ErrNotProvisioned` (valid token, no invite) → distinct Connect codes.
+- `internal/devlogin/` — the staging/local-only endpoint that mints a usable bearer
+  token for a seeded user (custom token → Identity Toolkit exchange). Mounted only
+  when dev auth is enabled; the server refuses to boot with it on in production
+  (decision 0007).
+- `internal/clients/firebase/` — Firebase Auth client setup (the verifier + dev-login
+  source); the emulator is auto-detected from `FIREBASE_AUTH_EMULATOR_HOST`.
 - `migrations/` — goose SQL migrations. The schema **enforces the domain in the DB**
   (composite FKs, CHECKs, a GiST no-overlap exclusion constraint, triggers); see
   `migrations/README.md` and decisions 0003/0004. Apply with `mage migrate`.
@@ -101,14 +121,17 @@ JWT verification is Phase 8.
   `qlab/v1/qlabv1connect` the Connect server/client stubs. The pure engine and the
   store never import this — proto ⇄ domain conversions live in the handlers.
 - `internal/api/` — the Connect service implementation (`qlab.v1.QlabService`): a
-  thin transport adapter. A **protovalidate interceptor** (connectrpc.com/validate)
-  enforces the `.proto` buf.validate rules (uuid ids, positive durations, required
-  desired-start) before any handler runs, so handlers assume structural validity and
-  parse the (valid) string ids to `uuid.UUID`. Each method reads the caller
-  principal, converts proto → domain, calls `services/scheduling` (held behind an
-  `atomic.Pointer`, set by `server.WithSchedulingService` once the store is ready —
-  until then RPCs return `Unavailable`), and converts the result back. proto types
-  live only here; domain errors map to Connect codes in `connectError`.
+  thin transport adapter. Two interceptors run before every method (outermost
+  first): the **auth interceptor** (`auth.go`) verifies the bearer token, resolves
+  it via `services/authentication`, and attaches the principal (or rejects —
+  Unauthenticated / PermissionDenied); then the **protovalidate interceptor**
+  (connectrpc.com/validate) enforces the `.proto` buf.validate rules (uuid ids,
+  positive durations, required desired-start). So a handler runs only for an
+  authenticated caller with structurally valid input. Each method reads the caller
+  principal, converts proto → domain, calls `services/scheduling` (and, like
+  authentication, held behind an `atomic.Pointer` set once the store is ready — until
+  then RPCs return `Unavailable`), and converts the result back. proto types live
+  only here; domain errors map to Connect codes in `connectError`.
 - `internal/server/` — the server: router, handlers (methods on `Server`), and the
   lifecycle. `New` returns a `*Server`; `Run(ctx)` serves immediately (so
   `/healthq` liveness is 200 at once), runs the registered dependency injectors
@@ -177,13 +200,18 @@ JWT verification is Phase 8.
 
 ## Verify the service
 
-The service now requires `DATABASE_URL` and pings Postgres on boot, so run it
-through the Compose stack rather than bare:
+The service requires `DATABASE_URL` and `FIREBASE_PROJECT_ID` and pings Postgres on
+boot, so run it through the Compose stack rather than bare (Compose also brings up
+the Postgres + Auth-emulator dependencies):
 
-    mage startStack                        # from repo root: API + Postgres
+    mage startStack                        # from repo root: API + Postgres + Auth emulator
     curl localhost:8090/healthq            # {"status":"ok"}  (liveness)
     curl localhost:8090/readyq             # {"status":"ok"}  (readiness — DB reachable)
 
-To run the binary directly, point it at a Postgres instance:
+See `docs/runbook.md` → "Auth locally (dev-login)" for getting a token and making an
+authenticated call. To run the binary directly, point it at Postgres and the Auth
+emulator:
 
-    DATABASE_URL=postgres://qlab:qlab@localhost:5432/qlab?sslmode=disable go run ./backend/cmd/server
+    DATABASE_URL=postgres://qlab:qlab@localhost:5432/qlab?sslmode=disable \
+      FIREBASE_PROJECT_ID=demo-qlab FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
+      go run ./backend/cmd/server

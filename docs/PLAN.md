@@ -590,6 +590,17 @@ emits one structured log line correlated by request id.
 **Goal:** Every API call is authenticated as a real user scoped to their lab — with
 an easy demo-login path in staging and none in prod.
 
+**Status:** The **core auth path has landed** — Firebase ID-token verification (Admin
+SDK, behind the `auth.TokenVerifier` seam, exercised locally and in CI against the
+Auth emulator), invite-only first-login provisioning by verified email, the auth
+Connect interceptor populating the principal, the staging/local **dev-login**
+endpoint, and the production guards (config + server refuse dev-auth in prod,
+test-asserted). See decision 0007. **Deferred to a follow-up slice:** the head-only
+**invite / add-member RPC** and member management, and the **`lab_id`-scoped
+state-export endpoint** (both add proto). Enabling Google sign-in in the two Firebase
+projects and wiring the real (non-emulator) verification in staging/prod remain the
+user's to drive.
+
 **Work:**
 - In each Firebase project, enable **Google as a sign-in provider** (Login with
   Google only, per the primer).

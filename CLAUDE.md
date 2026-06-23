@@ -4,7 +4,7 @@ QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-resource
 scheduling engine** that continuously re-flows a priority queue across
 interchangeable resources as experiments overrun, finish early, or get cancelled.
 
-**Current status:** Phase 7 (API endpoints). The Go service, a one-command local
+**Current status:** Phase 8 (auth — core landed). The Go service, a one-command local
 stack (Docker Compose + Postgres, `mage` targets), the GitHub Actions pipeline (CI
 gate + deploy to Cloud Run + Firebase Hosting, both environments — see
 `docs/deploy.md`), the pure scheduling engine (`internal/dynamicqueue`, Phase 4),
@@ -13,9 +13,14 @@ the data model (goose migrations + a self-enforcing schema, seed, and the
 TS, Phase 6), and now the **real, persisted Connect API** — the eight RPCs wired
 through a domain scheduling service (`internal/scheduling`) to the engine + store in
 one transaction per event, with a full-stack integration suite
-(`backend/integration_test`, `mage testIntegration`) — are in place. Auth (real
-Firebase JWTs) is next (Phase 8); Phase 7 uses a dev-header principal stand-in. Work
-proceeds through the phases in `docs/PLAN.md`.
+(`backend/integration_test`, `mage testIntegration`) — are in place, and now **real
+authentication**: every RPC runs behind a Firebase ID-token verifying auth
+interceptor (the `auth.TokenVerifier` seam over the Admin SDK; the Auth emulator
+locally and in CI), with invite-only first-login provisioning and a staging/local
+**dev-login** endpoint (production-guarded). The follow-up auth slice (the head-only
+invite/add-member RPC and the lab state-export endpoint) and real Google sign-in in
+the Firebase projects are still to come. Work proceeds through the phases in
+`docs/PLAN.md`.
 
 ## Read these first
 

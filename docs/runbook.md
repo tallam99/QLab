@@ -18,13 +18,20 @@
 
 ## The stack
 
-`docker-compose.yml` runs two services:
+`docker-compose.yml` runs three services:
 
 - **`postgres`** — Postgres 18 (matches the Neon major version), data in the named
   volume `qlab_pgdata`, host port 5432, gated by a `pg_isready` healthcheck.
+- **`firebase-auth`** — the Firebase Auth emulator (built from
+  `docker/firebase-emulator/Dockerfile`: Node + a JRE + pinned `firebase-tools`,
+  Auth-only, offline under the demo project `demo-qlab`), host port 9099, gated by a
+  healthcheck. Token verification and dev-login run against it locally, so **no real
+  Firebase project is needed for local dev** (decision 0007).
 - **`api`** — the Go service built from `backend/Dockerfile`, on host port 8090.
-  Waits for Postgres to be healthy, then connects + pings it on boot (a failed
-  connection is a hard boot failure, not a stream of failing requests).
+  Waits for Postgres and the emulator to be healthy, then connects + pings Postgres
+  on boot (a failed connection is a hard boot failure, not a stream of failing
+  requests). It is configured for the emulator via `FIREBASE_AUTH_EMULATOR_HOST` and
+  the demo project id.
 
 Config comes from `.env.json` (gitignored; `mage` creates it from
 `.env.example.json` on first run) — fields: `postgres_user`, `postgres_password`,
@@ -48,7 +55,7 @@ same fields.
 | `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
 | `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
 | `mage testSchema` | DB-level schema tests (constraints/triggers/seed) against a throwaway DB; **requires the stack up**. Its `TestMain` creates/migrates/seeds/drops `qlab_schema_test` |
-| `mage testIntegration` | full-stack suite: boots the real server (as an RLS-bound app role) against a throwaway DB and drives it through the Connect client; **requires the stack up**. Its `TestMain` creates/migrates/drops `qlab_integration_test` |
+| `mage testIntegration` | full-stack suite: boots the real server (as an RLS-bound app role) against a throwaway DB and drives it through the Connect client with **real emulator-issued tokens**; **requires the stack up** (Postgres + the Auth emulator). Its `TestMain` creates/migrates/drops `qlab_integration_test` |
 | `mage genMocks` / `mage clearMocks` | (re)generate / remove the mockery mocks. Mocks are **not** committed (`.mockery.yaml`); generate before building code that imports one, then `go mod tidy` |
 | `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
@@ -90,13 +97,37 @@ runs the same CI gate before deploying — so schema tests also gate CD.
 ## Connect API
 
 The data API is mounted at `/qlab.v1.QlabService/<Method>` (Connect-RPC; speaks
-JSON or binary protobuf on the same path). The methods are stubs that return a
-Connect `unimplemented` error (HTTP 501) until they're wired to the engine + store.
-Drive them from the Yaak workspace, or with curl:
+JSON or binary protobuf on the same path). The methods are wired to the engine +
+store, and **every call is authenticated**: it needs an `Authorization: Bearer
+<id-token>` header and an `X-QLab-Lab: <lab-uuid>` header (the lab the caller is
+acting in). A call with no token is rejected:
 
     curl -s -X POST localhost:8090/qlab.v1.QlabService/ListSlots \
-      -H 'Content-Type: application/json' -d '{"resourcePoolId":"demo"}'
-    # → {"code":"unimplemented","message":"qlab.v1.QlabService.ListSlots is not implemented"}
+      -H 'Content-Type: application/json' \
+      -d '{"resourcePoolId":"11111111-1111-1111-1111-111111111111"}'
+    # → HTTP 401, {"code":"unauthenticated", ...}
+
+## Auth locally (dev-login)
+
+Locally and in staging the **dev-login endpoint** mints a usable token for a seeded
+user without the Google OAuth dance (decision 0007; absent in production). It
+returns an ID token you paste straight into `Authorization: Bearer`:
+
+    # Mint a token for a seeded user's email (the user must exist — see mage seed).
+    TOKEN=$(curl -s -X POST localhost:8090/devlogin \
+      -H 'Content-Type: application/json' \
+      -d '{"email":"someone@example.com"}' | jq -r .idToken)
+
+    # Call the API as that user, acting in a given lab.
+    curl -s -X POST localhost:8090/qlab.v1.QlabService/ListSlots \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "X-QLab-Lab: <lab-uuid>" \
+      -H 'Content-Type: application/json' \
+      -d '{"resourcePoolId":"<pool-uuid>"}'
+
+First login provisions invited users: dev-login (or a real Google login) links the
+Firebase identity to the `users` row matched by the verified email. A valid token
+for an un-invited email is rejected with `permission_denied` (not provisioned).
 
 ## Debugging
 

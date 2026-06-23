@@ -47,7 +47,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken string) (store.User
 	identity, err := s.verifier.Verify(ctx, rawToken)
 	if err != nil {
 		// Any verification failure is unauthenticated; keep the cause for logs.
-		return store.User{}, fmt.Errorf("%w: %v", authentication.ErrUnauthenticated, err)
+		return store.User{}, fmt.Errorf("%w: %w", authentication.ErrUnauthenticated, err)
 	}
 
 	// Fast path: the identity is already linked to a user.
@@ -101,8 +101,8 @@ func splitName(name string) (first, last string) {
 	if name == "" {
 		return "", ""
 	}
-	if i := strings.IndexByte(name, ' '); i >= 0 {
-		return strings.TrimSpace(name[:i]), strings.TrimSpace(name[i+1:])
+	if before, after, found := strings.Cut(name, " "); found {
+		return strings.TrimSpace(before), strings.TrimSpace(after)
 	}
 	return name, ""
 }
