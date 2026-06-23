@@ -46,12 +46,16 @@ func (in Input) Validate() error {
 				return fmt.Errorf("dynamicqueue: active slot %q has no assigned resource", s.ID)
 			}
 			// An ACTIVE slot still holds its resource; its ProjectedEnd is when it is
-			// expected to free it and must be strictly in the future. A projection
-			// at or before now means it is overrunning and the caller must re-project
-			// it (or record the clock-out) before rescheduling — otherwise the engine
-			// would treat a still-occupied resource as free (§2.3, §6).
-			if !s.ProjectedEnd.After(in.Now) {
-				return fmt.Errorf("dynamicqueue: active slot %q projected end %s is not after now %s; re-project on overrun",
+			// expected to free it and may not lie in the past. ProjectedEnd == now is
+			// the valid re-projection for an overrunning slot: "expected to free
+			// imminently" — its occupancy [now, now) is empty, so the resource is free
+			// from now and the people behind are placed at now (the floor), which is
+			// exactly the overrun behaviour. A projection strictly before now is a
+			// stale projection the caller must refresh (or settle via clock-out) before
+			// rescheduling — otherwise the engine would treat a still-occupied resource
+			// as free (§2.3, §6).
+			if s.ProjectedEnd.Before(in.Now) {
+				return fmt.Errorf("dynamicqueue: active slot %q projected end %s is before now %s; re-project on overrun",
 					s.ID, s.ProjectedEnd.Format(time.RFC3339), in.Now.Format(time.RFC3339))
 			}
 			// A resource runs one experiment at a time, so two ACTIVE slots cannot

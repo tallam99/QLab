@@ -35,6 +35,13 @@ func TestValidate(t *testing.T) {
 	// future ProjectedEnd must pass), so loosening either comparison fails here.
 	require.NoError(t, validInput().Validate())
 
+	// ProjectedEnd == now is the valid re-projection for an overrunning ACTIVE slot
+	// ("frees imminently"): accepted, not an error (§6). Only a projection strictly
+	// before now is rejected (the case below).
+	atNow := validInput()
+	atNow.Slots[1].ProjectedEnd = atNow.Now
+	require.NoError(t, atNow.Validate())
+
 	cases := []struct {
 		name    string
 		mutate  func(*Input)
@@ -48,8 +55,7 @@ func TestValidate(t *testing.T) {
 		{"negative lookahead", func(in *Input) { in.Slots[0].Lookahead = -1 }, "negative lookahead"},
 		{"unknown status", func(in *Input) { in.Slots[0].Status = SlotStatusUnknown }, "only SCHEDULED or ACTIVE"},
 		{"active without resource", func(in *Input) { in.Slots[1].AssignedResource = "" }, "no assigned resource"},
-		{"projected end at now", func(in *Input) { in.Slots[1].ProjectedEnd = in.Now }, "not after now"},
-		{"projected end before now", func(in *Input) { in.Slots[1].ProjectedEnd = in.Now.Add(-time.Minute) }, "not after now"},
+		{"projected end before now", func(in *Input) { in.Slots[1].ProjectedEnd = in.Now.Add(-time.Minute) }, "before now"},
 		{"duplicate priority", func(in *Input) { in.Slots[1].SlotPriority = in.Slots[0].SlotPriority }, "unique total order"},
 		{"two active on one resource", func(in *Input) {
 			in.Slots = append(in.Slots, Slot{ID: "s3", ResourcePoolID: "pool-1", SlotPriority: 3, Status: SlotStatusActive, AssignedResource: "r1", ActualStart: t0, ProjectedEnd: t0.Add(time.Hour), Duration: 60})
