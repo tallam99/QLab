@@ -44,10 +44,11 @@ same fields.
 | `mage resetStack` | wipe the data volume **and** recreate (fresh DB) |
 | `mage migrate` | apply `goose` migrations (`backend/migrations/`) to local Postgres |
 | `mage seed` | load demo data (`backend/seed/seed.sql`) into local Postgres — **local only** |
-| `mage test` | run all test tiers: `testUnit` + `testSecurity` + `testSchema`. **Requires the stack up** (testSchema needs Postgres) |
+| `mage test` | run all test tiers: `testUnit` + `testSecurity` + `testSchema` + `testIntegration`. **Requires the stack up** (the schema + integration tiers need Postgres) |
 | `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
 | `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
 | `mage testSchema` | DB-level schema tests (constraints/triggers/seed) against a throwaway DB; **requires the stack up**. Its `TestMain` creates/migrates/seeds/drops `qlab_schema_test` |
+| `mage testIntegration` | full-stack suite: boots the real server (as an RLS-bound app role) against a throwaway DB and drives it through the Connect client; **requires the stack up**. Its `TestMain` creates/migrates/drops `qlab_integration_test` |
 | `mage genMocks` / `mage clearMocks` | (re)generate / remove the mockery mocks. Mocks are **not** committed (`.mockery.yaml`); generate before building code that imports one, then `go mod tidy` |
 | `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |

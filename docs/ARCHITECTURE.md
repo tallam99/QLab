@@ -28,7 +28,13 @@ QLab is two separate surfaces plus managed backing services:
 
 ## Backend components (Go)
 
-- **API / Connect handlers** — thin; convert proto ⇄ domain at the edges.
+- **API / Connect handlers** (`internal/api`) — thin transport adapters; convert
+  proto ⇄ domain at the edges and call the scheduling service.
+- **Scheduling service** (`internal/scheduling`) — the domain orchestration between
+  the API and the engine + store (both reached via interfaces). One method per
+  ALGORITHM §6 event; each mutating one runs in a single transaction (load the
+  pool's live slots `FOR UPDATE` → run the engine → persist placements → enqueue
+  outbox), and owns authorization (lab membership, owner-only, next-in-line reclaim).
 - **Scheduling engine** (`internal/dynamicqueue`) — **pure**, no DB/HTTP/clock.
   The product's core; specified in `docs/ALGORITHM.md`. A single `reschedule()`
   operation re-flows the queue on every event.

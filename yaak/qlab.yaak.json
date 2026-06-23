@@ -56,7 +56,7 @@
           {
             "enabled": true,
             "name": "resource_pool_id",
-            "value": "",
+            "value": "30000000-0000-0000-0000-000000000001",
             "id": null
           },
           {
@@ -64,6 +64,18 @@
             "name": "slot_id",
             "value": "",
             "id": null
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "dev_user_id",
+            "value": "20000000-0000-0000-0000-000000000002"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "dev_lab_id",
+            "value": "10000000-0000-0000-0000-000000000001"
           }
         ],
         "color": "#00C9A7",
@@ -102,6 +114,18 @@
             "name": "slot_id",
             "value": "",
             "id": null
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "dev_user_id",
+            "value": ""
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "dev_lab_id",
+            "value": ""
           }
         ],
         "color": "#F59E0B",
@@ -140,6 +164,18 @@
             "name": "slot_id",
             "value": "",
             "id": null
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "dev_user_id",
+            "value": ""
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "dev_lab_id",
+            "value": ""
           }
         ],
         "color": "#F87171",
@@ -208,21 +244,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": null,
         "name": "ListSlots",
-        "description": "Connect-RPC (JSON over HTTP): list a resource pool's slots. A read, so it lives outside the Danger folder. Until the handler is built it returns a Connect `unimplemented` error (HTTP 501) — that response is the Phase 6 acceptance check.",
+        "description": "Connect-RPC (JSON): list a resource pool's slots for the caller's lab. A read, so it lives outside the Danger folder. Requires the dev principal headers (X-QLab-User / X-QLab-Lab); Phase 8 replaces them with a verified Firebase JWT in the Authorization header.",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/ListSlots",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],
@@ -240,21 +282,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
         "name": "CreateSlot",
-        "description": "Connect-RPC (JSON over HTTP): book a slot, then reschedule. Mutating, so it lives in the Danger folder. Returns the recomputed schedule once wired; currently a Connect `unimplemented` error.",
+        "description": "Book a slot for the caller (X-QLab-User) in their lab (X-QLab-Lab). The service assigns slot_priority and reschedules; set desiredStart / lookaheadMinutes / durationMinutes in the body.",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/CreateSlot",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],
@@ -272,21 +320,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
         "name": "ClockIn",
-        "description": "Connect-RPC (JSON over HTTP): clock a slot in (SCHEDULED → ACTIVE, pin to a resource), then reschedule. Currently a Connect `unimplemented` error.",
+        "description": "Clock the caller's own slot in (-> ACTIVE, pinned to a free resource at now) and reschedule.",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/ClockIn",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],
@@ -304,21 +358,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
         "name": "ClockOut",
-        "description": "Connect-RPC (JSON over HTTP): clock out / early-finish (ACTIVE → COMPLETE, free the resource), then reschedule (pull-forward). Currently a Connect `unimplemented` error.",
+        "description": "Settle the caller's own ACTIVE slot (clock-out / early finish -> COMPLETE), freeing its resource, then reschedule (pull-forward).",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/ClockOut",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],
@@ -336,21 +396,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
         "name": "CancelSlot",
-        "description": "Connect-RPC (JSON over HTTP): cancel a slot (→ CANCELLED, free its place), then reschedule (pull-forward). Currently a Connect `unimplemented` error.",
+        "description": "Cancel the caller's own SCHEDULED/ACTIVE slot (-> CANCELLED) and reschedule (pull-forward).",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/CancelSlot",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],
@@ -368,21 +434,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
         "name": "PokeOccupant",
-        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, nudge the occupant of an overrunning slot to wrap up (the backend notifies them). Step one of a resource reclaim; changes no schedule state. In the Danger folder because it triggers a real notification. Currently a Connect `unimplemented` error.",
+        "description": "As the next-in-line user, nudge an overrunning occupant to wrap up (enqueues a notification; changes no schedule state).",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/PokeOccupant",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],
@@ -400,21 +472,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
         "name": "ForceClockOut",
-        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, boot the occupant of an overrunning slot (settles it COMPLETE, frees the resource), then reschedule (pull-forward). Step two of a reclaim, the escalation when a poke goes unheeded. Currently a Connect `unimplemented` error.",
+        "description": "As the next-in-line user, boot an overrunning occupant (-> COMPLETE) and reschedule. The escalation after a poke.",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/ForceClockOut",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],
@@ -432,21 +510,27 @@
         "workspaceId": "wk_igZobFKXDr",
         "folderId": "fl_FVRufW7bBP",
         "name": "ForceNoShow",
-        "description": "Connect-RPC (JSON over HTTP): as the next-in-line user, reclaim a slot whose clock-in grace lapsed (settles it NO_SHOW, frees its place), then reschedule (pull-forward). Sibling of ForceClockOut for the no-show case, with no prior poke — the grace period was the warning. The engine never no-shows anyone automatically. Currently a Connect `unimplemented` error.",
+        "description": "As the next-in-line user, reclaim a slot whose clock-in grace lapsed (-> NO_SHOW) and reschedule. No prior poke — the grace was the warning.",
         "method": "POST",
         "url": "${[ base_url ]}/qlab.v1.QlabService/ForceNoShow",
         "headers": [
           {
             "enabled": true,
+            "id": null,
             "name": "Content-Type",
-            "value": "application/json",
-            "id": null
+            "value": "application/json"
           },
           {
             "enabled": true,
-            "name": "Authorization",
-            "value": "Bearer ${[ auth_token ]}",
-            "id": null
+            "id": null,
+            "name": "X-QLab-User",
+            "value": "${[ dev_user_id ]}"
+          },
+          {
+            "enabled": true,
+            "id": null,
+            "name": "X-QLab-Lab",
+            "value": "${[ dev_lab_id ]}"
           }
         ],
         "urlParameters": [],

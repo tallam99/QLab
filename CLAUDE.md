@@ -4,14 +4,18 @@ QLab is a lab-equipment scheduling PWA. Its differentiator is a **multi-resource
 scheduling engine** that continuously re-flows a priority queue across
 interchangeable resources as experiments overrun, finish early, or get cancelled.
 
-**Current status:** Phase 6 (contract layer). The Go service, a one-command local
+**Current status:** Phase 7 (API endpoints). The Go service, a one-command local
 stack (Docker Compose + Postgres, `mage` targets), the GitHub Actions pipeline (CI
 gate + deploy to Cloud Run + Firebase Hosting, both environments — see
 `docs/deploy.md`), the pure scheduling engine (`internal/dynamicqueue`, Phase 4),
 the data model (goose migrations + a self-enforcing schema, seed, and the
-`schema_test` suite — Phase 5), and now the proto contract (`proto/qlab/v1`, with
-generated Go + TS and a stubbed Connect service mounted on the router) are in place;
-the real API endpoints are next. Work proceeds through the phases in `docs/PLAN.md`.
+`schema_test` suite — Phase 5), the proto contract (`proto/qlab/v1`, generated Go +
+TS, Phase 6), and now the **real, persisted Connect API** — the eight RPCs wired
+through a domain scheduling service (`internal/scheduling`) to the engine + store in
+one transaction per event, with a full-stack integration suite
+(`backend/integration_test`, `mage testIntegration`) — are in place. Auth (real
+Firebase JWTs) is next (Phase 8); Phase 7 uses a dev-header principal stand-in. Work
+proceeds through the phases in `docs/PLAN.md`.
 
 ## Read these first
 
