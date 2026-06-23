@@ -8,17 +8,69 @@
 // configures it nor health-checks it. The interface therefore holds only
 // business-domain operations, nothing infrastructural. Callers choose the
 // implementation: the real Postgres store, or a stub in tests.
+//
+// The store speaks the persistence domain (Slot, Pool, Resource, OutboxRow) and
+// is deliberately engine-agnostic: it never imports dynamicqueue. The scheduling
+// layer converts these to the engine's types and back at its boundary.
 package store
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 //go:generate go tool mockery
 
-// Store is the data store the service reads and writes its data model through. The
-// full set of business-domain methods lands with the API in Phase 7; for now it
-// carries a single trivial read that proves the store connects and queries.
+// ErrNotFound is returned by the single-row lookups when no row matches (within
+// the caller's lab scope). Callers map it to a not-found / permission error at the
+// edge rather than leaking pgx.ErrNoRows.
+var ErrNotFound = errors.New("store: not found")
+
+// PoolState is the locked snapshot WithPool hands to its callback: the pool's
+// live slots (SCHEDULED + ACTIVE, locked FOR UPDATE) and its resources. History
+// is excluded — the engine only ever sees the live world.
+type PoolState struct {
+	Slots     []Slot
+	Resources []Resource
+}
+
+// PoolMutation is what a WithPool callback returns for the store to persist
+// atomically: the full desired state of every slot to write (insert-or-update by
+// ID) and any outbox rows to enqueue.
+type PoolMutation struct {
+	Slots  []Slot
+	Outbox []OutboxRow
+}
+
+// Store is the data store the service reads and writes its data model through.
 type Store interface {
-	// CountLabs returns the number of labs. A connectivity/smoke query, not a
-	// product operation — the real lab/slot/membership methods arrive in Phase 7.
+	// CountLabs returns the number of labs — a connectivity/smoke query retained
+	// from the bootstrap, not a product operation.
 	CountLabs(ctx context.Context) (int, error)
+
+	// IsMember reports whether userID belongs to labID. Authorization uses it to
+	// reject callers acting on a lab they are not a member of.
+	IsMember(ctx context.Context, labID, userID string) (bool, error)
+
+	// PoolByID loads a pool within labID (resolving its kind). Returns ErrNotFound
+	// if no such pool exists in that lab — which is also how a cross-lab pool id is
+	// rejected.
+	PoolByID(ctx context.Context, labID, poolID string) (Pool, error)
+
+	// SlotByID loads a single slot within labID, so a slot-targeting RPC can
+	// resolve its pool (the lock + authoritative state check happen inside
+	// WithPool). Returns ErrNotFound if absent in that lab.
+	SlotByID(ctx context.Context, labID, slotID string) (Slot, error)
+
+	// ListSlots returns the pool's slots (full lifecycle) scoped to labID, ordered
+	// for display.
+	ListSlots(ctx context.Context, labID, poolID string) ([]Slot, error)
+
+	// WithPool runs fn inside one transaction with the lab's RLS scope set
+	// (app.current_lab_id) and the pool's live slots locked FOR UPDATE — the
+	// "one transaction per event" contract (ALGORITHM §10). It hands fn the locked
+	// PoolState, then persists the returned PoolMutation (upserting slots by id and
+	// enqueuing outbox rows) and commits; any error rolls the whole thing back.
+	// actorUserID is recorded as created_by/updated_by on written rows.
+	WithPool(ctx context.Context, labID, poolID, actorUserID string, fn func(PoolState) (PoolMutation, error)) error
 }
