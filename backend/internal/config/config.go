@@ -26,6 +26,11 @@ type Config struct {
 	// Comma-separated; set per environment to the Hosting URL(s). The local
 	// default is the Vite dev server. Empty means same-origin only (fail closed).
 	AllowedOrigins []string `envconfig:"CORS_ALLOWED_ORIGINS" default:"http://localhost:5173"`
+	// ClockInGraceMinutes is how long after a slot's committed start a user may
+	// still clock in before the slot becomes reclaimable by the next-in-line user
+	// (ALGORITHM §2.3). Injected into the scheduling engine as configuration — the
+	// engine never hardcodes it. Whole minutes, >= 0.
+	ClockInGraceMinutes int32 `envconfig:"CLOCK_IN_GRACE_MINUTES" default:"15"`
 }
 
 // Load reads and validates configuration from the environment.

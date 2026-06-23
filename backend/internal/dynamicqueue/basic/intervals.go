@@ -40,8 +40,11 @@ type freeMap map[dynamicqueue.ResourceID][]interval
 // buildFree seeds every resource's availability from now, carving out the
 // occupancy of pinned ACTIVE slots ([now, projectedEnd)) so scheduled slots are
 // placed only into genuinely free time (ALGORITHM §5 step 1). Validate guarantees
-// each active slot's projectedEnd is after now, so its occupancy is non-empty and
-// an overrunning active is never mistaken for a free resource.
+// each active slot's projectedEnd is at or after now: a projectedEnd after now
+// leaves a non-empty occupancy so the resource is busy until then; projectedEnd ==
+// now (an overrunning slot re-projected to "frees imminently") leaves an empty
+// occupancy [now, now), so the resource is free from now and the people behind are
+// placed at the now floor.
 func buildFree(resources []dynamicqueue.Resource, slots []dynamicqueue.Slot, now time.Time) freeMap {
 	busy := make(map[dynamicqueue.ResourceID][]interval)
 	for _, s := range slots {

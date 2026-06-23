@@ -18,14 +18,20 @@ type Algorithm interface {
 
 // Input is the world handed to the engine for one pool: the live slots
 // (SCHEDULED + ACTIVE — the caller filters history out, §1.2), the pool's
-// resources, and the current instant. The clock-in grace period is deliberately
-// NOT here: it is configuration the implementation is constructed with, not
-// world-state (§10).
+// resources, the current instant, and the clock-in grace period. Grace is passed
+// per run rather than held by the implementation so the caller (the scheduling
+// service) is the single owner of the value and the engine stays config-free —
+// the engine reads grace as world-state, exactly like Now (§2.3, §10).
 type Input struct {
 	ResourcePoolID ResourcePoolID
 	Slots          []Slot
 	Resources      []Resource
 	Now            time.Time
+	// Grace is the clock-in grace period: a SCHEDULED slot whose
+	// CommittedStart + Grace is before Now (and which hasn't clocked in) is flagged
+	// Reclaimable. Whole minutes, >= 0; 0 means a slot is reclaimable the instant it
+	// is past its committed start.
+	Grace Minutes
 }
 
 // Result is what Reschedule returns: the recomputed queue and the trace of how

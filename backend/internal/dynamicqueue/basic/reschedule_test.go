@@ -311,8 +311,9 @@ func TestReschedule(t *testing.T) {
 				Slots:          c.slots,
 				Resources:      c.resources,
 				Now:            at(c.now),
+				Grace:          dynamicqueue.Minutes(c.grace),
 			}
-			eng := New(Config{ClockInGrace: dynamicqueue.Minutes(c.grace)})
+			eng := New()
 
 			res, err := eng.Reschedule(in)
 			require.NoError(t, err)
@@ -399,7 +400,7 @@ func assertInvariants(t *testing.T, in dynamicqueue.Input, res dynamicqueue.Resu
 
 // TestRescheduleValidation exercises the input guard Reschedule runs first.
 func TestRescheduleValidation(t *testing.T) {
-	eng := New(Config{ClockInGrace: 15})
+	eng := New()
 	foreignPool := sched("x", 1, 0, 60, 0, -1)
 	foreignPool.ResourcePoolID = "other-pool"
 	noResource := active("y", 1, "r1", 0, 60)
@@ -414,7 +415,7 @@ func TestRescheduleValidation(t *testing.T) {
 		{"non-positive duration", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{sched("a", 1, 0, 0, 0, -1)}}},
 		{"foreign pool slot", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{foreignPool}}},
 		{"active without resource", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{noResource}}},
-		{"active projected end not after now", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{active("z", 1, "r1", -60, 0)}}},
+		{"active projected end before now", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{active("z", 1, "r1", -60, -1)}}},
 		{"two active slots on one resource", dynamicqueue.Input{ResourcePoolID: pool, Resources: resources("r1"), Now: base, Slots: []dynamicqueue.Slot{active("a", 1, "r1", 0, 60), active("b", 2, "r1", 0, 90)}}},
 	}
 	for _, c := range cases {
@@ -423,4 +424,28 @@ func TestRescheduleValidation(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+// TestRescheduleOverrunFreesAtNow checks the projectedEnd == now boundary: an
+// overrunning ACTIVE slot re-projected to "frees imminently" leaves its resource
+// free from now, so the slot behind it is placed at the now floor (the overrun
+// behaviour, §6). A projection strictly before now is rejected (see the validation
+// case above); exactly now is accepted.
+func TestRescheduleOverrunFreesAtNow(t *testing.T) {
+	eng := New()
+	// a overran: actual start 60m ago, projected end re-set to now (offset 0).
+	// b is behind a on the only resource, desired 30m ago, no earliness.
+	in := dynamicqueue.Input{
+		ResourcePoolID: pool,
+		Resources:      resources("r1"),
+		Now:            base,
+		Grace:          15,
+		Slots:          []dynamicqueue.Slot{active("a", 1, "r1", -60, 0), sched("b", 2, -30, 60, 0, -1)},
+	}
+	res, err := eng.Reschedule(in)
+	require.NoError(t, err)
+	pos, ok := res.Queue["b"]
+	require.True(t, ok)
+	assert.True(t, pos.ActualStart.Equal(base), "b should be placed at the now floor once a frees at now")
+	assert.Equal(t, dynamicqueue.ResourceID("r1"), pos.AssignedResource)
 }

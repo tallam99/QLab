@@ -44,15 +44,17 @@ same fields.
 | `mage resetStack` | wipe the data volume **and** recreate (fresh DB) |
 | `mage migrate` | apply `goose` migrations (`backend/migrations/`) to local Postgres |
 | `mage seed` | load demo data (`backend/seed/seed.sql`) into local Postgres — **local only** |
-| `mage test` | run all test tiers: `testUnit` + `testSecurity` + `testSchema`. **Requires the stack up** (testSchema needs Postgres) |
+| `mage test` | run all test tiers: `testUnit` + `testSecurity` + `testSchema` + `testIntegration`. **Requires the stack up** (the schema + integration tiers need Postgres) |
 | `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
 | `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
 | `mage testSchema` | DB-level schema tests (constraints/triggers/seed) against a throwaway DB; **requires the stack up**. Its `TestMain` creates/migrates/seeds/drops `qlab_schema_test` |
+| `mage testIntegration` | full-stack suite: boots the real server (as an RLS-bound app role) against a throwaway DB and drives it through the Connect client; **requires the stack up**. Its `TestMain` creates/migrates/drops `qlab_integration_test` |
 | `mage genMocks` / `mage clearMocks` | (re)generate / remove the mockery mocks. Mocks are **not** committed (`.mockery.yaml`); generate before building code that imports one, then `go mod tidy` |
 | `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
 | `mage genProto` | `buf generate` from `proto/`: Go → `backend/internal/protogen`, TS → `frontend/src/protogen`. Go plugins are the module's pinned `go tool` binaries; the TS plugin is `proto/package.json` (`npm install` in `proto/` first). Commit the regenerated output. |
+| `mage genSqlc` | `sqlc generate` (`sqlc.yaml`): compiles `backend/internal/store/pgstore/queries.sql` against the migration schema → `pgstore/sqlcgen`. Committed; run after changing the queries or the slots/outbox schema. CI checks drift. |
 | `mage dbStringStaging` / `mage dbStringProd` | **user-run only** — print the human read-write Neon connection string from Secret Manager (for DBeaver). Claude never runs these (they invoke `gcloud`). See `docs/deploy.md`. |
 
 `genProto` generates from the `proto/qlab/v1` contract; the committed output is

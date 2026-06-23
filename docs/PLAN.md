@@ -527,9 +527,9 @@ request hits one Connect endpoint and gets `Unimplemented`.
   any resulting notifications to the **outbox** (same tx) → return the updated
   schedule.
 - Enforce **`lab_id` scoping in every query** (defense in depth; pairs with Phase 8).
-- **Spans** on handler → engine → tx → outbox, annotated with `lab_id`, `resource_pool_id`,
-  event type, and per-slot re-commit info (which starts changed) (observability
-  convention).
+- **Observability (spans + structured request logging) is deferred to Phase 7.5**
+  — pulled out to reach a working demo sooner. The handler → engine → tx → outbox
+  span tree and the per-request log lines land there, not here.
 - **Add a Yaak request for each behavior variation** (every matrix scenario, each
   error path) — this is where the Yaak catalogue becomes the live regression set.
 
@@ -546,7 +546,42 @@ grace lapse → see `NO_SHOW` re-flow the queue. Each is a saved Yaak request.
   evaluating grace lazily on the next event/read). Pick one; note it.
 - Concurrency: the per-operation transaction + `SELECT … FOR UPDATE` on the pool's
   slots is what stops two simultaneous clock-outs from corrupting the schedule
-  (`docs/ALGORITHM.md` §10).
+  (`docs/ALGORITHM.md` §10). A **pool advisory lock** in the same transaction extends
+  this to concurrent *creates* (which have no existing row to lock), so they can't
+  collide on `slot_priority`.
+- **No-show is user-driven, not swept.** Per `docs/ALGORITHM.md` §2.3 (revised after
+  this plan was first written), the engine flags a grace-lapsed slot `reclaimable`
+  and the next-in-line user reclaims it via `ForceNoShow`; there is no backend sweep,
+  so no periodic trigger is needed. (Supersedes the "no-show sweep" note above.)
+
+---
+
+## Phase 7.5 — Observability (OTel tracing + structured request logging)
+
+**Goal:** Make a request's full story selectively feedable — spans on every
+meaningful unit of work and a structured log line per request — so staging behaviour
+can be reconstructed (the observability convention).
+
+**Status:** Deliberately **deferred** out of Phase 7 to reach a working demo sooner;
+OTel has not been wired into the codebase yet. Pick this up before staging carries
+real traffic (it pairs naturally with Phase 8, when requests gain real identity).
+
+**Work:**
+- Stand up the **OpenTelemetry SDK**: a tracer provider with a stdout exporter
+  locally and **Cloud Trace** in staging/prod (driven by `QLAB_ENV`), plus context
+  propagation; a tracing middleware on the chi router (sibling to the request-id /
+  logging middleware).
+- **Spans across the event path:** handler → `scheduling` event → `store.WithPool`
+  transaction → outbox enqueue, annotated with `lab_id`, `resource_pool_id`, event
+  type, and per-slot re-commit info (which starts changed).
+- **Structured request logging** in handlers via the existing
+  `httpmw.LoggerFromContext` (the slog infra is already in place), carrying the
+  request id, `lab_id`, and event.
+- Optional **metrics** instrumentation (flag any added, per conventions).
+
+**Exit criteria:** a single reschedule produces a span tree (handler → engine → tx →
+outbox) with the lab/pool/event annotations, exported to stdout locally; each request
+emits one structured log line correlated by request id.
 
 ---
 

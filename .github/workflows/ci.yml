@@ -2,8 +2,9 @@
 # main (via workflow_call), so a deploy can only proceed once these checks pass.
 #
 # Each job mirrors a `mage` test target so a green PR means the same thing locally
-# and in CI (`mage test` = testUnit + testSecurity + testSchema; the schema tier
-# needs a database, so it runs as its own job with a Postgres service).
+# and in CI (`mage test` = testUnit + testSecurity + testSchema + testIntegration;
+# the schema and integration tiers need a database, so each runs as its own job
+# with a Postgres service).
 name: CI
 
 on:
@@ -98,6 +99,37 @@ jobs:
       - name: Schema tests
         run: mage testSchema
 
+  # Full-stack integration tests — `mage testIntegration`. Like the schema job, a
+  # Postgres service stands in for the local Compose stack; the suite's TestMain
+  # boots the real server (as a non-privileged RLS-bound app role it creates) and
+  # drives it through the generated Connect client, then drops its throwaway database.
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: qlab
+          POSTGRES_PASSWORD: qlab
+          POSTGRES_DB: qlab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qlab -d qlab"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Integration tests
+        run: mage testIntegration
+
   # Proto contract checks: lint the schema, guard against backwards-incompatible
   # changes once it exists on main, and prove the committed generated code matches
   # the .proto (we commit codegen rather than generating in the consumer builds, so
@@ -145,6 +177,29 @@ jobs:
           if [ -n "$changes" ]; then
             echo "$changes"
             echo "::error::generated code is stale — run 'mage genProto' and commit"
+            exit 1
+          fi
+
+  # sqlc codegen check: prove the committed store query code matches queries.sql +
+  # the migration schema (committed, like proto, so consumer builds need no sqlc).
+  # Mirrors `mage genSqlc`.
+  sqlc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Verify generated code is up to date
+        run: |
+          mage genSqlc
+          changes=$(git status --porcelain -- backend/internal/store/pgstore/sqlcgen)
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::generated code is stale — run 'mage genSqlc' and commit"
             exit 1
           fi
 

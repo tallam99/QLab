@@ -33,6 +33,11 @@ const (
 	// creates, migrates, and drops so the tests never touch dev data.
 	schemaTestDir = "./backend/schema_test/..."
 	schemaTestDB  = "qlab_schema_test"
+	// integrationTestDir holds the full-stack integration suite (real server + DB +
+	// engine over Connect), tagged `integration`; integrationTestDB is the throwaway
+	// database its TestMain creates, migrates, and drops.
+	integrationTestDir = "./backend/integration_test/..."
+	integrationTestDB  = "qlab_integration_test"
 	// engineDir is the pure scheduling engine; mutation testing recurses it.
 	engineDir = "./backend/internal/dynamicqueue"
 	// goosePackage pins the migration tool. It's run via `go run …@version` rather
@@ -243,7 +248,10 @@ func Test() error {
 	if err := TestSecurity(); err != nil {
 		return err
 	}
-	return TestSchema()
+	if err := TestSchema(); err != nil {
+		return err
+	}
+	return TestIntegration()
 }
 
 // TestUnit runs the Go unit tests (build tag `testunit`). They need no
@@ -287,6 +295,33 @@ func TestSchema() error {
 	)
 	// -count=1 disables the test cache: the result depends on live DB state.
 	return runWithEnv(testEnv, "go", "test", "-tags", "database", "-count=1", schemaTestDir)
+}
+
+// TestIntegration runs the full-stack integration suite: it boots the real server
+// (connecting as a non-privileged RLS-bound app role) against a throwaway database
+// and drives it through the generated Connect client. The suite's TestMain owns
+// that database — creating it fresh, applying all migrations with goose, creating
+// the app role, running, and dropping it — so this target just hands it the
+// coordinates. It needs a reachable Postgres (mage startStack locally, a Postgres
+// service in CI). Part of `mage test`.
+func TestIntegration() error {
+	env, err := loadEnv()
+	if err != nil {
+		return err
+	}
+	abs := func(p string) string {
+		if a, err := filepath.Abs(p); err == nil {
+			return a
+		}
+		return p
+	}
+	testEnv := append(os.Environ(),
+		"INTEGRATION_TEST_DATABASE_URL="+env.hostDatabaseURLFor(integrationTestDB),
+		"INTEGRATION_TEST_MIGRATIONS_DIR="+abs(migrationsDir),
+		"INTEGRATION_TEST_GOOSE_PKG="+goosePackage,
+	)
+	// -count=1 disables the test cache: the result depends on live DB state.
+	return runWithEnv(testEnv, "go", "test", "-tags", "integration", "-count=1", integrationTestDir)
 }
 
 // mutateDirs are the directories `mage mutate` runs mutation testing over, in
@@ -378,6 +413,14 @@ func ClearMocks() error {
 	})
 }
 
+// GenSqlc regenerates the type-safe Go store queries from queries.sql against the
+// migration schema (see sqlc.yaml). Committed like the other generated code; CI
+// checks it is not stale. Run after changing queries.sql or the slots/outbox
+// schema.
+func GenSqlc() error {
+	return run("go", "tool", "sqlc", "generate")
+}
+
 // GenProto regenerates Go + TS from the .proto contract via buf, run from the
 // proto/ module dir so buf.gen.yaml's relative output paths and the npm-pinned TS
 // plugin resolve. The Go plugins are the module's pinned `go tool` binaries.
@@ -386,8 +429,9 @@ func GenProto() error {
 		fmt.Printf("genproto: no buf config (%s) found\n", bufConfigFile)
 		return nil
 	}
-	// --include-imports vendors the protovalidate dependency's types into our gen
-	// dirs (so both Go and TS are self-contained) while the well-known types stay
-	// external (no --include-wkt) — Go uses timestamppb, TS uses @bufbuild/protobuf.
-	return runIn(protoDir, "buf", "generate", "--include-imports")
+	// No --include-imports: imported modules (protovalidate, the well-known types)
+	// are NOT vendored into our gen dirs. They resolve to their own Go/TS packages —
+	// buf/validate to the protovalidate BSR module (the same one the runtime uses,
+	// so it is registered once), timestamps to timestamppb / @bufbuild/protobuf.
+	return runIn(protoDir, "buf", "generate")
 }

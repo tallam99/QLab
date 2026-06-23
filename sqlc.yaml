@@ -1,0 +1,47 @@
+# sqlc generates type-safe Go from the static SQL the store runs (the documented
+# convention: sqlc for static queries, squirrel for dynamic ones). It reads the
+# schema straight from the goose migrations (it understands the +goose Up/Down
+# markers and applies only Up), so the generated types track the real schema.
+# Regenerate with `mage genSqlc`; CI checks the committed output is up to date.
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "backend/migrations"
+    queries: "backend/internal/store/pgstore/queries.sql"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "backend/internal/store/pgstore/sqlcgen"
+        sql_package: "pgx/v5"
+        emit_json_tags: false
+        emit_interface: false
+        emit_empty_slices: true
+        # Map Postgres types to the domain's Go types. uuid -> google/uuid (the ids
+        # the whole codebase uses); enums -> plain strings (the store owns the typed
+        # enums and parses the labels); timestamptz -> time.Time. Nullable variants
+        # become pointers so SQL NULL is the Go zero/nil.
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+              pointer: true
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
+          - db_type: "slot_status"
+            go_type: "string"
+          - db_type: "resource_kind"
+            go_type: "string"
+          - db_type: "lab_role"
+            go_type: "string"
+          - db_type: "outbox_status"
+            go_type: "string"

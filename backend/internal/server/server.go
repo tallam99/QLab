@@ -22,8 +22,14 @@ import (
 
 	"github.com/tallam99/qlab/backend/internal/api"
 	"github.com/tallam99/qlab/backend/internal/clients/postgres"
+	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
+	"github.com/tallam99/qlab/backend/internal/dynamicqueue/basic"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/logging"
+	authzv1 "github.com/tallam99/qlab/backend/internal/services/authz/v1"
+	notificationsv1 "github.com/tallam99/qlab/backend/internal/services/notifications/v1"
+	"github.com/tallam99/qlab/backend/internal/services/scheduling"
+	schedulingv1 "github.com/tallam99/qlab/backend/internal/services/scheduling/v1"
 	"github.com/tallam99/qlab/backend/internal/store"
 	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
@@ -81,6 +87,12 @@ type Server struct {
 	logger     logging.Logger
 	handler    http.Handler
 	httpServer *http.Server
+	// apiService is the mounted Connect service; its scheduling dependency is
+	// attached by the WithScheduling injector once the store is ready.
+	apiService *api.Service
+	// boundAddr is the listener's actual address, published once Run binds it (so
+	// tests using a :0 port can discover it). Empty until then.
+	boundAddr atomic.Pointer[string]
 	// ready flips false->true once (Ready) when dependencies are initialized;
 	// /readyq reflects it. Atomic because request goroutines read it.
 	ready atomic.Bool
@@ -102,7 +114,7 @@ func New(opts Options) *Server {
 	if opts.Logger == nil {
 		panic("server: New requires a Logger")
 	}
-	s := &Server{logger: opts.Logger}
+	s := &Server{logger: opts.Logger, apiService: api.New()}
 
 	r := chi.NewRouter()
 
@@ -111,14 +123,16 @@ func New(opts Options) *Server {
 	r.Use(middleware.RequestID)              // generate/propagate a per-request id (in ctx + response header)
 	r.Use(httpmw.Recoverer(opts.Logger))     // turn downstream panics into a logged 500, never a crash
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
+	r.Use(httpmw.DevPrincipal)               // attach the caller principal from the dev header (Phase 8 replaces with JWT)
 
 	r.Get(pathHealthq, s.healthq) // liveness: is the process up? (always 200)
 	r.Get(pathReadyq, s.readyq)   // readiness: have dependencies initialized?
 
-	// Mount the Connect-RPC data API. Every method returns Unimplemented until
-	// Phase 7; the handler matches the full procedure paths under apiPath, so it
-	// mounts cleanly alongside the health routes.
-	apiPath, apiHandler := api.New().Handler()
+	// Mount the Connect-RPC data API. The handler matches the full procedure paths
+	// under apiPath, so it mounts cleanly alongside the health routes; its
+	// scheduling dependency is attached by the WithScheduling injector during Run
+	// (until then, methods return Unavailable).
+	apiPath, apiHandler := s.apiService.Handler()
 	r.Mount(apiPath, apiHandler)
 
 	s.handler = r
@@ -170,6 +184,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.httpServer.Addr, err)
 	}
+	// Publish the actual bound address so a caller that asked for a :0 (ephemeral)
+	// port — e.g. the integration suite — can discover it.
+	addr := listener.Addr().String()
+	s.boundAddr.Store(&addr)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -274,4 +292,36 @@ func WithPostgres(databaseURL string) func(context.Context, *Server) error {
 		s.closers = append(s.closers, dataStore)
 		return nil
 	}
+}
+
+// WithSchedulingService returns an injector that builds the scheduling service
+// (the basic engine + authorizer + notification builder over the ready store) and
+// attaches it to the mounted Connect handler. Register it AFTER WithPostgres, which
+// it depends on (the store must be set). clock may be nil — the service then uses
+// the real time.Now; tests pass a controllable clock for deterministic time.
+func WithSchedulingService(grace dynamicqueue.Minutes, clock scheduling.Clock) func(context.Context, *Server) error {
+	return func(_ context.Context, s *Server) error {
+		if s.store == nil {
+			return errors.New("WithSchedulingService requires the store; register WithPostgres first")
+		}
+		schedulingService := schedulingv1.New(schedulingv1.Options{
+			Store:         s.store,
+			Engine:        basic.New(),
+			Authorizer:    authzv1.New(s.store),
+			Notifications: notificationsv1.New(),
+			Clock:         clock,
+			ClockInGrace:  grace,
+		})
+		s.apiService.SetScheduling(schedulingService)
+		return nil
+	}
+}
+
+// Addr returns the server's actual listen address once Run has bound it, or "" if
+// it has not yet. Useful when Run was given a :0 (ephemeral) port.
+func (s *Server) Addr() string {
+	if a := s.boundAddr.Load(); a != nil {
+		return *a
+	}
+	return ""
 }

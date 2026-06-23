@@ -22,3 +22,4 @@ One file per decision, numbered `NNNN-short-title.md`. Each records:
 - [0003 — The database enforces domain invariants (belt-and-suspenders)](0003-database-enforced-invariants.md)
 - [0004 — Least-privilege Neon roles per access pattern](0004-least-privilege-database-roles.md)
 - [0005 — Row-level security for tenant isolation](0005-row-level-security-tenant-isolation.md)
+- [0006 — Request identity (principal) and lab scoping](0006-request-identity-and-lab-scoping.md)

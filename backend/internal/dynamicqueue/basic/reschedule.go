@@ -60,7 +60,7 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 		carve(free, resource, start, s.Duration)
 
 		recommitted := !start.Equal(s.CommittedStart)
-		reclaimable := e.lapsed(s, in.Now)
+		reclaimable := lapsed(s, in.Now, in.Grace)
 		queue[s.ID] = dynamicqueue.SlotPosition{
 			ActualStart:      start,
 			AssignedResource: resource,
@@ -96,7 +96,7 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 				Slot: s.ID,
 				At:   in.Now,
 				Detail: fmt.Sprintf("reclaimable: committed %s + %dm grace lapsed by %s",
-					fmtTime(s.CommittedStart), e.clockInGrace, fmtTime(in.Now)),
+					fmtTime(s.CommittedStart), in.Grace, fmtTime(in.Now)),
 			})
 		}
 	}
@@ -106,12 +106,13 @@ func (e Engine) Reschedule(in dynamicqueue.Input) (dynamicqueue.Result, error) {
 
 // lapsed reports whether a scheduled slot's clock-in grace has passed: it was
 // committed to a start and now is past committedStart + grace (§2.3). A slot with
-// no committed start has never been due, so it cannot be a no-show.
-func (e Engine) lapsed(s dynamicqueue.Slot, now time.Time) bool {
+// no committed start has never been due, so it cannot be a no-show. grace arrives
+// per run on Input, so this is a free function, not a method.
+func lapsed(s dynamicqueue.Slot, now time.Time, grace dynamicqueue.Minutes) bool {
 	if s.CommittedStart.IsZero() {
 		return false
 	}
-	return now.After(s.CommittedStart.Add(e.clockInGrace.Duration()))
+	return now.After(s.CommittedStart.Add(grace.Duration()))
 }
 
 // laterOf returns the later of two instants.

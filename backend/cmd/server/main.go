@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/tallam99/qlab/backend/internal/config"
+	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	slogging "github.com/tallam99/qlab/backend/internal/logging/slog"
 	"github.com/tallam99/qlab/backend/internal/server"
 )
@@ -49,6 +50,9 @@ func run() error {
 		AllowedOrigins: cfg.AllowedOrigins,
 	})
 	s.InjectDependency(server.WithPostgres(cfg.DatabaseURL))
+	// Scheduling depends on the store, so register it after WithPostgres. Clock is
+	// nil here → the service uses the real time.Now.
+	s.InjectDependency(server.WithSchedulingService(dynamicqueue.Minutes(cfg.ClockInGraceMinutes), nil))
 
 	// Cloud Run sends SIGTERM to drain a container; also handle SIGINT for local
 	// Ctrl-C. Cancelling ctx tells the server to shut down (and aborts init).
