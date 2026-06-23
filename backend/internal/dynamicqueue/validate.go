@@ -15,6 +15,9 @@ func (in Input) Validate() error {
 	if len(in.Resources) == 0 {
 		return errors.New("dynamicqueue: input has no resources")
 	}
+	if in.Grace < 0 {
+		return fmt.Errorf("dynamicqueue: negative grace %d", in.Grace)
+	}
 	for _, r := range in.Resources {
 		if r.ResourcePoolID != in.ResourcePoolID {
 			return fmt.Errorf("dynamicqueue: resource %q is in resource pool %q, not %q", r.ID, r.ResourcePoolID, in.ResourcePoolID)

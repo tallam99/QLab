@@ -311,8 +311,9 @@ func TestReschedule(t *testing.T) {
 				Slots:          c.slots,
 				Resources:      c.resources,
 				Now:            at(c.now),
+				Grace:          dynamicqueue.Minutes(c.grace),
 			}
-			eng := New(Config{ClockInGrace: dynamicqueue.Minutes(c.grace)})
+			eng := New()
 
 			res, err := eng.Reschedule(in)
 			require.NoError(t, err)
@@ -399,7 +400,7 @@ func assertInvariants(t *testing.T, in dynamicqueue.Input, res dynamicqueue.Resu
 
 // TestRescheduleValidation exercises the input guard Reschedule runs first.
 func TestRescheduleValidation(t *testing.T) {
-	eng := New(Config{ClockInGrace: 15})
+	eng := New()
 	foreignPool := sched("x", 1, 0, 60, 0, -1)
 	foreignPool.ResourcePoolID = "other-pool"
 	noResource := active("y", 1, "r1", 0, 60)
@@ -431,13 +432,14 @@ func TestRescheduleValidation(t *testing.T) {
 // behaviour, §6). A projection strictly before now is rejected (see the validation
 // case above); exactly now is accepted.
 func TestRescheduleOverrunFreesAtNow(t *testing.T) {
-	eng := New(Config{ClockInGrace: 15})
+	eng := New()
 	// a overran: actual start 60m ago, projected end re-set to now (offset 0).
 	// b is behind a on the only resource, desired 30m ago, no earliness.
 	in := dynamicqueue.Input{
 		ResourcePoolID: pool,
 		Resources:      resources("r1"),
 		Now:            base,
+		Grace:          15,
 		Slots:          []dynamicqueue.Slot{active("a", 1, "r1", -60, 0), sched("b", 2, -30, 60, 0, -1)},
 	}
 	res, err := eng.Reschedule(in)

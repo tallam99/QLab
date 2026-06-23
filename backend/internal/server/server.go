@@ -301,7 +301,7 @@ func WithScheduling(grace dynamicqueue.Minutes, clock scheduling.Clock) func(con
 		if s.store == nil {
 			return errors.New("WithScheduling requires the store; register WithPostgres first")
 		}
-		engine := basic.New(basic.Config{ClockInGrace: grace})
+		engine := basic.New()
 		s.apiService.SetScheduling(scheduling.New(scheduling.Options{
 			Store:        s.store,
 			Engine:       engine,
