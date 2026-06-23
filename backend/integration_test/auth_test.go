@@ -4,7 +4,6 @@ package integrationtest
 
 import (
 	"context"
-	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -15,8 +14,8 @@ import (
 
 // TestUnauthenticated: a request with no principal headers is rejected before it
 // reaches any business logic.
-func TestUnauthenticated(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestUnauthenticated() {
+	t := s.T()
 	lab := h.makeLab(t, 1)
 	_, err := h.anonClient().
 		ListSlots(context.Background(), connect.NewRequest(&v1.ListSlotsRequest{ResourcePoolId: lab.PoolID}))
@@ -25,8 +24,8 @@ func TestUnauthenticated(t *testing.T) {
 
 // TestNonMemberDenied: an authenticated user who is not a member of the lab they
 // claim is denied (RLS checks the lab, but membership is the app-layer gate).
-func TestNonMemberDenied(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestNonMemberDenied() {
+	t := s.T()
 	lab := h.makeLab(t, 1)
 	stranger := uuid.NewString() // a valid uuid, but not a member of the lab
 	_, err := h.client(stranger, lab.LabID).
@@ -37,8 +36,8 @@ func TestNonMemberDenied(t *testing.T) {
 // TestCrossLabIsolation: a member of one lab cannot reach another lab's pool —
 // neither by naming it under their own lab (not found), nor by claiming the other
 // lab they don't belong to (permission denied).
-func TestCrossLabIsolation(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestCrossLabIsolation() {
+	t := s.T()
 	ctx := context.Background()
 	labA := h.makeLab(t, 1)
 	labB := h.makeLab(t, 1)
@@ -55,8 +54,8 @@ func TestCrossLabIsolation(t *testing.T) {
 }
 
 // TestCreateInvalidArgument: a malformed booking (zero duration) is rejected.
-func TestCreateInvalidArgument(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestCreateInvalidArgument() {
+	t := s.T()
 	lab := h.makeLab(t, 1)
 	_, err := h.client(lab.Member1, lab.LabID).
 		CreateSlot(context.Background(), connect.NewRequest(&v1.CreateSlotRequest{

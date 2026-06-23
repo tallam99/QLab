@@ -24,10 +24,12 @@ func TestConnectServiceMounted(t *testing.T) {
 	srv := httptest.NewServer(New(Options{Logger: logging.Noop()}))
 	defer srv.Close()
 
+	// A valid-uuid pool id so the request passes the protovalidate interceptor and
+	// reaches the auth gate (an invalid id would stop at validation with 400).
 	resp, err := srv.Client().Post(
 		srv.URL+"/qlab.v1.QlabService/ListSlots",
 		"application/json",
-		strings.NewReader(`{"resourcePoolId":"demo"}`),
+		strings.NewReader(`{"resourcePoolId":"11111111-1111-1111-1111-111111111111"}`),
 	)
 	require.NoError(t, err)
 	defer func() {

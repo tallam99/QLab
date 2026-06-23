@@ -76,7 +76,7 @@ func startHarness(appURL string) (*harness, error) {
 		Addr:   "127.0.0.1:0", // ephemeral; discovered via srv.Addr()
 	})
 	srv.InjectDependency(server.WithPostgres(appURL))
-	srv.InjectDependency(server.WithScheduling(testGrace, clock.Now))
+	srv.InjectDependency(server.WithSchedulingService(testGrace, clock.Now))
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

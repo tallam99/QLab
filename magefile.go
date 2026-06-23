@@ -413,6 +413,14 @@ func ClearMocks() error {
 	})
 }
 
+// GenSqlc regenerates the type-safe Go store queries from queries.sql against the
+// migration schema (see sqlc.yaml). Committed like the other generated code; CI
+// checks it is not stale. Run after changing queries.sql or the slots/outbox
+// schema.
+func GenSqlc() error {
+	return run("go", "tool", "sqlc", "generate")
+}
+
 // GenProto regenerates Go + TS from the .proto contract via buf, run from the
 // proto/ module dir so buf.gen.yaml's relative output paths and the npm-pinned TS
 // plugin resolve. The Go plugins are the module's pinned `go tool` binaries.
@@ -421,8 +429,9 @@ func GenProto() error {
 		fmt.Printf("genproto: no buf config (%s) found\n", bufConfigFile)
 		return nil
 	}
-	// --include-imports vendors the protovalidate dependency's types into our gen
-	// dirs (so both Go and TS are self-contained) while the well-known types stay
-	// external (no --include-wkt) — Go uses timestamppb, TS uses @bufbuild/protobuf.
-	return runIn(protoDir, "buf", "generate", "--include-imports")
+	// No --include-imports: imported modules (protovalidate, the well-known types)
+	// are NOT vendored into our gen dirs. They resolve to their own Go/TS packages —
+	// buf/validate to the protovalidate BSR module (the same one the runtime uses,
+	// so it is registered once), timestamps to timestamppb / @bufbuild/protobuf.
+	return runIn(protoDir, "buf", "generate")
 }

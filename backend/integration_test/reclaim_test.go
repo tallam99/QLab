@@ -37,8 +37,8 @@ func overrunSetup(t *testing.T, lab labFixture) (activeID, waitingID string) {
 // TestForceClockOutOverrun: the next-in-line user boots an overrunning occupant,
 // settling it COMPLETE and freeing the resource; a non-next-in-line caller and a
 // not-yet-overrunning target are both rejected.
-func TestForceClockOutOverrun(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestForceClockOutOverrun() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	activeID, _ := overrunSetup(t, lab)
@@ -66,8 +66,8 @@ func TestForceClockOutOverrun(t *testing.T) {
 // TestPoke: the next-in-line user nudges an overrunning occupant; it enqueues an
 // outbox row and changes no schedule state. A non-overrunning target and a
 // non-next-in-line caller are rejected.
-func TestPoke(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestPoke() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	activeID, _ := overrunSetup(t, lab)
@@ -97,8 +97,8 @@ func pokeErr(ctx context.Context, lab labFixture, user, slotID string) error {
 // TestForceNoShowGraceLapsed: a slot whose clock-in grace has lapsed is reclaimed
 // by the next-in-line user (settled NO_SHOW), and the slot behind pulls forward.
 // Before the grace lapses the reclaim is rejected.
-func TestForceNoShowGraceLapsed(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestForceNoShowGraceLapsed() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	m1 := h.client(lab.Member1, lab.LabID)

@@ -1,6 +1,10 @@
 package store
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 //go:generate go tool enumer -type=SlotStatus -trimprefix=SlotStatus -transform=snake-upper -output=slotstatus_enumer.go
 
@@ -29,12 +33,12 @@ func (s SlotStatus) IsLive() bool { return s == SlotStatusScheduled || s == Slot
 // the engine and writes the engine's placements back here; nullable columns are
 // represented by zero values (empty ResourceID, zero CommittedStart/ActualStart).
 type Slot struct {
-	ID             string
-	LabID          string
-	UserID         string
-	ResourcePoolID string
-	// ResourceID is the assigned resource, "" when unassigned (NULL in the row).
-	ResourceID string
+	ID             uuid.UUID
+	LabID          uuid.UUID
+	UserID         uuid.UUID
+	ResourcePoolID uuid.UUID
+	// ResourceID is the assigned resource, uuid.Nil when unassigned (NULL in the row).
+	ResourceID uuid.UUID
 	// Priority is slot_priority: a unique total order across the pool's live slots,
 	// lower runs ahead. bigint in the row, so int64 here.
 	Priority int64

@@ -26,7 +26,10 @@ import (
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue/basic"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/logging"
-	"github.com/tallam99/qlab/backend/internal/scheduling"
+	authzv1 "github.com/tallam99/qlab/backend/internal/services/authz/v1"
+	notificationsv1 "github.com/tallam99/qlab/backend/internal/services/notifications/v1"
+	"github.com/tallam99/qlab/backend/internal/services/scheduling"
+	schedulingv1 "github.com/tallam99/qlab/backend/internal/services/scheduling/v1"
 	"github.com/tallam99/qlab/backend/internal/store"
 	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
@@ -291,23 +294,25 @@ func WithPostgres(databaseURL string) func(context.Context, *Server) error {
 	}
 }
 
-// WithScheduling returns an injector that builds the scheduling service (the basic
-// engine, configured with the clock-in grace, over the ready store) and attaches
-// it to the mounted Connect handler. Register it AFTER WithPostgres, which it
-// depends on (the store must be set). clock may be nil — the service then uses the
-// real time.Now; tests pass a controllable clock for deterministic time behaviour.
-func WithScheduling(grace dynamicqueue.Minutes, clock scheduling.Clock) func(context.Context, *Server) error {
+// WithSchedulingService returns an injector that builds the scheduling service
+// (the basic engine + authorizer + notification builder over the ready store) and
+// attaches it to the mounted Connect handler. Register it AFTER WithPostgres, which
+// it depends on (the store must be set). clock may be nil — the service then uses
+// the real time.Now; tests pass a controllable clock for deterministic time.
+func WithSchedulingService(grace dynamicqueue.Minutes, clock scheduling.Clock) func(context.Context, *Server) error {
 	return func(_ context.Context, s *Server) error {
 		if s.store == nil {
-			return errors.New("WithScheduling requires the store; register WithPostgres first")
+			return errors.New("WithSchedulingService requires the store; register WithPostgres first")
 		}
-		engine := basic.New()
-		s.apiService.SetScheduling(scheduling.New(scheduling.Options{
-			Store:        s.store,
-			Engine:       engine,
-			Clock:        clock,
-			ClockInGrace: grace,
-		}))
+		schedulingService := schedulingv1.New(schedulingv1.Options{
+			Store:         s.store,
+			Engine:        basic.New(),
+			Authorizer:    authzv1.New(s.store),
+			Notifications: notificationsv1.New(),
+			Clock:         clock,
+			ClockInGrace:  grace,
+		})
+		s.apiService.SetScheduling(schedulingService)
 		return nil
 	}
 }

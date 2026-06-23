@@ -180,6 +180,29 @@ jobs:
             exit 1
           fi
 
+  # sqlc codegen check: prove the committed store query code matches queries.sql +
+  # the migration schema (committed, like proto, so consumer builds need no sqlc).
+  # Mirrors `mage genSqlc`.
+  sqlc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install mage
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Verify generated code is up to date
+        run: |
+          mage genSqlc
+          changes=$(git status --porcelain -- backend/internal/store/pgstore/sqlcgen)
+          if [ -n "$changes" ]; then
+            echo "$changes"
+            echo "::error::generated code is stale — run 'mage genSqlc' and commit"
+            exit 1
+          fi
+
   lint:
     runs-on: ubuntu-latest
     steps:

@@ -1,5 +1,7 @@
 package store
 
+import "github.com/google/uuid"
+
 //go:generate go tool enumer -type=ResourceKind -trimprefix=ResourceKind -transform=snake-upper -output=resourcekind_enumer.go
 
 // ResourceKind identifies what a resource is. Labels match the resource_kind DB
@@ -12,20 +14,20 @@ const (
 	ResourceKindVentHood                     // the MVP's single equipment kind
 )
 
-// Pool is a resource_pools row: a set of interchangeable resources a single queue
-// fans out across.
-type Pool struct {
-	ID    string
-	LabID string
+// ResourcePool is a resource_pools row: a set of interchangeable resources a
+// single queue fans out across.
+type ResourcePool struct {
+	ID    uuid.UUID
+	LabID uuid.UUID
 	Kind  ResourceKind
 	Name  string
 }
 
 // Resource is a resources row: one interchangeable machine within a pool.
 type Resource struct {
-	ID             string
-	ResourcePoolID string
-	LabID          string
+	ID             uuid.UUID
+	ResourcePoolID uuid.UUID
+	LabID          uuid.UUID
 	Kind           ResourceKind
 	Name           string
 }

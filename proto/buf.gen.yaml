@@ -8,6 +8,12 @@
 version: v2
 managed:
   enabled: true
+  # Leave the protovalidate module on its own (BSR) go_package so our generated
+  # code imports the SAME buf/validate Go package the protovalidate runtime uses.
+  # Generating a second local copy would register buf/validate/validate.proto
+  # twice and panic at init (protobuf global-registry conflict).
+  disable:
+    - module: buf.build/bufbuild/protovalidate
   override:
     - file_option: go_package_prefix
       value: github.com/tallam99/qlab/backend/internal/protogen

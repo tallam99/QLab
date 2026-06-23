@@ -15,15 +15,20 @@
 // still verify the caller is a member of the lab (store.IsMember).
 package principal
 
-import "context"
+import (
+	"context"
 
-// Principal is the authenticated caller and the lab they are acting in.
+	"github.com/google/uuid"
+)
+
+// Principal is the authenticated caller and the lab they are acting in. The ids
+// are parsed at the transport edge, so they are uuids by the time any handler runs.
 type Principal struct {
 	// UserID is the caller's users_id (the booker/actor for an event).
-	UserID string
+	UserID uuid.UUID
 	// LabID is the lab the request operates within. Every Phase-7 RPC is
 	// lab-scoped, so both fields are required for an authenticated principal.
-	LabID string
+	LabID uuid.UUID
 }
 
 // ctxKey is an unexported context key type so no other package can collide with

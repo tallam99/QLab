@@ -1,7 +1,9 @@
-package scheduling
+package v1
 
 import (
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/store"
 )
@@ -15,7 +17,7 @@ func cloneSlots(in []store.Slot) []store.Slot {
 
 // findSlot returns a pointer to the slot with id in slots (so the caller can
 // mutate it in place), or nil if absent.
-func findSlot(slots []store.Slot, id string) *store.Slot {
+func findSlot(slots []store.Slot, id uuid.UUID) *store.Slot {
 	for i := range slots {
 		if slots[i].ID == id {
 			return &slots[i]
@@ -25,8 +27,7 @@ func findSlot(slots []store.Slot, id string) *store.Slot {
 }
 
 // nextPriority returns one past the highest live priority — the slot_priority for
-// a newly booked slot, appended at the back of the queue. bigint leaves ample room
-// (inserting between is a future concern).
+// a newly booked slot, appended at the back of the queue.
 func nextPriority(slots []store.Slot) int64 {
 	var max int64
 	for _, s := range slots {
@@ -42,7 +43,7 @@ func nextPriority(slots []store.Slot) int64 {
 // a force-no-show the lapsed target is excluded so the user behind it is the
 // reclaimer. (A simplification for Phase 7: a single pool-wide next-in-line rather
 // than per-resource.)
-func nextInLineUser(slots []store.Slot, excludeID string) (string, bool) {
+func nextInLineUser(slots []store.Slot, excludeID uuid.UUID) (uuid.UUID, bool) {
 	var best *store.Slot
 	for i := range slots {
 		s := &slots[i]
@@ -54,13 +55,13 @@ func nextInLineUser(slots []store.Slot, excludeID string) (string, bool) {
 		}
 	}
 	if best == nil {
-		return "", false
+		return uuid.Nil, false
 	}
 	return best.UserID, true
 }
 
 // resourceHasActive reports whether any ACTIVE slot currently holds resourceID.
-func resourceHasActive(slots []store.Slot, resourceID string) bool {
+func resourceHasActive(slots []store.Slot, resourceID uuid.UUID) bool {
 	for _, s := range slots {
 		if s.Status == store.SlotStatusActive && s.ResourceID == resourceID {
 			return true
@@ -71,13 +72,13 @@ func resourceHasActive(slots []store.Slot, resourceID string) bool {
 
 // firstFreeResource returns the lowest-id resource with no ACTIVE slot on it (the
 // resources arrive id-ordered from the store), for pinning a clock-in.
-func firstFreeResource(resources []store.Resource, slots []store.Slot) (string, bool) {
+func firstFreeResource(resources []store.Resource, slots []store.Slot) (uuid.UUID, bool) {
 	for _, r := range resources {
 		if !resourceHasActive(slots, r.ID) {
 			return r.ID, true
 		}
 	}
-	return "", false
+	return uuid.Nil, false
 }
 
 // overrunning reports whether an ACTIVE slot is past its scheduled end (its

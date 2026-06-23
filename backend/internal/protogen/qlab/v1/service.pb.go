@@ -12,7 +12,7 @@
 package qlabv1
 
 import (
-	_ "github.com/tallam99/qlab/backend/internal/protogen/buf/validate"
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -784,29 +784,29 @@ var File_qlab_v1_service_proto protoreflect.FileDescriptor
 
 const file_qlab_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"\x15qlab/v1/service.proto\x12\aqlab.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13qlab/v1/types.proto\"E\n" +
-	"\x10ListSlotsRequest\x121\n" +
-	"\x10resource_pool_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eresourcePoolId\"8\n" +
+	"\x15qlab/v1/service.proto\x12\aqlab.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13qlab/v1/types.proto\"F\n" +
+	"\x10ListSlotsRequest\x122\n" +
+	"\x10resource_pool_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x0eresourcePoolId\"8\n" +
 	"\x11ListSlotsResponse\x12#\n" +
-	"\x05slots\x18\x01 \x03(\v2\r.qlab.v1.SlotR\x05slots\"\x85\x02\n" +
-	"\x11CreateSlotRequest\x121\n" +
-	"\x10resource_pool_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eresourcePoolId\x12?\n" +
-	"\rdesired_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fdesiredStart\x124\n" +
+	"\x05slots\x18\x01 \x03(\v2\r.qlab.v1.SlotR\x05slots\"\x8e\x02\n" +
+	"\x11CreateSlotRequest\x122\n" +
+	"\x10resource_pool_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x0eresourcePoolId\x12G\n" +
+	"\rdesired_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\fdesiredStart\x124\n" +
 	"\x11lookahead_minutes\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x10lookaheadMinutes\x122\n" +
 	"\x10duration_minutes\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\x0fdurationMinutes\x12\x12\n" +
-	"\x04note\x18\x05 \x01(\tR\x04note\"2\n" +
-	"\x0eClockInRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"3\n" +
-	"\x0fClockOutRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"5\n" +
-	"\x11CancelSlotRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"7\n" +
-	"\x13PokeOccupantRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"8\n" +
-	"\x14ForceClockOutRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"6\n" +
-	"\x12ForceNoShowRequest\x12 \n" +
-	"\aslot_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06slotId\"G\n" +
+	"\x04note\x18\x05 \x01(\tR\x04note\"3\n" +
+	"\x0eClockInRequest\x12!\n" +
+	"\aslot_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06slotId\"4\n" +
+	"\x0fClockOutRequest\x12!\n" +
+	"\aslot_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06slotId\"6\n" +
+	"\x11CancelSlotRequest\x12!\n" +
+	"\aslot_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06slotId\"8\n" +
+	"\x13PokeOccupantRequest\x12!\n" +
+	"\aslot_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06slotId\"9\n" +
+	"\x14ForceClockOutRequest\x12!\n" +
+	"\aslot_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06slotId\"7\n" +
+	"\x12ForceNoShowRequest\x12!\n" +
+	"\aslot_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06slotId\"G\n" +
 	"\x12CreateSlotResponse\x121\n" +
 	"\x06result\x18\x01 \x01(\v2\x19.qlab.v1.RescheduleResultR\x06result\"D\n" +
 	"\x0fClockInResponse\x121\n" +

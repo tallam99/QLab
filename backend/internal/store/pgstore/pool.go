@@ -3,45 +3,64 @@ package pgstore
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/store"
+	"github.com/tallam99/qlab/backend/internal/store/pgstore/sqlcgen"
 )
 
-// WithPool runs fn inside one transaction with the lab's RLS scope set and the
-// pool's live slots locked FOR UPDATE, then persists the returned mutation
-// atomically (ALGORITHM §10). The lock serializes concurrent events on the same
-// pool, so two simultaneous clock-outs can't corrupt the schedule.
-func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID string, fn func(store.PoolState) (store.PoolMutation, error)) error {
+// lockResourcePoolSQL serializes all events on one pool. The slot FOR UPDATE locks
+// existing rows, but a brand-new slot has no row to lock, so two concurrent
+// CreateSlots could pick the same next priority and collide; an advisory lock keyed
+// on the pool id makes even creates serialize. xact-scoped: released at commit.
+const lockResourcePoolSQL = `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`
+
+// WithPool runs fn inside one transaction with the lab's RLS scope set, the pool
+// serialized by an advisory lock, and the pool's live slots locked FOR UPDATE,
+// then persists the returned mutation atomically (ALGORITHM §10).
+func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID uuid.UUID, fn func(store.PoolState) (store.PoolMutation, error)) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	// Rollback is a no-op once Commit has run, so this is safe to always defer.
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
 
-	// Scope row-level security to this lab for the whole transaction (see
-	// setLabScopeSQL).
-	if _, err := tx.Exec(ctx, setLabScopeSQL, labID); err != nil {
+	if _, err := tx.Exec(ctx, setLabScopeSQL, labID.String()); err != nil {
 		return fmt.Errorf("set lab scope: %w", err)
 	}
-
-	// Lock the pool's live slots in priority order; history is excluded — the engine
-	// only sees the live world.
-	slots, err := querySlots(ctx, tx,
-		`SELECT `+slotColumns+` FROM slots
-		 WHERE labs_id = $1 AND resource_pools_id = $2 AND status IN ('SCHEDULED', 'ACTIVE')
-		 ORDER BY slot_priority
-		 FOR UPDATE`,
-		labID, poolID)
-	if err != nil {
-		return err
+	if _, err := tx.Exec(ctx, lockResourcePoolSQL, poolID.String()); err != nil {
+		return fmt.Errorf("lock pool: %w", err)
 	}
-	resources, err := queryResources(ctx, tx, labID, poolID)
+
+	liveRows, err := q.ListLiveSlotsForUpdate(ctx, sqlcgen.ListLiveSlotsForUpdateParams{LabsID: labID, ResourcePoolsID: poolID})
 	if err != nil {
-		return err
+		return fmt.Errorf("lock live slots: %w", err)
+	}
+	slots := make([]store.Slot, 0, len(liveRows))
+	for _, r := range liveRows {
+		slot, err := slotFromLive(r)
+		if err != nil {
+			return err
+		}
+		slots = append(slots, slot)
+	}
+
+	resourceRows, err := q.ListResources(ctx, sqlcgen.ListResourcesParams{LabsID: labID, ResourcePoolsID: poolID})
+	if err != nil {
+		return fmt.Errorf("load resources: %w", err)
+	}
+	resources := make([]store.Resource, 0, len(resourceRows))
+	for _, r := range resourceRows {
+		kind, err := store.ResourceKindString(r.Kind)
+		if err != nil {
+			return fmt.Errorf("decode resource kind %q: %w", r.Kind, err)
+		}
+		resources = append(resources, store.Resource{
+			ID: r.ResourcesID, ResourcePoolID: r.ResourcePoolsID, LabID: r.LabsID, Kind: kind, Name: r.Name,
+		})
 	}
 
 	mutation, err := fn(store.PoolState{Slots: slots, Resources: resources})
@@ -50,12 +69,12 @@ func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID string,
 	}
 
 	for _, slot := range mutation.Slots {
-		if err := upsertSlot(ctx, tx, slot, actorUserID); err != nil {
+		if err := q.UpsertSlot(ctx, upsertParams(slot, actorUserID)); err != nil {
 			return fmt.Errorf("upsert slot %s: %w", slot.ID, err)
 		}
 	}
 	for _, row := range mutation.Outbox {
-		if err := insertOutbox(ctx, tx, row); err != nil {
+		if err := q.InsertOutbox(ctx, outboxParams(row)); err != nil {
 			return fmt.Errorf("enqueue outbox %s: %w", row.DedupKey, err)
 		}
 	}
@@ -66,65 +85,36 @@ func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID string,
 	return nil
 }
 
-// upsertSlot inserts a new slot or updates an existing one by id. The immutable
-// columns (labs_id, users_id, created_by) are set only on insert; updated_by
-// records the actor whose event caused the write. The active-pin trigger forbids
-// changing an ACTIVE slot's resource/start, but settling ACTIVE→COMPLETE writes
-// those columns unchanged, so the trigger's IS DISTINCT FROM check passes.
-func upsertSlot(ctx context.Context, q querier, s store.Slot, actorUserID string) error {
-	_, err := q.Exec(ctx,
-		`INSERT INTO slots (
-			slots_id, labs_id, users_id, resource_pools_id, resources_id,
-			slot_priority, desired_start, lookahead, duration,
-			committed_start, actual_start, status, note, created_by, updated_by
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::slot_status,$13,$14,$14)
-		ON CONFLICT (slots_id) DO UPDATE SET
-			resources_id      = EXCLUDED.resources_id,
-			resource_pools_id = EXCLUDED.resource_pools_id,
-			slot_priority     = EXCLUDED.slot_priority,
-			desired_start     = EXCLUDED.desired_start,
-			lookahead         = EXCLUDED.lookahead,
-			duration          = EXCLUDED.duration,
-			committed_start   = EXCLUDED.committed_start,
-			actual_start      = EXCLUDED.actual_start,
-			status            = EXCLUDED.status,
-			note              = EXCLUDED.note,
-			updated_by        = EXCLUDED.updated_by`,
-		s.ID, s.LabID, s.UserID, s.ResourcePoolID, nullString(s.ResourceID),
-		s.Priority, s.DesiredStart, s.LookaheadMinutes, s.DurationMinutes,
-		nullTime(s.CommittedStart), nullTime(s.ActualStart), s.Status.String(), s.Note,
-		nullString(actorUserID),
-	)
-	return err
-}
-
-// insertOutbox enqueues a notification, idempotent on dedup_key (a retry of the
-// same logical message is a no-op). Delivery is Phase 11.
-func insertOutbox(ctx context.Context, q querier, row store.OutboxRow) error {
-	_, err := q.Exec(ctx,
-		`INSERT INTO outbox (labs_id, dedup_key, event_type, payload, created_by, updated_by)
-		 VALUES ($1, $2, $3, $4::jsonb, $5, $5)
-		 ON CONFLICT (dedup_key) DO NOTHING`,
-		row.LabID, row.DedupKey, row.EventType, string(row.Payload), nullString(row.ActorUserID),
-	)
-	return err
-}
-
-// nullString maps the domain's empty-string "absent" to a SQL NULL.
-func nullString(s string) *string {
-	if s == "" {
-		return nil
+// upsertParams maps a domain slot + the acting principal to the sqlc upsert params.
+// The active-pin trigger forbids changing an ACTIVE slot's resource/start, but
+// settling ACTIVE→COMPLETE writes those columns unchanged, so the trigger passes.
+func upsertParams(s store.Slot, actorUserID uuid.UUID) sqlcgen.UpsertSlotParams {
+	return sqlcgen.UpsertSlotParams{
+		SlotsID:         s.ID,
+		LabsID:          s.LabID,
+		UsersID:         s.UserID,
+		ResourcePoolsID: s.ResourcePoolID,
+		ResourcesID:     nilUUID(s.ResourceID),
+		SlotPriority:    s.Priority,
+		DesiredStart:    s.DesiredStart,
+		Lookahead:       s.LookaheadMinutes,
+		Duration:        s.DurationMinutes,
+		CommittedStart:  nilTime(s.CommittedStart),
+		ActualStart:     nilTime(s.ActualStart),
+		Status:          s.Status.String(),
+		Note:            s.Note,
+		Actor:           nilUUID(actorUserID),
 	}
-	return &s
 }
 
-// nullTime maps the domain's zero-instant "absent" to a SQL NULL.
-func nullTime(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
+// outboxParams maps a domain outbox row to the sqlc insert params.
+func outboxParams(row store.OutboxRow) sqlcgen.InsertOutboxParams {
+	return sqlcgen.InsertOutboxParams{
+		LabsID:          row.LabID,
+		DedupKey:        row.DedupKey,
+		EventType:       row.EventType,
+		Payload:         row.Payload,
+		RecipientUserID: nilUUID(row.RecipientUserID),
+		Actor:           nilUUID(row.ActorUserID),
 	}
-	return &t
 }
-
-// compile-time guard: *pgx.Tx and *pgxpool.Pool both satisfy querier.
-var _ querier = pgx.Tx(nil)

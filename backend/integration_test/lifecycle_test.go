@@ -4,7 +4,6 @@ package integrationtest
 
 import (
 	"context"
-	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -16,8 +15,8 @@ import (
 // TestCreateAndList covers booking a slot and reading it back: the slot is placed
 // at its earliest feasible start and re-committed (first placement), and ListSlots
 // returns it scoped to the lab.
-func TestCreateAndList(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestCreateAndList() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	c := h.client(lab.Member1, lab.LabID)
@@ -47,8 +46,8 @@ func TestCreateAndList(t *testing.T) {
 // TestCreatePullsEarlierWithinLookahead checks that lookahead lets a slot be placed
 // before its desired start when capacity is free: desired at 60, lookahead 60, an
 // empty pool, now at 0 → placed at its floor (at 0), an hour early.
-func TestCreatePullsEarlierWithinLookahead(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestCreatePullsEarlierWithinLookahead() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	c := h.client(lab.Member1, lab.LabID)
@@ -62,8 +61,8 @@ func TestCreatePullsEarlierWithinLookahead(t *testing.T) {
 // TestClockInClockOutPullsForward is the core lifecycle chain: two queued slots on
 // one resource, the first clocks in and then finishes early, and the second is
 // pulled forward into the freed time (down to its earliness floor).
-func TestClockInClockOutPullsForward(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestClockInClockOutPullsForward() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	m1 := h.client(lab.Member1, lab.LabID)
@@ -98,8 +97,8 @@ func TestClockInClockOutPullsForward(t *testing.T) {
 
 // TestCancelPullsForward checks that cancelling a queued slot frees its place and
 // the slot behind pulls forward.
-func TestCancelPullsForward(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestCancelPullsForward() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	m1 := h.client(lab.Member1, lab.LabID)
@@ -121,8 +120,8 @@ func TestCancelPullsForward(t *testing.T) {
 
 // TestClockInOnlyOwnSlot checks the owner guard: a member cannot clock in another
 // member's slot.
-func TestClockInOnlyOwnSlot(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestClockInOnlyOwnSlot() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
 	respA, err := h.client(lab.Member1, lab.LabID).

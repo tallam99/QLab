@@ -4,7 +4,6 @@ package integrationtest
 
 import (
 	"context"
-	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -18,8 +17,8 @@ import (
 // slots clock in, and when one finishes early the queued slot is pulled forward
 // onto the freed resource. It exercises fan-out, queueing behind ACTIVE occupancy,
 // and cross-resource pull-forward in one flow.
-func TestMultiResourceFanOutAndReflow(t *testing.T) {
-	h.reset(t)
+func (s *IntegrationSuite) TestMultiResourceFanOutAndReflow() {
+	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 2)
 	m1 := h.client(lab.Member1, lab.LabID)

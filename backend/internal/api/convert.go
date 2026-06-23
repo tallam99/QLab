@@ -3,10 +3,11 @@ package api
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
-	"github.com/tallam99/qlab/backend/internal/scheduling"
+	"github.com/tallam99/qlab/backend/internal/services/scheduling"
 	"github.com/tallam99/qlab/backend/internal/store"
 )
 
@@ -14,14 +15,23 @@ import (
 // and store never see proto (ALGORITHM §10). Times use the zero instant for "unset"
 // on the domain side and a nil timestamp on the wire.
 
+// uuidStr renders a uuid for the wire, mapping uuid.Nil (the domain's "unset") to
+// an empty string.
+func uuidStr(id uuid.UUID) string {
+	if id == uuid.Nil {
+		return ""
+	}
+	return id.String()
+}
+
 // slotToProto converts a persisted slot to its wire form.
 func slotToProto(s store.Slot) *v1.Slot {
 	return &v1.Slot{
-		Id:                 s.ID,
-		LabId:              s.LabID,
-		UserId:             s.UserID,
-		ResourcePoolId:     s.ResourcePoolID,
-		AssignedResourceId: s.ResourceID,
+		Id:                 s.ID.String(),
+		LabId:              s.LabID.String(),
+		UserId:             s.UserID.String(),
+		ResourcePoolId:     s.ResourcePoolID.String(),
+		AssignedResourceId: uuidStr(s.ResourceID),
 		SlotPriority:       int32(s.Priority),
 		Status:             slotStatusToProto(s.Status),
 		DesiredStart:       timeToProto(s.DesiredStart),
@@ -36,7 +46,7 @@ func slotToProto(s store.Slot) *v1.Slot {
 // resultToProto converts a reschedule result (live slots + engine verdicts).
 func resultToProto(r scheduling.Result) *v1.RescheduleResult {
 	out := &v1.RescheduleResult{
-		ResourcePoolId: r.ResourcePoolID,
+		ResourcePoolId: r.ResourcePoolID.String(),
 		Slots:          make([]*v1.Slot, 0, len(r.Slots)),
 		Positions:      make([]*v1.SlotPosition, 0, len(r.Positions)),
 	}
@@ -45,9 +55,9 @@ func resultToProto(r scheduling.Result) *v1.RescheduleResult {
 	}
 	for _, p := range r.Positions {
 		out.Positions = append(out.Positions, &v1.SlotPosition{
-			SlotId:             p.SlotID,
+			SlotId:             p.SlotID.String(),
 			ActualStart:        timeToProto(p.ActualStart),
-			AssignedResourceId: p.AssignedResourceID,
+			AssignedResourceId: uuidStr(p.AssignedResourceID),
 			Recommitted:        p.Recommitted,
 			Reclaimable:        p.Reclaimable,
 		})

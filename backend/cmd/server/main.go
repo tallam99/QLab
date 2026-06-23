@@ -52,7 +52,7 @@ func run() error {
 	s.InjectDependency(server.WithPostgres(cfg.DatabaseURL))
 	// Scheduling depends on the store, so register it after WithPostgres. Clock is
 	// nil here → the service uses the real time.Now.
-	s.InjectDependency(server.WithScheduling(dynamicqueue.Minutes(cfg.ClockInGraceMinutes), nil))
+	s.InjectDependency(server.WithSchedulingService(dynamicqueue.Minutes(cfg.ClockInGraceMinutes), nil))
 
 	// Cloud Run sends SIGTERM to drain a container; also handle SIGINT for local
 	// Ctrl-C. Cancelling ctx tells the server to shut down (and aborts init).

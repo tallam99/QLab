@@ -17,6 +17,8 @@ package store
 import (
 	"context"
 	"errors"
+
+	"github.com/google/uuid"
 )
 
 //go:generate go tool mockery
@@ -50,27 +52,28 @@ type Store interface {
 
 	// IsMember reports whether userID belongs to labID. Authorization uses it to
 	// reject callers acting on a lab they are not a member of.
-	IsMember(ctx context.Context, labID, userID string) (bool, error)
+	IsMember(ctx context.Context, labID, userID uuid.UUID) (bool, error)
 
-	// PoolByID loads a pool within labID (resolving its kind). Returns ErrNotFound
-	// if no such pool exists in that lab — which is also how a cross-lab pool id is
-	// rejected.
-	PoolByID(ctx context.Context, labID, poolID string) (Pool, error)
+	// ResourcePoolByID loads a pool within labID (resolving its kind). Returns
+	// ErrNotFound if no such pool exists in that lab — which is also how a cross-lab
+	// pool id is rejected.
+	ResourcePoolByID(ctx context.Context, labID, poolID uuid.UUID) (ResourcePool, error)
 
 	// SlotByID loads a single slot within labID, so a slot-targeting RPC can
 	// resolve its pool (the lock + authoritative state check happen inside
 	// WithPool). Returns ErrNotFound if absent in that lab.
-	SlotByID(ctx context.Context, labID, slotID string) (Slot, error)
+	SlotByID(ctx context.Context, labID, slotID uuid.UUID) (Slot, error)
 
 	// ListSlots returns the pool's slots (full lifecycle) scoped to labID, ordered
 	// for display.
-	ListSlots(ctx context.Context, labID, poolID string) ([]Slot, error)
+	ListSlots(ctx context.Context, labID, poolID uuid.UUID) ([]Slot, error)
 
 	// WithPool runs fn inside one transaction with the lab's RLS scope set
-	// (app.current_lab_id) and the pool's live slots locked FOR UPDATE — the
-	// "one transaction per event" contract (ALGORITHM §10). It hands fn the locked
-	// PoolState, then persists the returned PoolMutation (upserting slots by id and
-	// enqueuing outbox rows) and commits; any error rolls the whole thing back.
-	// actorUserID is recorded as created_by/updated_by on written rows.
-	WithPool(ctx context.Context, labID, poolID, actorUserID string, fn func(PoolState) (PoolMutation, error)) error
+	// (app.current_lab_id), the pool serialized by an advisory lock, and the pool's
+	// live slots locked FOR UPDATE — the "one transaction per event" contract
+	// (ALGORITHM §10). It hands fn the locked PoolState, then persists the returned
+	// PoolMutation (upserting slots by id and enqueuing outbox rows) and commits;
+	// any error rolls the whole thing back. actorUserID is recorded as
+	// created_by/updated_by on written rows.
+	WithPool(ctx context.Context, labID, poolID, actorUserID uuid.UUID, fn func(PoolState) (PoolMutation, error)) error
 }

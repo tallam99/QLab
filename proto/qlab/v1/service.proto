@@ -11,7 +11,7 @@ import "google/protobuf/timestamp.proto";
 import "qlab/v1/types.proto";
 
 message ListSlotsRequest {
-  string resource_pool_id = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_pool_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 message ListSlotsResponse {
@@ -21,25 +21,25 @@ message ListSlotsResponse {
 // CreateSlot books a slot. user_id comes from the authenticated caller (Phase 8)
 // and slot_priority is assigned by the service, so neither is on the request.
 message CreateSlotRequest {
-  string resource_pool_id = 1 [(buf.validate.field).string.min_len = 1];
-  google.protobuf.Timestamp desired_start = 2;
+  string resource_pool_id = 1 [(buf.validate.field).string.uuid = true];
+  google.protobuf.Timestamp desired_start = 2 [(buf.validate.field).required = true];
   int32 lookahead_minutes = 3 [(buf.validate.field).int32.gte = 0];
   int32 duration_minutes = 4 [(buf.validate.field).int32.gt = 0];
   string note = 5;
 }
 
 message ClockInRequest {
-  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+  string slot_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 // ClockOut covers clock-out and early-finish (both settle the slot COMPLETE and
 // free its resource).
 message ClockOutRequest {
-  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+  string slot_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 message CancelSlotRequest {
-  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+  string slot_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 // PokeOccupant nudges the user holding an overrunning slot to wrap up (the backend
@@ -47,7 +47,7 @@ message CancelSlotRequest {
 // the next-in-line user — not the backend, which never pokes proactively. It
 // changes no schedule state.
 message PokeOccupantRequest {
-  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+  string slot_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 // ForceClockOut boots the user holding an overrunning slot (settles it COMPLETE and
@@ -56,7 +56,7 @@ message PokeOccupantRequest {
 // the users', not the backend's. Authorization (caller is next-in-line for that
 // resource, occupant is past their scheduled end) is enforced server-side.
 message ForceClockOutRequest {
-  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+  string slot_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 // ForceNoShow reclaims a slot whose clock-in grace lapsed (settles it NO_SHOW and
@@ -66,7 +66,7 @@ message ForceClockOutRequest {
 // Authorization (caller is next-in-line, target is SCHEDULED with grace lapsed) is
 // enforced server-side.
 message ForceNoShowRequest {
-  string slot_id = 1 [(buf.validate.field).string.min_len = 1];
+  string slot_id = 1 [(buf.validate.field).string.uuid = true];
 }
 
 // Most mutating RPCs return the recomputed schedule. They carry the same

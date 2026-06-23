@@ -3,6 +3,8 @@ package httpmw
 import (
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/tallam99/qlab/backend/internal/principal"
 )
 
@@ -27,9 +29,11 @@ const (
 // it must be compiled/guarded off outside local/staging (Phase 8).
 func DevPrincipal(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get(HeaderDevUser)
-		labID := r.Header.Get(HeaderDevLab)
-		if userID != "" && labID != "" {
+		userID, userErr := uuid.Parse(r.Header.Get(HeaderDevUser))
+		labID, labErr := uuid.Parse(r.Header.Get(HeaderDevLab))
+		// Both headers must be present and valid uuids to form a principal; otherwise
+		// the request is treated as unauthenticated (handlers reject it).
+		if userErr == nil && labErr == nil {
 			ctx := principal.NewContext(r.Context(), principal.Principal{UserID: userID, LabID: labID})
 			r = r.WithContext(ctx)
 		}
