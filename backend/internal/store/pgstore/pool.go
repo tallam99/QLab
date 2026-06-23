@@ -22,10 +22,9 @@ func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID string,
 	// Rollback is a no-op once Commit has run, so this is safe to always defer.
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Scope row-level security to this lab for the whole transaction. LOCAL keeps
-	// it tx-bound. This is a no-op under the local superuser (which bypasses RLS)
-	// but load-bearing for the cloud app role (decision 0005).
-	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_lab_id', $1, true)`, labID); err != nil {
+	// Scope row-level security to this lab for the whole transaction (see
+	// setLabScopeSQL).
+	if _, err := tx.Exec(ctx, setLabScopeSQL, labID); err != nil {
 		return fmt.Errorf("set lab scope: %w", err)
 	}
 

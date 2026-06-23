@@ -12,12 +12,36 @@ import (
 	"github.com/tallam99/qlab/backend/internal/store"
 )
 
+// setLabScopeSQL binds row-level security to a lab for the current transaction
+// (decision 0005). LOCAL = tx-scoped. Every lab-scoped query runs after this so it
+// works under the cloud app role (which RLS applies to); under the local superuser
+// it is a harmless no-op.
+const setLabScopeSQL = `SELECT set_config('app.current_lab_id', $1, true)`
+
 // querier is the subset of pgx shared by the pool and a transaction, so the read
 // helpers run identically standalone or inside WithPool's tx.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+// inLabTx runs fn inside a short transaction with the lab's RLS scope set. Reads
+// must do this (not just WithPool): RLS is fail-closed, so a query with no
+// app.current_lab_id set sees zero rows under the app role.
+func (s *Store) inLabTx(ctx context.Context, labID string, fn func(pgx.Tx) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin read tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, setLabScopeSQL, labID); err != nil {
+		return fmt.Errorf("set lab scope: %w", err)
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // slotColumns is the slots projection every slot read shares, in the order
@@ -62,9 +86,11 @@ func scanSlot(row pgx.Row) (store.Slot, error) {
 // IsMember reports whether userID belongs to labID.
 func (s *Store) IsMember(ctx context.Context, labID, userID string) (bool, error) {
 	var ok bool
-	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM labs_users WHERE labs_id = $1 AND users_id = $2)`,
-		labID, userID).Scan(&ok)
+	err := s.inLabTx(ctx, labID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM labs_users WHERE labs_id = $1 AND users_id = $2)`,
+			labID, userID).Scan(&ok)
+	})
 	if err != nil {
 		return false, fmt.Errorf("check membership: %w", err)
 	}
@@ -76,10 +102,12 @@ func (s *Store) IsMember(ctx context.Context, labID, userID string) (bool, error
 func (s *Store) PoolByID(ctx context.Context, labID, poolID string) (store.Pool, error) {
 	var p store.Pool
 	var kindText string
-	err := s.pool.QueryRow(ctx,
-		`SELECT resource_pools_id, labs_id, kind::text, name
-		 FROM resource_pools WHERE labs_id = $1 AND resource_pools_id = $2`,
-		labID, poolID).Scan(&p.ID, &p.LabID, &kindText, &p.Name)
+	err := s.inLabTx(ctx, labID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx,
+			`SELECT resource_pools_id, labs_id, kind::text, name
+			 FROM resource_pools WHERE labs_id = $1 AND resource_pools_id = $2`,
+			labID, poolID).Scan(&p.ID, &p.LabID, &kindText, &p.Name)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return store.Pool{}, store.ErrNotFound
 	}
@@ -97,9 +125,14 @@ func (s *Store) PoolByID(ctx context.Context, labID, poolID string) (store.Pool,
 // SlotByID loads a single slot within labID. Absent (or cross-lab) is
 // store.ErrNotFound.
 func (s *Store) SlotByID(ctx context.Context, labID, slotID string) (store.Slot, error) {
-	slot, err := scanSlot(s.pool.QueryRow(ctx,
-		`SELECT `+slotColumns+` FROM slots WHERE labs_id = $1 AND slots_id = $2`,
-		labID, slotID))
+	var slot store.Slot
+	err := s.inLabTx(ctx, labID, func(tx pgx.Tx) error {
+		var scanErr error
+		slot, scanErr = scanSlot(tx.QueryRow(ctx,
+			`SELECT `+slotColumns+` FROM slots WHERE labs_id = $1 AND slots_id = $2`,
+			labID, slotID))
+		return scanErr
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return store.Slot{}, store.ErrNotFound
 	}
@@ -112,11 +145,17 @@ func (s *Store) SlotByID(ctx context.Context, labID, slotID string) (store.Slot,
 // ListSlots returns the pool's slots (full lifecycle) scoped to labID, ordered by
 // desired start for a stable display order.
 func (s *Store) ListSlots(ctx context.Context, labID, poolID string) ([]store.Slot, error) {
-	return querySlots(ctx, s.pool,
-		`SELECT `+slotColumns+` FROM slots
-		 WHERE labs_id = $1 AND resource_pools_id = $2
-		 ORDER BY desired_start, slots_id`,
-		labID, poolID)
+	var slots []store.Slot
+	err := s.inLabTx(ctx, labID, func(tx pgx.Tx) error {
+		var qErr error
+		slots, qErr = querySlots(ctx, tx,
+			`SELECT `+slotColumns+` FROM slots
+			 WHERE labs_id = $1 AND resource_pools_id = $2
+			 ORDER BY desired_start, slots_id`,
+			labID, poolID)
+		return qErr
+	})
+	return slots, err
 }
 
 // querySlots runs a slot query on any querier and scans the full result set.
