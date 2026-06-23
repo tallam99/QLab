@@ -13,13 +13,25 @@ import (
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/logging"
+	"github.com/tallam99/qlab/backend/internal/store"
 )
 
 // fakeStore is a store.Store stub for these lifecycle tests, which only need a
 // non-nil dependency to attach — they never call its methods.
 type fakeStore struct{}
 
-func (fakeStore) CountLabs(context.Context) (int, error) { return 0, nil }
+func (fakeStore) CountLabs(context.Context) (int, error)                 { return 0, nil }
+func (fakeStore) IsMember(context.Context, string, string) (bool, error) { return false, nil }
+func (fakeStore) PoolByID(context.Context, string, string) (store.Pool, error) {
+	return store.Pool{}, nil
+}
+func (fakeStore) SlotByID(context.Context, string, string) (store.Slot, error) {
+	return store.Slot{}, nil
+}
+func (fakeStore) ListSlots(context.Context, string, string) ([]store.Slot, error) { return nil, nil }
+func (fakeStore) WithPool(context.Context, string, string, string, func(store.PoolState) (store.PoolMutation, error)) error {
+	return nil
+}
 
 // TestReadyq verifies the readiness probe gates on startup: 503 until the server
 // is marked ready, 200 afterward. Liveness (/healthq) is independent — see
