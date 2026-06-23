@@ -73,6 +73,55 @@ func (q *Queries) IsMember(ctx context.Context, arg IsMemberParams) (bool, error
 	return exists, err
 }
 
+const linkFirebaseUID = `-- name: LinkFirebaseUID :one
+UPDATE users SET
+    firebase_uid = $1::text,
+    first_name   = COALESCE(NULLIF($2::text, ''), first_name),
+    last_name    = COALESCE(NULLIF($3::text, ''), last_name),
+    updated_by   = $4,
+    updated_at   = now()
+WHERE users_id = $5
+RETURNING users_id, firebase_uid, email, first_name, last_name
+`
+
+type LinkFirebaseUIDParams struct {
+	FirebaseUid string
+	FirstName   string
+	LastName    string
+	Actor       *uuid.UUID
+	UsersID     uuid.UUID
+}
+
+type LinkFirebaseUIDRow struct {
+	UsersID     uuid.UUID
+	FirebaseUid *string
+	Email       string
+	FirstName   string
+	LastName    string
+}
+
+// First-login provisioning: bind a Firebase uid to an existing user row and fill
+// any name parts the invite left blank (keep an existing name if the provider sent
+// none). The user is recorded as their own updater.
+func (q *Queries) LinkFirebaseUID(ctx context.Context, arg LinkFirebaseUIDParams) (LinkFirebaseUIDRow, error) {
+	row := q.db.QueryRow(ctx, linkFirebaseUID,
+		arg.FirebaseUid,
+		arg.FirstName,
+		arg.LastName,
+		arg.Actor,
+		arg.UsersID,
+	)
+	var i LinkFirebaseUIDRow
+	err := row.Scan(
+		&i.UsersID,
+		&i.FirebaseUid,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+	)
+	return i, err
+}
+
 const listLiveSlotsForUpdate = `-- name: ListLiveSlotsForUpdate :many
 SELECT slots_id, labs_id, users_id, resource_pools_id, resources_id,
        slot_priority, status, desired_start, lookahead, duration,
@@ -387,4 +436,56 @@ func (q *Queries) UpsertSlot(ctx context.Context, arg UpsertSlotParams) error {
 		arg.Actor,
 	)
 	return err
+}
+
+const userByEmail = `-- name: UserByEmail :one
+SELECT users_id, firebase_uid, email, first_name, last_name
+FROM users WHERE email = $1
+`
+
+type UserByEmailRow struct {
+	UsersID     uuid.UUID
+	FirebaseUid *string
+	Email       string
+	FirstName   string
+	LastName    string
+}
+
+func (q *Queries) UserByEmail(ctx context.Context, email string) (UserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, userByEmail, email)
+	var i UserByEmailRow
+	err := row.Scan(
+		&i.UsersID,
+		&i.FirebaseUid,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+	)
+	return i, err
+}
+
+const userByFirebaseUID = `-- name: UserByFirebaseUID :one
+SELECT users_id, firebase_uid, email, first_name, last_name
+FROM users WHERE firebase_uid = $1::text
+`
+
+type UserByFirebaseUIDRow struct {
+	UsersID     uuid.UUID
+	FirebaseUid *string
+	Email       string
+	FirstName   string
+	LastName    string
+}
+
+func (q *Queries) UserByFirebaseUID(ctx context.Context, firebaseUid string) (UserByFirebaseUIDRow, error) {
+	row := q.db.QueryRow(ctx, userByFirebaseUID, firebaseUid)
+	var i UserByFirebaseUIDRow
+	err := row.Scan(
+		&i.UsersID,
+		&i.FirebaseUid,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+	)
+	return i, err
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/tallam99/qlab/backend/internal/principal"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	"github.com/tallam99/qlab/backend/internal/protogen/qlab/v1/qlabv1connect"
+	"github.com/tallam99/qlab/backend/internal/services/authentication"
 	"github.com/tallam99/qlab/backend/internal/services/scheduling"
 )
 
@@ -35,6 +36,9 @@ type Service struct {
 	// pointer-to-interface in an atomic.Pointer so reads are race-free (the server
 	// serves before dependencies are injected) and a pre-readiness call sees nil.
 	sched atomic.Pointer[scheduling.Service]
+	// authn holds the authentication service (token -> user), attached once the store
+	// is ready, like sched. The auth interceptor reads it per call; nil => Unavailable.
+	authn atomic.Pointer[authentication.Service]
 	// validate enforces the .proto buf.validate rules at the transport edge.
 	validate connect.Interceptor
 }
@@ -51,10 +55,18 @@ func (s *Service) SetScheduling(svc scheduling.Service) {
 	s.sched.Store(&svc)
 }
 
-// Handler returns the mount path and the HTTP handler for the Connect service, with
-// the protovalidate interceptor in front of every method.
+// SetAuthentication attaches the authentication service the auth interceptor uses.
+// Called by the server's dependency injector once the store is ready.
+func (s *Service) SetAuthentication(svc authentication.Service) {
+	s.authn.Store(&svc)
+}
+
+// Handler returns the mount path and the HTTP handler for the Connect service. Two
+// interceptors run before every method, outermost first: authentication (reject or
+// attach the principal) then protovalidate (enforce the .proto rules). So a handler
+// runs only for an authenticated caller with a structurally valid request.
 func (s *Service) Handler() (string, http.Handler) {
-	return qlabv1connect.NewQlabServiceHandler(s, connect.WithInterceptors(s.validate))
+	return qlabv1connect.NewQlabServiceHandler(s, connect.WithInterceptors(s.authInterceptor(), s.validate))
 }
 
 // caller resolves the authenticated principal and the ready scheduling service, or

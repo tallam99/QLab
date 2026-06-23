@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
-	"github.com/tallam99/qlab/backend/internal/logging"
 	"github.com/tallam99/qlab/backend/internal/store"
 )
 
@@ -36,12 +35,21 @@ func (fakeStore) ListSlots(context.Context, uuid.UUID, uuid.UUID) ([]store.Slot,
 func (fakeStore) WithPool(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, func(store.PoolState) (store.PoolMutation, error)) error {
 	return nil
 }
+func (fakeStore) UserByFirebaseUID(context.Context, string) (store.User, error) {
+	return store.User{}, nil
+}
+func (fakeStore) UserByEmail(context.Context, string) (store.User, error) {
+	return store.User{}, nil
+}
+func (fakeStore) LinkFirebaseUID(context.Context, uuid.UUID, string, string, string) (store.User, error) {
+	return store.User{}, nil
+}
 
 // TestReadyq verifies the readiness probe gates on startup: 503 until the server
 // is marked ready, 200 afterward. Liveness (/healthq) is independent — see
 // TestHealthq, which gets 200 from the same un-readied server.
 func TestReadyq(t *testing.T) {
-	s := New(Options{Logger: logging.Noop()})
+	s := New(testOptions(t))
 	ts := httptest.NewServer(s)
 	defer ts.Close()
 
@@ -65,7 +73,7 @@ func TestReadyq(t *testing.T) {
 // TestReady verifies the readiness gate: false until every required dependency is
 // present, then latched true.
 func TestReady(t *testing.T) {
-	s := New(Options{Logger: logging.Noop()})
+	s := New(testOptions(t))
 	assert.False(t, s.Ready(), "no store yet")
 
 	s.store = fakeStore{}

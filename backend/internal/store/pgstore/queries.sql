@@ -11,6 +11,27 @@ SELECT EXISTS (
     SELECT 1 FROM labs_users WHERE labs_id = $1 AND users_id = $2
 );
 
+-- name: UserByFirebaseUID :one
+SELECT users_id, firebase_uid, email, first_name, last_name
+FROM users WHERE firebase_uid = @firebase_uid::text;
+
+-- name: UserByEmail :one
+SELECT users_id, firebase_uid, email, first_name, last_name
+FROM users WHERE email = $1;
+
+-- name: LinkFirebaseUID :one
+-- First-login provisioning: bind a Firebase uid to an existing user row and fill
+-- any name parts the invite left blank (keep an existing name if the provider sent
+-- none). The user is recorded as their own updater.
+UPDATE users SET
+    firebase_uid = @firebase_uid::text,
+    first_name   = COALESCE(NULLIF(@first_name::text, ''), first_name),
+    last_name    = COALESCE(NULLIF(@last_name::text, ''), last_name),
+    updated_by   = @actor,
+    updated_at   = now()
+WHERE users_id = @users_id
+RETURNING users_id, firebase_uid, email, first_name, last_name;
+
 -- name: ResourcePoolByID :one
 SELECT resource_pools_id, labs_id, kind, name
 FROM resource_pools

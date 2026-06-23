@@ -4,7 +4,11 @@
 // QLAB_ENV). Keep this the single place env is read so wiring stays testable.
 package config
 
-import "github.com/kelseyhightower/envconfig"
+import (
+	"fmt"
+
+	"github.com/kelseyhightower/envconfig"
+)
 
 // Config is the fully-resolved service configuration.
 type Config struct {
@@ -31,6 +35,20 @@ type Config struct {
 	// (ALGORITHM §2.3). Injected into the scheduling engine as configuration — the
 	// engine never hardcodes it. Whole minutes, >= 0.
 	ClockInGraceMinutes int32 `envconfig:"CLOCK_IN_GRACE_MINUTES" default:"15"`
+	// FirebaseProjectID names the Firebase project whose ID tokens this service
+	// verifies (the token `aud`/`iss` must match it). Each environment verifies
+	// against its own project (decision 0007). Required: auth is mandatory on every
+	// data RPC. Locally it is a `demo-*` id so the Auth emulator runs fully offline.
+	FirebaseProjectID string `envconfig:"FIREBASE_PROJECT_ID" required:"true"`
+	// FirebaseAuthEmulatorHost, when set (host:port), points the Firebase Admin SDK
+	// at a local Auth emulator instead of Google's servers — local/CI only, never
+	// set in staging/prod. The SDK reads the same env var itself; config carries it
+	// so the dev-login token exchange targets the same host. Empty = real Firebase.
+	FirebaseAuthEmulatorHost string `envconfig:"FIREBASE_AUTH_EMULATOR_HOST" default:""`
+	// FirebaseWebAPIKey is the Identity Toolkit web API key the dev-login endpoint
+	// uses to exchange a custom token for an ID token. Required only where dev-login
+	// runs (local/staging); against the emulator any non-empty value works.
+	FirebaseWebAPIKey string `envconfig:"FIREBASE_WEB_API_KEY" default:""`
 }
 
 // Load reads and validates configuration from the environment.
@@ -39,8 +57,29 @@ func Load() (Config, error) {
 	if err := envconfig.Process("", &c); err != nil {
 		return Config{}, err
 	}
+	if err := c.validate(); err != nil {
+		return Config{}, err
+	}
 	return c, nil
+}
+
+// validate enforces cross-field invariants envconfig's per-field rules can't.
+func (c Config) validate() error {
+	// The Auth emulator is a development stand-in that skips signature verification;
+	// pointing production at it would accept forged tokens. Refuse to boot. (This is
+	// the config-side half of the dev-auth prod guard; the dev-login route is the
+	// other half, in the server.)
+	if c.Env == EnvProduction && c.FirebaseAuthEmulatorHost != "" {
+		return fmt.Errorf("FIREBASE_AUTH_EMULATOR_HOST must not be set when QLAB_ENV=production")
+	}
+	return nil
 }
 
 // IsLocal reports whether the service is running in the local dev environment.
 func (c Config) IsLocal() bool { return c.Env == EnvLocal }
+
+// DevAuthEnabled reports whether the development authentication aids (the
+// dev-login endpoint) are available. They exist everywhere EXCEPT production —
+// they are the single most dangerous surface if shipped to prod (decision 0007),
+// so this is derived from the environment and cannot be turned on in production.
+func (c Config) DevAuthEnabled() bool { return c.Env != EnvProduction }

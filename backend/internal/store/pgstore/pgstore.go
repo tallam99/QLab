@@ -82,3 +82,10 @@ func derefTime(p *time.Time) time.Time {
 	}
 	return *p
 }
+
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}

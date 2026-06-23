@@ -17,15 +17,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"firebase.google.com/go/v4/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/tallam99/qlab/backend/internal/api"
+	"github.com/tallam99/qlab/backend/internal/auth/firebaseauth"
 	"github.com/tallam99/qlab/backend/internal/clients/postgres"
+	"github.com/tallam99/qlab/backend/internal/devlogin"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue/basic"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/logging"
+	authenticationv1 "github.com/tallam99/qlab/backend/internal/services/authentication/v1"
 	authzv1 "github.com/tallam99/qlab/backend/internal/services/authz/v1"
 	notificationsv1 "github.com/tallam99/qlab/backend/internal/services/notifications/v1"
 	"github.com/tallam99/qlab/backend/internal/services/scheduling"
@@ -40,8 +44,9 @@ import (
 // reaches this service (it returns a Google 404). /healthq and /readyq are not
 // reserved, so they reach our handlers.
 const (
-	pathHealthq = "/healthq"
-	pathReadyq  = "/readyq"
+	pathHealthq  = "/healthq"
+	pathReadyq   = "/readyq"
+	pathDevLogin = "/devlogin"
 )
 
 const (
@@ -79,6 +84,25 @@ type Options struct {
 	// AllowedOrigins is the CORS allow-list for the browser PWA (a separate origin
 	// from the API; decision 0001). Empty means same-origin only.
 	AllowedOrigins []string
+	// FirebaseAuth is the Firebase Auth client backing token verification (and the
+	// dev-login endpoint). Required: every data RPC is authenticated.
+	FirebaseAuth *auth.Client
+	// Production reports whether this is the production environment. It exists solely
+	// to enforce the dev-auth guard: New refuses to boot if DevLogin is set here.
+	Production bool
+	// DevLogin, when non-nil, mounts the staging/local-only dev-login endpoint
+	// (decision 0007). It is nil in production by construction; New panics if it is
+	// set together with Production, as a load-bearing defense.
+	DevLogin *DevLoginConfig
+}
+
+// DevLoginConfig configures the dev-login endpoint's token exchange.
+type DevLoginConfig struct {
+	// EmulatorHost routes the exchange at the local Auth emulator when set.
+	EmulatorHost string
+	// WebAPIKey is the Identity Toolkit key for the exchange (any non-empty value
+	// against the emulator; the real key in staging).
+	WebAPIKey string
 }
 
 // Server is the service: its HTTP handler plus the lifecycle that initializes
@@ -106,6 +130,9 @@ type Server struct {
 	// must read it only after loading ready, so the atomic acquire pairs with
 	// Ready's release and they observe the write.
 	store store.Store
+	// firebaseAuth is the Firebase Auth client (from Options); the WithAuthentication
+	// injector builds the verifier over it once the store is ready.
+	firebaseAuth *auth.Client
 }
 
 // New builds the server and its middleware/route wiring. It panics if a required
@@ -114,19 +141,40 @@ func New(opts Options) *Server {
 	if opts.Logger == nil {
 		panic("server: New requires a Logger")
 	}
-	s := &Server{logger: opts.Logger, apiService: api.New()}
+	if opts.FirebaseAuth == nil {
+		panic("server: New requires a FirebaseAuth client")
+	}
+	// Load-bearing dev-auth guard: the dev-login endpoint must never exist in
+	// production (decision 0007). main never sets DevLogin in prod, but assert it here
+	// so a wiring mistake fails to boot rather than shipping the most dangerous surface.
+	if opts.Production && opts.DevLogin != nil {
+		panic("server: dev-login must not be enabled in production")
+	}
+	s := &Server{logger: opts.Logger, apiService: api.New(), firebaseAuth: opts.FirebaseAuth}
 
 	r := chi.NewRouter()
 
-	// Order matters — each line wraps everything below it:
+	// Order matters — each line wraps everything below it. Authentication is NOT a
+	// chi middleware: it is a Connect interceptor on the API handler (so it yields
+	// native Connect error codes), which is why there is no principal middleware here.
 	r.Use(httpmw.CORS(opts.AllowedOrigins))  // answer browser preflights / add CORS headers (outermost: skip logging OPTIONS noise)
 	r.Use(middleware.RequestID)              // generate/propagate a per-request id (in ctx + response header)
 	r.Use(httpmw.Recoverer(opts.Logger))     // turn downstream panics into a logged 500, never a crash
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
-	r.Use(httpmw.DevPrincipal)               // attach the caller principal from the dev header (Phase 8 replaces with JWT)
 
 	r.Get(pathHealthq, s.healthq) // liveness: is the process up? (always 200)
 	r.Get(pathReadyq, s.readyq)   // readiness: have dependencies initialized?
+
+	// Dev-login: staging/local only (decision 0007). Mounted only when configured;
+	// absent entirely in production. It is a plain route (not Connect), so it sits
+	// outside the auth interceptor — it is what issues the token.
+	if opts.DevLogin != nil {
+		r.Handle(pathDevLogin, devlogin.Handler(devlogin.Options{
+			Auth:         opts.FirebaseAuth,
+			EmulatorHost: opts.DevLogin.EmulatorHost,
+			WebAPIKey:    opts.DevLogin.WebAPIKey,
+		}))
+	}
 
 	// Mount the Connect-RPC data API. The handler matches the full procedure paths
 	// under apiPath, so it mounts cleanly alongside the health routes; its
@@ -290,6 +338,27 @@ func WithPostgres(databaseURL string) func(context.Context, *Server) error {
 		}
 		s.store = dataStore
 		s.closers = append(s.closers, dataStore)
+		return nil
+	}
+}
+
+// WithAuthentication returns an injector that builds the authentication service
+// (the Firebase token verifier over the ready store, which provisions invited users
+// on first login) and attaches it to the mounted Connect handler's auth interceptor.
+// Register it AFTER WithPostgres: it needs the store.
+func WithAuthentication() func(context.Context, *Server) error {
+	return func(_ context.Context, s *Server) error {
+		if s.store == nil {
+			return errors.New("WithAuthentication requires the store; register WithPostgres first")
+		}
+		if s.firebaseAuth == nil {
+			return errors.New("WithAuthentication requires a Firebase Auth client")
+		}
+		authnService := authenticationv1.New(authenticationv1.Options{
+			Verifier: firebaseauth.New(s.firebaseAuth),
+			Store:    s.store,
+		})
+		s.apiService.SetAuthentication(authnService)
 		return nil
 	}
 }

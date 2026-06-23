@@ -211,7 +211,7 @@ type Outbox struct {
 	Payload         []byte
 	Status          string
 	Attempts        int32
-	LastError       pgtype.Text
+	LastError       *string
 	AvailableAt     time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -265,7 +265,7 @@ type Slot struct {
 
 type User struct {
 	UsersID     uuid.UUID
-	FirebaseUid pgtype.Text
+	FirebaseUid *string
 	Email       string
 	FirstName   string
 	LastName    string

@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
 	"github.com/tallam99/qlab/backend/internal/config"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	slogging "github.com/tallam99/qlab/backend/internal/logging/slog"
@@ -44,20 +45,44 @@ func run() error {
 	logger := slogging.New(slogging.Options{Local: cfg.IsLocal(), Level: logLevel}).
 		With("env", cfg.Env.String())
 
-	s := server.New(server.Options{
-		Logger:         logger,
-		Addr:           ":" + cfg.Port,
-		AllowedOrigins: cfg.AllowedOrigins,
-	})
-	s.InjectDependency(server.WithPostgres(cfg.DatabaseURL))
-	// Scheduling depends on the store, so register it after WithPostgres. Clock is
-	// nil here → the service uses the real time.Now.
-	s.InjectDependency(server.WithSchedulingService(dynamicqueue.Minutes(cfg.ClockInGraceMinutes), nil))
-
 	// Cloud Run sends SIGTERM to drain a container; also handle SIGINT for local
 	// Ctrl-C. Cancelling ctx tells the server to shut down (and aborts init).
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+
+	// Build the Firebase Auth client (token verification + dev-login). Locally it is
+	// pointed at the Auth emulator via FIREBASE_AUTH_EMULATOR_HOST; in staging/prod it
+	// uses Application Default Credentials (the Cloud Run service account).
+	firebaseAuth, err := firebaseclient.New(ctx, firebaseclient.Options{ProjectID: cfg.FirebaseProjectID})
+	if err != nil {
+		logger.Error("build firebase client", "error", err)
+		return err
+	}
+	if firebaseclient.UsingEmulator() {
+		logger.Warn("Firebase Auth emulator in use — token signatures are NOT verified")
+	}
+
+	opts := server.Options{
+		Logger:         logger,
+		Addr:           ":" + cfg.Port,
+		AllowedOrigins: cfg.AllowedOrigins,
+		FirebaseAuth:   firebaseAuth,
+		Production:     cfg.Env == config.EnvProduction,
+	}
+	// Dev-login exists everywhere except production (decision 0007).
+	if cfg.DevAuthEnabled() {
+		opts.DevLogin = &server.DevLoginConfig{
+			EmulatorHost: cfg.FirebaseAuthEmulatorHost,
+			WebAPIKey:    cfg.FirebaseWebAPIKey,
+		}
+	}
+
+	s := server.New(opts)
+	s.InjectDependency(server.WithPostgres(cfg.DatabaseURL))
+	// Authentication and scheduling both depend on the store, so register them after
+	// WithPostgres. Clock is nil → the scheduling service uses the real time.Now.
+	s.InjectDependency(server.WithAuthentication())
+	s.InjectDependency(server.WithSchedulingService(dynamicqueue.Minutes(cfg.ClockInGraceMinutes), nil))
 
 	if err := s.Run(ctx); err != nil {
 		logger.Error("run server", "error", err)
