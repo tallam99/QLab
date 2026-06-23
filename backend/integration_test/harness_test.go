@@ -3,9 +3,12 @@
 package integrationtest
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -16,7 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/tallam99/qlab/backend/internal/httpmw"
+	"github.com/tallam99/qlab/backend/internal/api"
+	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
 	"github.com/tallam99/qlab/backend/internal/logging"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	"github.com/tallam99/qlab/backend/internal/protogen/qlab/v1/qlabv1connect"
@@ -51,7 +55,9 @@ func (c *testClock) set(t time.Time) {
 
 // harness holds everything a test touches: the admin pool (superuser, bypasses RLS
 // — for arranging state and reading ground truth), the running server, the HTTP
-// client + base URL for building Connect clients, and the clock.
+// client + base URL for building Connect clients, the clock, and the auth helpers
+// (a userID→email map and a per-email ID-token cache, both minted via the real
+// Auth emulator through the dev-login endpoint).
 type harness struct {
 	admin   *pgxpool.Pool
 	baseURL string
@@ -59,10 +65,16 @@ type harness struct {
 	clock   *testClock
 	cancel  context.CancelFunc
 	done    chan struct{}
+
+	mu     sync.Mutex
+	emails map[string]string // userID -> email (for minting that user's token)
+	tokens map[string]string // email -> cached ID token
 }
 
 // startHarness boots the real server (connecting as the app role) on an ephemeral
-// port, waits for readiness, and opens the admin pool for arranging state.
+// port, waits for readiness, and opens the admin pool for arranging state. The
+// server verifies tokens against the Auth emulator and has the dev-login endpoint
+// enabled (a non-production environment), which the harness uses to mint tokens.
 func startHarness(appURL string) (*harness, error) {
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, adminDatabaseURL)
@@ -70,12 +82,24 @@ func startHarness(appURL string) (*harness, error) {
 		return nil, fmt.Errorf("open admin pool: %w", err)
 	}
 
+	// The Admin SDK reads FIREBASE_AUTH_EMULATOR_HOST itself (set by mage), so this
+	// client talks to the emulator; the project id is the demo project.
+	emulatorHost := os.Getenv("FIREBASE_AUTH_EMULATOR_HOST")
+	firebaseAuth, err := firebaseclient.New(ctx, firebaseclient.Options{ProjectID: os.Getenv("FIREBASE_PROJECT_ID")})
+	if err != nil {
+		admin.Close()
+		return nil, fmt.Errorf("build firebase client: %w", err)
+	}
+
 	clock := &testClock{now: base}
 	srv := server.New(server.Options{
-		Logger: logging.Noop(),
-		Addr:   "127.0.0.1:0", // ephemeral; discovered via srv.Addr()
+		Logger:       logging.Noop(),
+		Addr:         "127.0.0.1:0", // ephemeral; discovered via srv.Addr()
+		FirebaseAuth: firebaseAuth,
+		DevLogin:     &server.DevLoginConfig{EmulatorHost: emulatorHost},
 	})
 	srv.InjectDependency(server.WithPostgres(appURL))
+	srv.InjectDependency(server.WithAuthentication())
 	srv.InjectDependency(server.WithSchedulingService(testGrace, clock.Now))
 
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -91,6 +115,8 @@ func startHarness(appURL string) (*harness, error) {
 		clock:  clock,
 		cancel: cancel,
 		done:   done,
+		emails: make(map[string]string),
+		tokens: make(map[string]string),
 	}
 	if err := h.waitReady(srv); err != nil {
 		cancel()
@@ -127,32 +153,87 @@ func (h *harness) shutdown() {
 	h.admin.Close()
 }
 
-// client returns a Connect client whose requests carry the dev principal headers
-// for the given user acting in the given lab.
-func (h *harness) client(userID, labID string) qlabv1connect.QlabServiceClient {
-	return qlabv1connect.NewQlabServiceClient(h.http, h.baseURL,
-		connect.WithInterceptors(devPrincipalInterceptor(userID, labID)))
+// client returns a Connect client authenticated as the given user (by minting a
+// real emulator ID token for that user's email) acting in the given lab.
+func (h *harness) client(t *testing.T, userID, labID string) qlabv1connect.QlabServiceClient {
+	t.Helper()
+	return h.bearerClient(h.tokenFor(t, h.emailOf(t, userID)), labID)
 }
 
-// anonClient returns a client with no principal headers (for auth tests).
+// clientForEmail authenticates as an arbitrary email (which may have no users row),
+// for exercising the not-provisioned path.
+func (h *harness) clientForEmail(t *testing.T, email, labID string) qlabv1connect.QlabServiceClient {
+	t.Helper()
+	return h.bearerClient(h.tokenFor(t, email), labID)
+}
+
+// anonClient returns a client with no Authorization header (for the unauthenticated
+// case).
 func (h *harness) anonClient() qlabv1connect.QlabServiceClient {
 	return qlabv1connect.NewQlabServiceClient(h.http, h.baseURL)
 }
 
-// devPrincipalInterceptor stamps the dev principal headers on every outgoing
-// request — the Phase-7 stand-in for an Authorization: Bearer <jwt> header.
-func devPrincipalInterceptor(userID, labID string) connect.Interceptor {
+// bearerClient builds a Connect client that stamps the given bearer token and
+// selected-lab header on every request — the real auth headers.
+func (h *harness) bearerClient(token, labID string) qlabv1connect.QlabServiceClient {
+	return qlabv1connect.NewQlabServiceClient(h.http, h.baseURL,
+		connect.WithInterceptors(authHeaderInterceptor(token, labID)))
+}
+
+// authHeaderInterceptor sets Authorization: Bearer and the selected-lab header on
+// every outgoing request.
+func authHeaderInterceptor(token, labID string) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if userID != "" {
-				req.Header().Set(httpmw.HeaderDevUser, userID)
+			if token != "" {
+				req.Header().Set(api.HeaderAuthorization, "Bearer "+token)
 			}
 			if labID != "" {
-				req.Header().Set(httpmw.HeaderDevLab, labID)
+				req.Header().Set(api.HeaderSelectedLab, labID)
 			}
 			return next(ctx, req)
 		}
 	})
+}
+
+// emailOf returns the email recorded for a created user.
+func (h *harness) emailOf(t *testing.T, userID string) string {
+	t.Helper()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	email, ok := h.emails[userID]
+	require.Truef(t, ok, "no email recorded for user %s (was it made via makeUser?)", userID)
+	return email
+}
+
+// tokenFor returns an emulator ID token for email, minting one via the real
+// dev-login endpoint on first use and caching it. Exercising dev-login here also
+// keeps it covered.
+func (h *harness) tokenFor(t *testing.T, email string) string {
+	t.Helper()
+	h.mu.Lock()
+	if tok, ok := h.tokens[email]; ok {
+		h.mu.Unlock()
+		return tok
+	}
+	h.mu.Unlock()
+
+	body, err := json.Marshal(map[string]string{"email": email})
+	require.NoError(t, err)
+	resp, err := h.http.Post(h.baseURL+"/devlogin", "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "dev-login should succeed for %s", email)
+	var out struct {
+		IDToken string `json:"idToken"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.NotEmpty(t, out.IDToken, "dev-login returned an empty token")
+
+	h.mu.Lock()
+	h.tokens[email] = out.IDToken
+	h.mu.Unlock()
+	return out.IDToken
 }
 
 // reset returns the database to a clean slate and the clock to base between tests.
@@ -165,6 +246,12 @@ func (h *harness) reset(t *testing.T) {
 		 RESTART IDENTITY CASCADE`)
 	require.NoError(t, err)
 	h.clock.set(base)
+	// Drop per-user identity caches: the next test recreates users with fresh
+	// emails, so old mappings/tokens are stale.
+	h.mu.Lock()
+	h.emails = make(map[string]string)
+	h.tokens = make(map[string]string)
+	h.mu.Unlock()
 }
 
 // ---- state builders (admin connection, bypassing RLS) ----
@@ -218,6 +305,9 @@ func (h *harness) makeUser(t *testing.T, labID, role string) string {
 	_, err = h.admin.Exec(ctx, `INSERT INTO labs_users (labs_id, users_id, role) VALUES ($1, $2, $3)`,
 		labID, id, role)
 	require.NoError(t, err)
+	h.mu.Lock()
+	h.emails[id] = email
+	h.mu.Unlock()
 	return id
 }
 

@@ -21,9 +21,9 @@ func (s *IntegrationSuite) TestMultiResourceFanOutAndReflow() {
 	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 2)
-	m1 := h.client(lab.Member1, lab.LabID)
-	m2 := h.client(lab.Member2, lab.LabID)
-	head := h.client(lab.Head, lab.LabID)
+	m1 := h.client(t, lab.Member1, lab.LabID)
+	m2 := h.client(t, lab.Member2, lab.LabID)
+	head := h.client(t, lab.Head, lab.LabID)
 
 	// Three slots all desired at 0, 60 min, no earliness. Two fan across the two
 	// resources; the third queues behind one of them.
