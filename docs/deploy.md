@@ -272,7 +272,13 @@ more; it costs a migration.)
 All of this is **already done** by Claude under the boundary exception
 (`qlab-staging`); it activates on the next staging deploy:
 - `operator-secret` created (random) + runtime SA granted `secretAccessor`.
-- runtime SA granted `roles/iam.serviceAccountTokenCreator` on itself (for `MintToken`).
+- runtime SA granted `roles/iam.serviceAccountTokenCreator` on itself (for `MintToken`
+  custom-token signing).
+- runtime SA granted `roles/firebaseauth.admin` (project-level) — `MintToken`'s
+  `ensureUser` step creates/looks-up Firebase Auth users via the Admin SDK, which
+  needs Auth-admin permission. Without it `MintToken` fails with `INSUFFICIENT_PERMISSION`
+  (the emulator doesn't enforce IAM, so this only surfaces against real Firebase).
+  Staging-only: production never mints tokens, only verifies them (public-key, no IAM).
 - runtime SA granted `secretAccessor` on `db-url-staging-migrator` (the operator DB url).
 - `firebase-web-api-key` secret created from the project's auto-created Firebase
   "Browser key" + runtime SA granted `secretAccessor`.
