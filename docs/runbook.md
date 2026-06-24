@@ -141,13 +141,13 @@ First login provisions invited users: minting (or a real Google login) links the
 Firebase identity to the `users` row matched by the verified email. A valid token
 for an un-invited email is rejected with `permission_denied` (not provisioned).
 
-> **Staging operator setup (you run; Claude drafts).** The operator surface needs
-> two env vars on the staging Cloud Run service, provisioned from staging's Secret
-> Manager (never committed): `OPERATOR_SECRET` (the gate) and `OPERATOR_DATABASE_URL`
-> (a connection as an elevated role that bypasses RLS — e.g. a dedicated `BYPASSRLS`
-> role on the same Neon branch, distinct from the RLS-bound app role). Both MUST be
-> absent on production — the service refuses to boot otherwise.
-> Exact `gcloud secrets` / Cloud Run `--set-secrets` commands live in `docs/deploy.md`.
+> **Staging operator setup.** The operator surface needs three env vars on the
+> staging Cloud Run service, from staging's Secret Manager: `OPERATOR_SECRET` (the
+> gate), `OPERATOR_DATABASE_URL` (the elevated cross-tenant connection — it reuses the
+> migrator/owner secret, which bypasses RLS), and `FIREBASE_WEB_API_KEY` (for
+> `MintToken`'s exchange). All MUST be absent on production — the service refuses to
+> boot otherwise. Most of this is already wired; the exact commands and the one
+> remaining step (the Web API key) live in `docs/deploy.md`.
 
 ## Debugging
 

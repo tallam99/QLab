@@ -245,39 +245,54 @@ live revision references them.
 
 ---
 
-## Operator surface (staging only — you run these)
+## Operator surface (staging only)
 
 The operator tooling (`qlab.dev.v1.DevService`: provision workspaces, mint tokens to
-act as seeded users — decision 0008) is enabled by two env vars on the **staging**
-Cloud Run service. **Never set either on production** — the service refuses to boot
-if they are present there, and the surface is not mounted in prod regardless.
+act as seeded users — decision 0008) is enabled by three env vars on the **staging**
+Cloud Run service, all sourced from Secret Manager. **None are set on production** —
+the service refuses to boot if any is present there, and the surface is not mounted
+in prod regardless.
+
+- `OPERATOR_SECRET` — the gate every operator call must present.
+- `OPERATOR_DATABASE_URL` — the operator's elevated, cross-tenant connection.
+- `FIREBASE_WEB_API_KEY` — the staging Web API key the operator's `MintToken` uses to
+  exchange a custom token for an ID token.
+
+**Elevated DB connection — reuse the migrator (owner) credential.** The operator's
+cross-tenant work (create a lab, list all workspaces) needs to bypass RLS. Neon has
+no superuser, so a `BYPASSRLS` role is impossible — but the table *owner* already
+bypasses RLS (our policies are `ENABLE`, not `FORCE`), and the migrator credential
+(`db-url-staging-migrator`) *is* the owner. So `OPERATOR_DATABASE_URL` reuses that
+secret — **no new Neon role**. The tradeoff: the staging runtime then holds the
+owner (DDL-capable) credential. Acceptable for staging — gated by the operator
+secret, demo data only, and entirely absent in production. (A dedicated operator role
++ an RLS-policy exemption is the stricter alternative if least-privilege matters
+more; it costs a migration.)
+
+Already done by Claude under the boundary exception (`qlab-staging`):
+- `operator-secret` created (random) + runtime SA granted `secretAccessor`.
+- runtime SA granted `roles/iam.serviceAccountTokenCreator` on itself (for `MintToken`).
+- runtime SA granted `secretAccessor` on `db-url-staging-migrator` (the operator DB url).
+- `OPERATOR_SECRET` + `OPERATOR_DATABASE_URL` wired into the staging Cloud Run deploy
+  (`_deploy.yml`, staging-only; `OPERATOR_DATABASE_URL` = the `DATABASE_MIGRATOR_SECRET`).
+
+Remaining (needs the **staging Web API key**, a console lookup: Firebase console →
+`qlab-staging` → Project settings → General → "Web API Key"):
 
 ```sh
-# 1. The operator gate secret (the value the CLI / dev switcher must present).
-openssl rand -base64 32 \
-  | gcloud secrets create operator-secret --data-file=- --project qlab-staging
-gcloud secrets add-iam-policy-binding operator-secret \
+printf '%s' "<staging-web-api-key>" \
+  | gcloud secrets create firebase-web-api-key --data-file=- \
+      --replication-policy=automatic --project qlab-staging
+gcloud secrets add-iam-policy-binding firebase-web-api-key \
   --member="serviceAccount:qlab-api@qlab-staging.iam.gserviceaccount.com" \
-  --role=roles/secretmanager.secretAccessor --project qlab-staging
-
-# 2. An elevated DB role that bypasses RLS (operator work is cross-tenant), distinct
-#    from the RLS-bound app role. Run in Neon's SQL editor on the STAGING branch:
-#       CREATE ROLE qlab_operator LOGIN PASSWORD '<pw>' NOSUPERUSER BYPASSRLS;
-#       GRANT ALL ON ALL TABLES IN SCHEMA public TO qlab_operator;
-#       GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO qlab_operator;
-#    then store its connection string + grant the runtime SA read:
-printf '%s' "postgres://qlab_operator:<pw>@<host>/<db>?sslmode=require" \
-  | gcloud secrets create db-url-staging-operator --data-file=- --project qlab-staging
-gcloud secrets add-iam-policy-binding db-url-staging-operator \
-  --member="serviceAccount:qlab-api@qlab-staging.iam.gserviceaccount.com" \
-  --role=roles/secretmanager.secretAccessor --project qlab-staging
+  --role=roles/secretmanager.secretAccessor --project qlab-staging --condition=None
+# then add to the staging deploy's --set-secrets:
+#   FIREBASE_WEB_API_KEY=firebase-web-api-key:latest
 ```
 
-Then wire both onto the **staging** Cloud Run service (so the runtime sees
-`OPERATOR_SECRET` and `OPERATOR_DATABASE_URL`). Add to the staging deploy step only —
-e.g. `--set-secrets=OPERATOR_SECRET=operator-secret:latest,OPERATOR_DATABASE_URL=db-url-staging-operator:latest`
-— and leave the production deploy without them. Drive the surface with the curl flow
-in `docs/runbook.md` → "Operator surface", pointing it at the staging API URL.
+Drive the surface with the curl flow in `docs/runbook.md` → "Operator surface",
+pointing it at the staging API URL (retrieve the gate value with
+`gcloud secrets versions access latest --secret=operator-secret --project qlab-staging`).
 
 ---
 

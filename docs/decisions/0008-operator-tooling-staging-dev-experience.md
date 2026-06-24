@@ -45,7 +45,13 @@ now and an in-app dev switcher later (Phase 9) both build on.
   because provisioning a *new* lab and listing *all* workspaces are inherently
   cross-tenant — the kind of thing the per-request, RLS-scoped store deliberately
   cannot do. `store.OperatorStore` is a second interface beside `store.Store`,
-  implemented by the same type over a different connection.
+  implemented by the same type over a different connection. In staging this reuses
+  the **migrator (owner) credential**: Neon has no superuser so a `BYPASSRLS` role
+  isn't possible, but the table owner already bypasses RLS (policies are `ENABLE`,
+  not `FORCE`). The tradeoff — the runtime holding the DDL-capable owner credential —
+  is accepted for a staging-only, secret-gated, demo-data surface; the stricter
+  alternative (a dedicated operator role + an RLS-policy exemption migration) was
+  considered and deferred.
 - **Provisioning goes through the app, not raw SQL.** `ProvisionLab` creates the
   lab, a head + members, and a pool with resources in one transaction, returning the
   roster. Users are created unlinked; `MintToken` (or a real first login) links the
