@@ -20,8 +20,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// tracerName identifies this service's instrumentation library on every span.
-const tracerName = "github.com/tallam99/qlab/backend"
+// tracerName is the instrumentation scope recorded on every span.
+const tracerName = "qlab"
 
 // tracer returns the service tracer from the global provider. It is fetched per call
 // (not cached) so it picks up whatever provider Init installed — and a no-op provider
