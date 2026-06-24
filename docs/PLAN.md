@@ -562,9 +562,16 @@ grace lapse → see `NO_SHOW` re-flow the queue. Each is a saved Yaak request.
 meaningful unit of work and a structured log line per request — so staging behaviour
 can be reconstructed (the observability convention).
 
-**Status:** Deliberately **deferred** out of Phase 7 to reach a working demo sooner;
-OTel has not been wired into the codebase yet. Pick this up before staging carries
-real traffic (it pairs naturally with Phase 8, when requests gain real identity).
+**Status:** **Landed.** OTel tracing and per-request structured logging are wired
+through the service (`internal/observability`; an `otelconnect` interceptor + an
+`otelhttp` middleware give the handler/RPC span for free, with manual spans at
+`scheduling.<event>` → `engine.reschedule` + `store.with_pool`). Exporter is stdout
+locally / Cloud Trace in staging-prod, driven by `QLAB_ENV`. Every log line carries
+`request_id` + `trace_id`; the authenticated RPC line adds `lab_id`/`user_id`. The
+span tree is asserted end to end in the integration suite. Conventions are recorded in
+decision 0009; metrics were deliberately deferred (optional, below). The Cloud Trace
+export path compiles and is unit-tested via stdout; it is confirmed in staging on the
+next deploy.
 
 **Work:**
 - Stand up the **OpenTelemetry SDK**: a tracer provider with a stdout exporter

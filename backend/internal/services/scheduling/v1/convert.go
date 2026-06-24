@@ -1,12 +1,14 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
+	"github.com/tallam99/qlab/backend/internal/observability"
 	"github.com/tallam99/qlab/backend/internal/services/scheduling"
 	"github.com/tallam99/qlab/backend/internal/store"
 )
@@ -20,7 +22,15 @@ import (
 // Every live and settled slot is written (an upsert is idempotent; at QLab's scale
 // the few extra writes are negligible). Outbox rows are emitted only for genuinely
 // re-committed slots, so notifications never thrash.
-func (s *service) applyEngine(actor, poolID uuid.UUID, working []store.Slot, resources []store.Resource, now time.Time, extraOutbox []store.OutboxRow) (store.PoolMutation, scheduling.Result, error) {
+// The engine itself (internal/dynamicqueue) stays pure — no tracing, no ctx — so the
+// "engine.reschedule" span is opened here, one layer up, around the call (ALGORITHM
+// §10). The blank result names let the existing explicit returns stand while the named
+// err feeds the deferred End.
+func (s *service) applyEngine(ctx context.Context, actor, poolID uuid.UUID, working []store.Slot, resources []store.Resource, now time.Time, extraOutbox []store.OutboxRow) (_ store.PoolMutation, _ scheduling.Result, err error) {
+	ctx, span := observability.Start(ctx, "engine.reschedule")
+	defer observability.End(span, &err)
+	_ = ctx // the pure engine takes no context; ctx is held only for the span scope.
+
 	input := dynamicqueue.Input{
 		ResourcePoolID: dynamicqueue.ResourcePoolID(poolID.String()),
 		Now:            now,
@@ -44,6 +54,7 @@ func (s *service) applyEngine(actor, poolID uuid.UUID, working []store.Slot, res
 		input.Slots = append(input.Slots, es)
 	}
 
+	span.SetAttributes(observability.Count("input_slots", len(input.Slots)))
 	out, err := s.engine.Reschedule(input)
 	if err != nil {
 		return store.PoolMutation{}, scheduling.Result{}, fmt.Errorf("reschedule: %w", err)
@@ -53,6 +64,7 @@ func (s *service) applyEngine(actor, poolID uuid.UUID, working []store.Slot, res
 	live := make([]store.Slot, 0, len(working))
 	var positions []scheduling.Position
 	outbox := extraOutbox
+	recommitted := 0 // slots whose committed_start changed — the "which starts changed" span tag
 
 	for _, sl := range working {
 		switch sl.Status {
@@ -72,6 +84,7 @@ func (s *service) applyEngine(actor, poolID uuid.UUID, working []store.Slot, res
 				// enqueue a re-commit notification (§2.2).
 				sl.CommittedStart = pos.ActualStart
 				outbox = append(outbox, s.notify.Recommit(actor, sl))
+				recommitted++
 			}
 			positions = append(positions, scheduling.Position{
 				SlotID:             sl.ID,
@@ -94,6 +107,7 @@ func (s *service) applyEngine(actor, poolID uuid.UUID, working []store.Slot, res
 		}
 	}
 
+	span.SetAttributes(observability.Recommitted(recommitted))
 	return store.PoolMutation{Slots: writes, Outbox: outbox},
 		scheduling.Result{ResourcePoolID: poolID, Slots: live, Positions: positions},
 		nil

@@ -297,6 +297,34 @@ pointing it at the staging API URL (retrieve the gate value with
 
 ---
 
+## Cloud Trace (Phase 7.5 — tracing)
+
+Tracing exports to **Google Cloud Trace** in staging/prod (stdout locally), chosen by
+`QLAB_ENV` — which `_deploy.yml` already sets on Cloud Run. The exporter auto-detects
+the project from the runtime SA's metadata, so **no app config, env var, or deploy
+change is needed.**
+
+> ✅ **Done (2026-06-23)** for both `qlab-staging` and `qlab-production`, by Claude
+> under a one-time exception to the local/cloud boundary: `cloudtrace.googleapis.com`
+> enabled and the `qlab-api` runtime SA granted `roles/cloudtrace.agent` in each. It
+> activates on the next deploy. Commands kept below for reference/recreation.
+
+```sh
+# 1. Enable the Cloud Trace API.
+gcloud services enable cloudtrace.googleapis.com --project "$PROJECT_ID"
+
+# 2. Let the runtime SA write trace spans (cloudtrace.traces.patch).
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:qlab-api@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role=roles/cloudtrace.agent
+```
+
+Without these the service still runs normally — tracing is never load-bearing (an
+exporter that can't be built falls back to a no-op provider; batch-export failures are
+logged, not fatal) — traces simply wouldn't appear in the Cloud Trace console.
+
+---
+
 ## One-time GCP setup
 
 > ✅ **Done (2026-06-20)** for both `qlab-staging` and `qlab-production`, by Claude

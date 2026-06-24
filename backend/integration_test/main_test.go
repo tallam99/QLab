@@ -28,6 +28,9 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 )
@@ -54,6 +57,13 @@ const testGrace = dynamicqueue.Minutes(15)
 // h is the shared harness; every test uses it. Tests run serially (they share one
 // database and one clock), so they must reset state with h.reset between them.
 var h *harness
+
+// traceRecorder records every span the server produces during the suite. It is
+// installed as the global provider before the server is built (mirroring main.go,
+// where observability.Init runs before server.New) so the otelhttp/otelconnect
+// instrumentation — which captures the provider at construction — feeds it. The
+// tracing tests read the spans from their own operation; other tests ignore it.
+var traceRecorder *tracetest.SpanRecorder
 
 func TestMain(m *testing.M) {
 	code, err := run(m)
@@ -84,6 +94,16 @@ func run(m *testing.M) (int, error) {
 	if err != nil {
 		return 1, err
 	}
+
+	// Install a recording tracer provider before the server is built, the same
+	// ordering main.go uses (observability.Init before server.New), so the otelhttp
+	// middleware and otelconnect interceptors — which bind the global provider at
+	// construction — emit into traceRecorder. AlwaysSample so no span is dropped.
+	traceRecorder = tracetest.NewSpanRecorder()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSpanProcessor(traceRecorder),
+	))
 
 	started, err := startHarness(appURL)
 	if err != nil {

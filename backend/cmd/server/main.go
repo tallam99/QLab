@@ -12,15 +12,21 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
 	"github.com/tallam99/qlab/backend/internal/config"
 	"github.com/tallam99/qlab/backend/internal/devapi"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	slogging "github.com/tallam99/qlab/backend/internal/logging/slog"
+	"github.com/tallam99/qlab/backend/internal/observability"
 	"github.com/tallam99/qlab/backend/internal/server"
 	operatorv1 "github.com/tallam99/qlab/backend/internal/services/operator/v1"
 )
+
+// tracingShutdownTimeout bounds the final span flush on shutdown so a slow or
+// unreachable trace backend can't stall the process exit.
+const tracingShutdownTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -51,6 +57,26 @@ func run() error {
 	// Ctrl-C. Cancelling ctx tells the server to shut down (and aborts init).
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+
+	// Install the tracer provider: stdout locally, Google Cloud Trace in staging/prod
+	// (driven by QLAB_ENV). Tracing is never load-bearing — on an exporter failure Init
+	// installs a no-op provider and returns the error, so we log and carry on rather
+	// than refuse to boot. The returned shutdown flushes pending spans on the way out.
+	shutdownTracing, err := observability.Init(ctx, observability.Options{
+		ServiceName: "qlab-api",
+		Environment: cfg.Env.String(),
+		Local:       cfg.IsLocal(),
+	})
+	if err != nil {
+		logger.Warn("tracing disabled: exporter setup failed", "error", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), tracingShutdownTimeout)
+		defer cancel()
+		if err := shutdownTracing(shutdownCtx); err != nil {
+			logger.Warn("flush traces on shutdown", "error", err)
+		}
+	}()
 
 	// Build the Firebase Auth client (token verification + the operator token
 	// minter). Locally it is pointed at the Auth emulator via

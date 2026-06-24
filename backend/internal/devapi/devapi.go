@@ -10,9 +10,11 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"connectrpc.com/validate"
 	"github.com/google/uuid"
 
@@ -38,10 +40,14 @@ type Service struct {
 	// the plaintext secret out of resident memory; the interceptor compares digests.
 	secretHash [sha256.Size]byte
 	validate   connect.Interceptor
+	// otel opens an RPC span (named for the procedure) on every operator call, so the
+	// staging operator surface is traced like the public API.
+	otel connect.Interceptor
 }
 
-// New builds the DevService transport. It panics on a missing dependency or an empty
-// secret — a wiring bug should fail loudly (and an empty secret would mean no gate).
+// New builds the DevService transport. It panics on a missing dependency, an empty
+// secret, or a failure building the otel interceptor — a wiring bug should fail loudly
+// (and an empty secret would mean no gate).
 func New(svc operator.Service, secret string) *Service {
 	if svc == nil {
 		panic("devapi: New requires an operator.Service")
@@ -49,13 +55,18 @@ func New(svc operator.Service, secret string) *Service {
 	if secret == "" {
 		panic("devapi: New requires a non-empty operator secret")
 	}
-	return &Service{svc: svc, secretHash: sha256.Sum256([]byte(secret)), validate: validate.NewInterceptor()}
+	otelInterceptor, err := otelconnect.NewInterceptor()
+	if err != nil {
+		panic(fmt.Sprintf("devapi: build otelconnect interceptor: %v", err))
+	}
+	return &Service{svc: svc, secretHash: sha256.Sum256([]byte(secret)), validate: validate.NewInterceptor(), otel: otelInterceptor}
 }
 
-// Handler returns the mount path and HTTP handler, with the operator-secret gate and
-// protovalidate in front of every method (secret outermost: reject before validating).
+// Handler returns the mount path and HTTP handler, with the OpenTelemetry span, the
+// operator-secret gate, and protovalidate in front of every method (otel outermost so
+// the span wraps the gate; secret before validate: reject before validating).
 func (s *Service) Handler() (string, http.Handler) {
-	return devv1connect.NewDevServiceHandler(s, connect.WithInterceptors(s.secretInterceptor(), s.validate))
+	return devv1connect.NewDevServiceHandler(s, connect.WithInterceptors(s.otel, s.secretInterceptor(), s.validate))
 }
 
 // secretInterceptor rejects any call without the matching operator secret. A

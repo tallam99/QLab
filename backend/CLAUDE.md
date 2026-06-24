@@ -123,11 +123,22 @@ come.
   `mage test`. **This is where new end-to-end behaviour goes** — add cases (and
   multi-step chains) here as features land.
 - `internal/httpmw/` — HTTP middleware: request-id structured logging
-  (`RequestLogger`, `LoggerFromContext`), panic recovery (`Recoverer`), CORS
-  (`CORS`) for the cross-origin PWA, and `DevPrincipal` (the Phase-7 dev-header auth
-  stand-in). `CORS` fails closed on an empty allow-list (same-origin only) rather
-  than the underlying library's "allow all" default; origins come from config
-  (`CORS_ALLOWED_ORIGINS`, set per environment to the Firebase Hosting origin).
+  (`RequestLogger`, `LoggerFromContext`/`WithLogger`; every line carries `request_id`
+  + `trace_id`), the OTel server-span middleware (`Tracing`, sibling to the
+  request-id/logging middleware, health probes filtered out), panic recovery
+  (`Recoverer`), and CORS (`CORS`) for the cross-origin PWA. `CORS` fails closed on an
+  empty allow-list (same-origin only) rather than the underlying library's "allow all"
+  default; origins come from config (`CORS_ALLOWED_ORIGINS`).
+- `internal/observability/` — the tracing surface (Phase 7.5): the OTel SDK setup
+  (`Init` — stdout locally / Cloud Trace in staging-prod, driven by `QLAB_ENV`; a no-op
+  provider on exporter failure so tracing is never load-bearing) and a uniform span API.
+  `Start`/`End` is the single idiom at every manual span site —
+  `defer observability.End(span, &err)` records the error path with no per-return
+  branch — and the typed attribute constructors (`LabID`/`PoolID`/`Event`/…) namespace
+  span keys under `qlab.` from one consts block. The handler/RPC span is automatic
+  (`otelconnect` on the API + operator surface, `otelhttp` on the router); manual spans
+  live only at `scheduling.<event>` → `engine.reschedule` + `store.with_pool`. The pure
+  engine never imports this. **Conventions: decision 0009 — follow them when adding spans.**
 - `internal/protogen/` — **generated** Go from the `proto/qlab/v1` contract (`mage
   genProto`); committed, never hand-edited. `qlab/v1` holds the message types,
   `qlab/v1/qlabv1connect` the Connect server/client stubs. The pure engine and the
@@ -164,6 +175,10 @@ come.
 - **Structured logging via the `logging.Logger` interface** (slog-backed), never
   `fmt.Println`/`log`. Use the request-scoped logger from
   `httpmw.LoggerFromContext(ctx)` inside handlers so lines carry the request id.
+- **Tracing via `internal/observability`** — `ctx, span := observability.Start(ctx,
+  "<layer>.<event>", observability.LabID(...), …); defer observability.End(span, &err)`
+  with a **named `err` return**. Span keys come only from the typed constructors. The
+  pure engine (`internal/dynamicqueue`) never imports it. Decision 0009 is the spec.
 - **chi** for routing/middleware; Connect-RPC handlers mount on the same router
   later. Wire format is protobuf via Connect — generated types only, no
   hand-written request/response shapes (lands Phase 6).
