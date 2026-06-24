@@ -159,6 +159,9 @@ jobs:
           VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_PROJECT_ID }}.firebaseapp.com
           VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          # Enable the dev switcher on staging only; production ships the neutral
+          # placeholder (the operator surface it needs isn't mounted in prod).
+          VITE_DEV_SWITCHER: ${{ inputs.environment == 'staging' && 'true' || '' }}
         run: |
           # Fail the deploy rather than ship a bundle that throws on first load: the
           # Firebase web API key is required for auth and is not derivable. (The API

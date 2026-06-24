@@ -29,4 +29,9 @@ export const env = {
     // Unset in staging/prod, where the SDK talks to real Firebase.
     authEmulatorHost: import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_HOST as string | undefined,
   },
+  // Whether to render the dev switcher (sign-in + provision/act-as). It only works
+  // where the operator surface is mounted (local/staging), so it is **off by default**
+  // — an unset value means a production build ships a neutral placeholder instead of a
+  // dev tool. Set VITE_DEV_SWITCHER=true for local/staging builds only.
+  devSwitcherEnabled: import.meta.env.VITE_DEV_SWITCHER === "true",
 } as const;

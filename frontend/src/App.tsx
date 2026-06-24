@@ -1,7 +1,9 @@
 import { ActAsSwitcher } from "./components/ActAsSwitcher";
+import { ComingSoon } from "./components/ComingSoon";
 import { SignIn } from "./components/SignIn";
 import { SlotList } from "./components/SlotList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
+import { env } from "./env";
 import { useSession } from "./session/SessionProvider";
 import { useWorkspace } from "./workspace/WorkspaceProvider";
 
@@ -11,6 +13,13 @@ import { useWorkspace } from "./workspace/WorkspaceProvider";
 export function App() {
   const { user, initializing } = useSession();
   const { workspace, error } = useWorkspace();
+
+  // The switcher only works where the operator surface is mounted (local/staging).
+  // In production it is disabled, so ship a neutral placeholder rather than a sign-in
+  // to a dev tool that can't function there.
+  if (!env.devSwitcherEnabled) {
+    return <ComingSoon />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
