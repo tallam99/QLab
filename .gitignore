@@ -40,6 +40,8 @@ __pycache__/
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
+# …but the coverage CI workflow is source, not an artifact (coverage.* would catch it).
+!.github/workflows/coverage.yml
 *.coverprofile
 profile.cov
 
