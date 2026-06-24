@@ -6,6 +6,7 @@ import { App } from "./App";
 import { transport } from "./api/transport";
 import "./index.css";
 import { SessionProvider } from "./session/SessionProvider";
+import { WorkspaceProvider } from "./workspace/WorkspaceProvider";
 
 const queryClient = new QueryClient();
 
@@ -19,7 +20,9 @@ createRoot(root).render(
     <TransportProvider transport={transport}>
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
-          <App />
+          <WorkspaceProvider>
+            <App />
+          </WorkspaceProvider>
         </SessionProvider>
       </QueryClientProvider>
     </TransportProvider>

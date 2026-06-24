@@ -1,13 +1,16 @@
-import { DevTokenPanel } from "./components/DevTokenPanel";
+import { ActAsSwitcher } from "./components/ActAsSwitcher";
 import { SignIn } from "./components/SignIn";
 import { SlotList } from "./components/SlotList";
+import { WorkspacePicker } from "./components/WorkspacePicker";
 import { useSession } from "./session/SessionProvider";
+import { useWorkspace } from "./workspace/WorkspaceProvider";
 
-// App is the Phase 9 shell: authenticate (Google or a minted token), select a
-// lab + pool, and render one real authenticated call (ListSlots). The product UI
-// — queue and timeline views, clock in/out, live updates — lands in Phase 10.
+// App is the dev-switcher shell: sign in once as the operator (Google), provision or
+// load a demo workspace, then act as any user in it and exercise the queue — all
+// without re-pasting tokens. The product UI proper (queue + timeline) lands later.
 export function App() {
-  const { canQuery, selection, initializing } = useSession();
+  const { user, initializing } = useSession();
+  const { workspace, error } = useWorkspace();
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
@@ -17,21 +20,22 @@ export function App() {
       </header>
 
       <main className="mx-auto grid max-w-3xl gap-6 px-6 py-8">
-        <DevTokenPanel />
-        <section>
-          <h2 className="mb-3 font-mono text-sm uppercase tracking-wide text-slate-400">
-            Slots {selection ? `· pool ${selection.poolId.slice(0, 8)}…` : ""}
-          </h2>
-          {initializing ? (
-            <p className="text-slate-400">Starting…</p>
-          ) : canQuery ? (
-            <SlotList />
-          ) : (
-            <p className="text-slate-400">
-              Sign in (or paste a minted token) and set a lab + pool to load slots.
-            </p>
-          )}
-        </section>
+        {initializing ? (
+          <p className="text-slate-400">Starting…</p>
+        ) : !user ? (
+          <p className="text-slate-400">Sign in with Google to use the dev switcher.</p>
+        ) : (
+          <>
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <WorkspacePicker />
+            {workspace && (
+              <>
+                <ActAsSwitcher />
+                <SlotList />
+              </>
+            )}
+          </>
+        )}
       </main>
     </div>
   );

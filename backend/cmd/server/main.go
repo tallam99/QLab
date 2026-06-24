@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tallam99/qlab/backend/internal/auth/firebaseauth"
 	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
 	"github.com/tallam99/qlab/backend/internal/config"
 	"github.com/tallam99/qlab/backend/internal/devapi"
@@ -114,7 +115,15 @@ func run() error {
 		defer func() { _ = operatorStore.Close() }()
 		minter := firebaseclient.NewMinter(firebaseAuth, cfg.FirebaseAuthEmulatorHost, cfg.FirebaseWebAPIKey)
 		operatorSvc := operatorv1.New(operatorv1.Options{Store: operatorStore, Minter: minter})
-		path, handler := devapi.New(operatorSvc, cfg.OperatorSecret).Handler()
+		// The browser dev switcher gates on a verified operator Google login against
+		// OPERATOR_ALLOWED_EMAILS (decision 0008), so the operator surface gets the same
+		// Firebase token verifier the public API uses, alongside the shared secret.
+		path, handler := devapi.New(devapi.Options{
+			Svc:           operatorSvc,
+			Secret:        cfg.OperatorSecret,
+			Verifier:      firebaseauth.New(firebaseAuth),
+			AllowedEmails: cfg.OperatorAllowedEmails,
+		}).Handler()
 		opts.OperatorMount = &server.OperatorMount{Path: path, Handler: handler}
 		logger.Warn("operator surface (qlab.dev.v1) enabled — staging/local only")
 	}

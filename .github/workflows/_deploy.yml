@@ -110,6 +110,18 @@ jobs:
           if [ "${{ inputs.environment }}" = "staging" ]; then
             SECRETS="$SECRETS,OPERATOR_SECRET=operator-secret:latest,OPERATOR_DATABASE_URL=${{ vars.DATABASE_MIGRATOR_SECRET }}:latest,FIREBASE_WEB_API_KEY=firebase-web-api-key:latest"
           fi
+          # Container env vars. --set-env-vars REPLACES the whole set (it is not
+          # additive), so every var goes in this one string; ^@^ makes '@' the
+          # delimiter so comma-bearing values (the CORS list, a multi-email allowlist)
+          # are safe.
+          ENVVARS="QLAB_ENV=${{ inputs.environment }}@CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}@FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}"
+          # Staging-only: the operator email allowlist that lets the in-app dev switcher
+          # drive the operator surface via a verified Google login instead of the secret
+          # (decision 0008). Omitted when the variable is unset, leaving only the
+          # secret-gated path. Not a secret — it is just an allowlist of emails.
+          if [ "${{ inputs.environment }}" = "staging" ] && [ -n "${{ vars.OPERATOR_ALLOWED_EMAILS }}" ]; then
+            ENVVARS="$ENVVARS@OPERATOR_ALLOWED_EMAILS=${{ vars.OPERATOR_ALLOWED_EMAILS }}"
+          fi
           # --region implies the fully managed platform, so --platform is omitted.
           gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
             --image "$IMAGE" \
@@ -117,7 +129,7 @@ jobs:
             --region "${{ vars.GCP_REGION }}" \
             --allow-unauthenticated \
             --service-account "${{ vars.CLOUD_RUN_RUNTIME_SA }}" \
-            --set-env-vars "^@^QLAB_ENV=${{ inputs.environment }}@CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}@FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}" \
+            --set-env-vars "^@^$ENVVARS" \
             --set-secrets "$SECRETS"
           url="$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
             --project "${{ vars.GCP_PROJECT_ID }}" --region "${{ vars.GCP_REGION }}" \

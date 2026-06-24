@@ -111,7 +111,8 @@ func TestIsLocal(t *testing.T) {
 }
 
 // TestOperatorEnabled checks the operator-surface gate: enabled only outside
-// production and only when a secret is configured.
+// production and only when a gate is configured — the shared secret or the browser
+// email allowlist (decision 0008).
 func TestOperatorEnabled(t *testing.T) {
 	tests := []struct {
 		name string
@@ -120,8 +121,10 @@ func TestOperatorEnabled(t *testing.T) {
 	}{
 		{"staging with secret", Config{Env: EnvStaging, OperatorSecret: "s"}, true},
 		{"local with secret", Config{Env: EnvLocal, OperatorSecret: "s"}, true},
-		{"staging without secret", Config{Env: EnvStaging}, false},
+		{"staging with allowlist only", Config{Env: EnvStaging, OperatorAllowedEmails: []string{"a@b.com"}}, true},
+		{"staging without secret or allowlist", Config{Env: EnvStaging}, false},
 		{"production with secret", Config{Env: EnvProduction, OperatorSecret: "s"}, false},
+		{"production with allowlist", Config{Env: EnvProduction, OperatorAllowedEmails: []string{"a@b.com"}}, false},
 	}
 	for _, tt := range tests {
 		if got := tt.cfg.OperatorEnabled(); got != tt.want {
@@ -146,7 +149,11 @@ func TestValidate(t *testing.T) {
 		{"production without emulator allowed", Config{Env: EnvProduction}, false},
 		{"operator secret in production rejected", Config{Env: EnvProduction, OperatorSecret: "s"}, true},
 		{"operator db url in production rejected", Config{Env: EnvProduction, OperatorDatabaseURL: "postgres://x"}, true},
+		{"operator allowlist in production rejected", Config{Env: EnvProduction, OperatorAllowedEmails: []string{"a@b.com"}}, true},
 		{"operator secret without db url rejected", Config{Env: EnvStaging, OperatorSecret: "s"}, true},
+		// Allowlist-only enables the surface too, so it also requires the elevated DB url.
+		{"operator allowlist without db url rejected", Config{Env: EnvLocal, OperatorAllowedEmails: []string{"a@b.com"}, FirebaseAuthEmulatorHost: "localhost:9099"}, true},
+		{"operator allowlist with db url and emulator allowed", Config{Env: EnvLocal, OperatorAllowedEmails: []string{"a@b.com"}, OperatorDatabaseURL: "postgres://x", FirebaseAuthEmulatorHost: "localhost:9099"}, false},
 		// Operator against the emulator: any web API key works, so none is required.
 		{"operator with db url and emulator allowed", Config{Env: EnvLocal, OperatorSecret: "s", OperatorDatabaseURL: "postgres://x", FirebaseAuthEmulatorHost: "localhost:9099"}, false},
 		// Operator against real Firebase (no emulator) needs the real web API key.
