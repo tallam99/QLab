@@ -52,6 +52,11 @@ services:
       # Both are absent in production by construction (decision 0008).
       OPERATOR_SECRET: "local-operator-secret"
       OPERATOR_DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      # Allowlist for the in-app dev switcher: signing into the Auth emulator as this
+      # email lets the browser drive the operator surface via a verified login (no
+      # secret in the browser). Any email works against the emulator — sign in as
+      # this one in the PWA to use the switcher locally.
+      OPERATOR_ALLOWED_EMAILS: "operator@qlab.dev"
     ports:
       - "8090:8090"
     depends_on:

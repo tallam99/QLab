@@ -160,18 +160,23 @@ The PWA (`frontend/`, Phase 9) runs against the local stack + Auth emulator:
     cd frontend && npm install
     npm run dev                    # http://localhost:5173
 
-Two ways to get an authenticated session (both attach `Authorization: Bearer` +
-`X-QLab-Lab` via the Connect transport):
+The app is the **dev switcher**: sign in once as the operator, then act as any seeded
+user without pasting tokens.
 
-- **Google sign-in** — the popup is served by the Auth emulator locally, so any
-  email works with no real Google account. The email must be invited; provision
-  one via the operator surface (above), then sign in as that user's email — first
-  login links the Firebase identity to the seeded `users` row.
-- **Dev token panel** — paste an operator-minted ID token plus a lab + pool id to
-  act as a seeded user with no OAuth dance. This is also the **staging-test** path:
-  mint against staging, act as seeded users, leave prod untouched. Get the ids +
-  token from the operator `ProvisionLab` / `MintToken` responses (above); there is
-  no public `ListPools` RPC yet (Phase 10), so the pool id comes from provisioning.
+1. **Sign in as the operator.** The popup is served by the Auth emulator locally, so
+   any email works — sign in as **`operator@qlab.dev`**, the email in the api
+   container's `OPERATOR_ALLOWED_EMAILS` (docker-compose). That verified login is what
+   lets the browser drive the operator surface, with no secret in the browser
+   (decision 0008). To change/add operators locally, edit `OPERATOR_ALLOWED_EMAILS`.
+2. **Provision or load a workspace.** "New workspace" creates a head + N members + a
+   pool of M resources; or load an existing one from the dropdown (operator `ListLabs`).
+3. **Act as anyone.** Pick a user from "Act as" — the app mints (and caches) their ID
+   token, so switching back to someone you've already acted as is instant. Pick a pool,
+   then list / add / cancel slots as that user; switch users to watch the queue re-flow.
+
+The same flow works against **staging** (the deployed app) — sign in with your real
+Google account (it must be in staging's `OPERATOR_ALLOWED_EMAILS` variable), and act
+as seeded users without touching prod.
 
 Cross-origin: locally the app calls the API **same-origin** through the Vite proxy
 (`vite.config.ts` forwards the Connect paths to `:8090`), so CORS doesn't apply on

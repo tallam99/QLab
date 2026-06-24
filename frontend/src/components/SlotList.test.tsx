@@ -8,19 +8,21 @@ import { QlabService } from "../protogen/qlab/v1/service_pb";
 import { SlotStatus } from "../protogen/qlab/v1/types_pb";
 import { SlotList } from "./SlotList";
 
-// Drive SlotList off a fixed session so the test exercises the data path (the
-// generated client + Connect-Query + rendering) without pulling in Firebase.
-vi.mock("../session/SessionProvider", () => ({
-  useSession: () => ({ selection: { labId: "lab-1", poolId: "pool-1" }, canQuery: true }),
+// Drive SlotList off a fixed workspace selection so the test exercises the data path
+// (the generated client + Connect-Query + rendering) without the operator context.
+vi.mock("../workspace/WorkspaceProvider", () => ({
+  useWorkspace: () => ({ poolId: "pool-1", canQuery: true }),
 }));
 
-// renderWithTransport wraps SlotList in the same providers main.tsx uses, but with
-// an in-memory transport that answers ListSlots locally — no network, deterministic.
+// renderWithTransport wraps SlotList in the same providers main.tsx uses, but with an
+// in-memory transport that answers the RPCs locally — no network, deterministic.
 function renderWithTransport(slots: unknown[]) {
   const transport = createRouterTransport(({ service }) => {
     service(QlabService, {
       // biome-ignore lint/suspicious/noExplicitAny: partial message init is fine for a stub.
       listSlots: () => ({ slots: slots as any }),
+      createSlot: () => ({}),
+      cancelSlot: () => ({}),
     });
   });
   const queryClient = new QueryClient();
@@ -32,8 +34,8 @@ function renderWithTransport(slots: unknown[]) {
   return render(<SlotList />, { wrapper });
 }
 
-// SlotList is the one real authenticated call in Phase 9; verify it renders the
-// pool's slots and the empty state, proving the generated client wiring works.
+// SlotList renders the acting-as user's pool queue; verify it lists the slots and the
+// empty state, proving the generated client wiring works.
 describe("SlotList", () => {
   it("renders the slots returned by ListSlots", async () => {
     renderWithTransport([

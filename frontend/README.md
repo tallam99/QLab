@@ -27,22 +27,16 @@ real API URL and are genuinely cross-origin.
 Scripts: `dev`, `build`, `test` (Vitest), `typecheck`, `lint`/`lint:fix` (Biome),
 `format`.
 
-## Signing in / testing against the API
+## The dev switcher
 
-Two ways to get an authenticated session (both feed the same Connect transport,
-which attaches `Authorization: Bearer <token>` and `X-QLab-Lab`):
-
-1. **Google sign-in** — the production path. Locally the Firebase SDK is pointed
-   at the Auth emulator, so the popup signs you in as any email with no real
-   Google account. The email must be invited (provisioned) — see below.
-2. **Dev token panel** — paste an operator-minted ID token plus a lab + pool id
-   to act as a seeded user without the OAuth dance (decision 0008). This is the
-   **staging-test** path: mint against staging with no new real identities, and
-   prod stays untouched. There is no public `ListPools` RPC yet (Phase 10), so the
-   lab/pool ids are taken from the operator `ProvisionLab` response.
-
-Provision a workspace and mint a token via the operator surface — see
-`docs/runbook.md` → "Operator surface" and "Frontend dev loop".
+Sign in **once** as the operator (Google), provision or load a demo workspace, then
+act as any user in it — fluidly, without pasting tokens. The operator's verified login
+drives the staging/local-only operator surface (`qlab.dev.v1`) against an email
+allowlist (`OPERATOR_ALLOWED_EMAILS`); switching users mints and caches an ID token
+per user, so switching back is instant. Two identities, two transports — see
+`frontend/ARCHITECTURE.md`. Locally, sign in as `operator@qlab.dev`; in staging, use a
+Google account in staging's allowlist. Step-by-step: `docs/runbook.md` →
+"Frontend dev loop".
 
 ## Stack
 
