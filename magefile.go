@@ -436,16 +436,29 @@ func GenSqlc() error {
 }
 
 // GenProto regenerates Go + TS from the .proto contract via buf, run from the
-// proto/ module dir so buf.gen.yaml's relative output paths and the npm-pinned TS
-// plugin resolve. The Go plugins are the module's pinned `go tool` binaries.
+// proto/ module dir so the buf.gen templates' relative output paths and the
+// npm-pinned TS plugin resolve. The Go plugins are the module's pinned `go tool`
+// binaries.
+//
+// Go and TS are generated in SEPARATE invocations because they need opposite
+// import handling:
+//   - Go (buf.gen.yaml, no --include-imports): imported modules are NOT vendored.
+//     buf/validate resolves to the protovalidate BSR Go module — the same one the
+//     runtime uses, so it is registered once; vendoring a second copy would panic
+//     at init. The well-known types resolve to timestamppb.
+//   - TS (buf.gen.ts.yaml, --include-imports): protobuf-es ships no buf/validate
+//     package, so the generated qlab/* TS imports it by relative path; that file
+//     must be vendored locally. --include-imports emits buf/validate/validate_pb.ts
+//     while still mapping the well-known types to @bufbuild/protobuf/wkt (they are
+//     special-cased, not vendored). The frontend never runs protovalidate, so the
+//     local descriptor is harmless there.
 func GenProto() error {
 	if _, err := os.Stat(bufConfigFile); err != nil {
 		fmt.Printf("genproto: no buf config (%s) found\n", bufConfigFile)
 		return nil
 	}
-	// No --include-imports: imported modules (protovalidate, the well-known types)
-	// are NOT vendored into our gen dirs. They resolve to their own Go/TS packages —
-	// buf/validate to the protovalidate BSR module (the same one the runtime uses,
-	// so it is registered once), timestamps to timestamppb / @bufbuild/protobuf.
-	return runIn(protoDir, "buf", "generate")
+	if err := runIn(protoDir, "buf", "generate"); err != nil {
+		return err
+	}
+	return runIn(protoDir, "buf", "generate", "--template", "buf.gen.ts.yaml", "--include-imports")
 }

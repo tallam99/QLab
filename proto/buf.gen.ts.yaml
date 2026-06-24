@@ -1,0 +1,20 @@
+# TypeScript codegen target. Run via `mage genProto` as a SEPARATE invocation from
+# the Go template (buf.gen.yaml), with --include-imports — see magefile GenProto.
+#
+# Connect-ES v2 emits both the message types and the Connect service descriptors
+# from this one plugin (consumed by the frontend via Connect-Query). The TS plugin
+# is the npm package pinned in proto/package.json.
+#
+# Unlike Go, TS is generated WITH --include-imports so that buf/validate is vendored
+# locally (protobuf-es ships no buf/validate package, so the generated qlab/* TS
+# imports it by relative path). The well-known types are still mapped to
+# @bufbuild/protobuf/wkt — protoc-gen-es special-cases them, so --include-imports
+# does not vendor a second copy. The frontend never runs protovalidate at runtime;
+# the local descriptor only carries the field-option metadata.
+version: v2
+managed:
+  enabled: true
+plugins:
+  - local: node_modules/.bin/protoc-gen-es
+    out: ../frontend/src/protogen
+    opt: target=ts
