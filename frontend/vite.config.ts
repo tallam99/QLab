@@ -27,5 +27,14 @@ export default defineConfig({
     setupFiles: "./src/setupTests.ts",
     // The generated protobuf code is exercised by the backend; don't re-test it here.
     exclude: ["**/node_modules/**", "src/protogen/**"],
+    // Dummy Firebase web config so env.ts/firebase.ts initialize during tests — any
+    // test that imports a component transitively loads firebase.ts at module load.
+    // These mirror .env.example; CI has no .env.local. No real Firebase is contacted.
+    env: {
+      VITE_FIREBASE_API_KEY: "demo-api-key",
+      VITE_FIREBASE_AUTH_DOMAIN: "demo-qlab.firebaseapp.com",
+      VITE_FIREBASE_PROJECT_ID: "demo-qlab",
+      VITE_FIREBASE_AUTH_EMULATOR_HOST: "http://localhost:9099",
+    },
   },
 });
