@@ -19,7 +19,10 @@ interceptor (the `auth.TokenVerifier` seam over the Admin SDK; the Auth emulator
 locally and in CI), with invite-only first-login provisioning, plus a **staging/local
 operator surface** (`qlab.dev.v1`, a separate secret-gated Connect service the prod
 binary never mounts) to provision demo workspaces, mint tokens to act as seeded
-users, and inspect/tear down workspaces (decision 0008). The head-only
+users, and inspect/tear down workspaces (decision 0008). **Observability is also in
+place (Phase 7.5):** OTel tracing (stdout locally / Cloud Trace in staging-prod) and
+per-request structured logging, correlated by `request_id` + `trace_id`, with a span
+tree per reschedule — see `internal/observability` and decision 0009. The head-only
 invite/add-member RPC and real Google sign-in in the Firebase projects are still to
 come. Work proceeds through the phases in `docs/PLAN.md`.
 

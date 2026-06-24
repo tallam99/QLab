@@ -57,7 +57,8 @@ same fields.
 | `mage testSchema` | DB-level schema tests (constraints/triggers/seed) against a throwaway DB; **requires the stack up**. Its `TestMain` creates/migrates/seeds/drops `qlab_schema_test` |
 | `mage testIntegration` | full-stack suite: boots the real server (as an RLS-bound app role) against a throwaway DB and drives it through the Connect client with **real emulator-issued tokens**; **requires the stack up** (Postgres + the Auth emulator). Its `TestMain` creates/migrates/drops `qlab_integration_test` |
 | `mage genMocks` / `mage clearMocks` | (re)generate / remove the mockery mocks. Mocks are **not** committed (`.mockery.yaml`); generate before building code that imports one, then `go mod tidy` |
-| `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
+| `mage mutate` | mutation-test the logic-dense packages with gremlins (`mutateDirs`: the engine + `basic`, auth provisioning, authz, config, protoconv); gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
+| `mage coverage` | run all tiers with statement coverage, merge them, and write a per-package + total summary (excluding generated code) to `coverage.md`. **Requires the stack up** (it runs the schema + integration tiers). CI runs this and posts `coverage.md` as a sticky PR comment. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
 | `mage postgresLogs` | dump Postgres's full log, then stream (debugging the DB) |
 | `mage genProto` | `buf generate` from `proto/`: Go → `backend/internal/protogen`, TS → `frontend/src/protogen`. Go plugins are the module's pinned `go tool` binaries; the TS plugin is `proto/package.json` (`npm install` in `proto/` first). Commit the regenerated output. |
@@ -155,8 +156,15 @@ for an un-invited email is rejected with `permission_denied` (not provisioned).
 
 - Logs are structured `slog`: human-readable text locally, JSON in the cloud.
   Every line carries a `request_id` (echoed in the `X-Request-Id` response header)
-  so a single request's full story can be filtered out and handed to Claude as a
-  self-contained slice. Follow with `mage serviceLogs`.
+  and a `trace_id` so a single request's full story can be filtered out and handed
+  to Claude as a self-contained slice. The authenticated RPC line also carries
+  `lab_id`/`user_id`. Follow with `mage serviceLogs`.
+- **Traces:** every reschedule emits a span tree (`POST …` → `…/ClockIn` →
+  `scheduling.<event>` → `engine.reschedule` + `store.with_pool`), annotated with
+  `qlab.lab_id`/`qlab.resource_pool_id`/`qlab.event` and the recommit/upsert counts.
+  Locally the spans print to **stdout** (interleaved with the logs); in staging/prod
+  they export to Cloud Trace. Conventions for adding spans are in
+  `docs/decisions/0009-observability-tracing-conventions.md`.
 - Inspect the DB directly: `docker exec -it qlab-postgres-1 psql -U qlab -d qlab`.
 - **Staging/prod** is the user's domain (Claude drafts, never runs cloud
   commands). Deploy setup, the CI/CD pipeline, and the `gcloud logging read`
