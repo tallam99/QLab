@@ -269,26 +269,21 @@ secret, demo data only, and entirely absent in production. (A dedicated operator
 + an RLS-policy exemption is the stricter alternative if least-privilege matters
 more; it costs a migration.)
 
-Already done by Claude under the boundary exception (`qlab-staging`):
+All of this is **already done** by Claude under the boundary exception
+(`qlab-staging`); it activates on the next staging deploy:
 - `operator-secret` created (random) + runtime SA granted `secretAccessor`.
 - runtime SA granted `roles/iam.serviceAccountTokenCreator` on itself (for `MintToken`).
 - runtime SA granted `secretAccessor` on `db-url-staging-migrator` (the operator DB url).
-- `OPERATOR_SECRET` + `OPERATOR_DATABASE_URL` wired into the staging Cloud Run deploy
-  (`_deploy.yml`, staging-only; `OPERATOR_DATABASE_URL` = the `DATABASE_MIGRATOR_SECRET`).
+- `firebase-web-api-key` secret created from the project's auto-created Firebase
+  "Browser key" + runtime SA granted `secretAccessor`.
+- `OPERATOR_SECRET` + `OPERATOR_DATABASE_URL` (= `DATABASE_MIGRATOR_SECRET`) +
+  `FIREBASE_WEB_API_KEY` wired into the staging Cloud Run deploy (`_deploy.yml`,
+  staging-only).
 
-Remaining (needs the **staging Web API key**, a console lookup: Firebase console →
-`qlab-staging` → Project settings → General → "Web API Key"):
-
-```sh
-printf '%s' "<staging-web-api-key>" \
-  | gcloud secrets create firebase-web-api-key --data-file=- \
-      --replication-policy=automatic --project qlab-staging
-gcloud secrets add-iam-policy-binding firebase-web-api-key \
-  --member="serviceAccount:qlab-api@qlab-staging.iam.gserviceaccount.com" \
-  --role=roles/secretmanager.secretAccessor --project qlab-staging --condition=None
-# then add to the staging deploy's --set-secrets:
-#   FIREBASE_WEB_API_KEY=firebase-web-api-key:latest
-```
+> If the Firebase **Browser key** ever gets API restrictions that exclude the
+> Identity Toolkit API, `MintToken`'s server-side `signInWithCustomToken` exchange
+> will fail; rotate `firebase-web-api-key` to an unrestricted (or Identity-Toolkit-
+> allowed) key then.
 
 Drive the surface with the curl flow in `docs/runbook.md` → "Operator surface",
 pointing it at the staging API URL (retrieve the gate value with

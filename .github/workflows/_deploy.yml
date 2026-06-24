@@ -92,13 +92,14 @@ jobs:
           # the Firebase Hosting deploy uses.
           #
           # The operator surface (qlab.dev.v1, decision 0008) is staging-only: only
-          # there do we attach OPERATOR_SECRET (the gate) and OPERATOR_DATABASE_URL
-          # (the operator's elevated, cross-tenant connection — it reuses the migrator/
-          # owner secret, since the owner bypasses RLS and Neon can't make a BYPASSRLS
-          # role). Production gets neither, so the surface can't exist there.
+          # there do we attach OPERATOR_SECRET (the gate), OPERATOR_DATABASE_URL (the
+          # operator's elevated, cross-tenant connection — it reuses the migrator/owner
+          # secret, since the owner bypasses RLS and Neon can't make a BYPASSRLS role),
+          # and FIREBASE_WEB_API_KEY (the Firebase browser key, for MintToken's token
+          # exchange). Production gets none of them, so the surface can't exist there.
           SECRETS="DATABASE_URL=${{ vars.DATABASE_SECRET }}:latest"
           if [ "${{ inputs.environment }}" = "staging" ]; then
-            SECRETS="$SECRETS,OPERATOR_SECRET=operator-secret:latest,OPERATOR_DATABASE_URL=${{ vars.DATABASE_MIGRATOR_SECRET }}:latest"
+            SECRETS="$SECRETS,OPERATOR_SECRET=operator-secret:latest,OPERATOR_DATABASE_URL=${{ vars.DATABASE_MIGRATOR_SECRET }}:latest,FIREBASE_WEB_API_KEY=firebase-web-api-key:latest"
           fi
           # --region implies the fully managed platform, so --platform is omitted.
           gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
