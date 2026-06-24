@@ -19,9 +19,11 @@ const auth: Interceptor = (next) => async (req) => {
   return next(req);
 };
 
-// The app talks to the Cloud Run API on a separate origin (decision 0001), so
-// this is a cross-origin Connect client; CORS on the API allows this origin.
+// In staging/prod the app talks to the Cloud Run API on a separate origin
+// (decision 0001) — a cross-origin Connect client; CORS on the API allows this
+// origin. In local dev apiBaseUrl is empty: calls go same-origin and the Vite
+// proxy forwards them to the Go service (see vite.config.ts).
 export const transport = createConnectTransport({
-  baseUrl: env.apiBaseUrl,
+  baseUrl: env.apiBaseUrl || window.location.origin,
   interceptors: [auth],
 });

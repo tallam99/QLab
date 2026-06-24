@@ -10,7 +10,17 @@ export default defineConfig({
   // build.sh until PR2 swaps the CD step to `vite build`). Disabling publicDir
   // keeps `vite build` from clashing with public/index.html in the meantime.
   publicDir: false,
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // In dev the browser talks to the Vite server same-origin; Vite proxies the
+    // Connect RPC paths to the local Go API. This avoids cross-origin/CORS and
+    // WSL2 localhost quirks locally. Staging/prod set VITE_API_BASE_URL to the
+    // real cross-origin API URL, so CORS is still exercised where it matters.
+    // Connect paths are "/<package>.<Service>/<method>".
+    proxy: {
+      "/qlab.v1.": { target: "http://localhost:8090", changeOrigin: true },
+    },
+  },
   test: {
     globals: true,
     environment: "jsdom",

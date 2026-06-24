@@ -172,10 +172,15 @@ Two ways to get an authenticated session (both attach `Authorization: Bearer` +
   token from the operator `ProvisionLab` / `MintToken` responses (above); there is
   no public `ListPools` RPC yet (Phase 10), so the pool id comes from provisioning.
 
-CORS: the API allows the app origin (`CORS_ALLOWED_ORIGINS`, default
-`http://localhost:5173`) and the browser Connect client's headers (Authorization,
-X-QLab-Lab, Connect-Protocol-Version/Timeout-Ms). A blocked call in the browser
-with a green `curl` usually means an origin or header is missing from that list.
+Cross-origin: locally the app calls the API **same-origin** through the Vite proxy
+(`vite.config.ts` forwards the Connect paths to `:8090`), so CORS doesn't apply on
+localhost — this also dodges WSL2 cross-origin localhost quirks. Real cross-origin
+CORS is exercised in staging (`VITE_API_BASE_URL` set to the Cloud Run URL) and is
+covered locally by the `httpmw` CORS test + the `curl` preflight check. The API
+allows the app origin (`CORS_ALLOWED_ORIGINS`, default `http://localhost:5173`) and
+the browser Connect client's headers (Authorization, X-QLab-Lab,
+Connect-Protocol-Version/Timeout-Ms); a 403/blocked call in *staging* with a green
+`curl` usually means an origin or header is missing from that list.
 
 ## Debugging
 

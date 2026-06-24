@@ -19,7 +19,10 @@ The React + TypeScript PWA, deployed to Firebase Hosting.
 
 `npm run dev` needs the local API + Auth emulator running (`mage startStack` from
 the repo root). Config comes from `.env.local` (copy `.env.example`); the defaults
-target the local stack and the Auth emulator.
+target the local stack and the Auth emulator. Locally the app calls the API
+**same-origin** through the Vite proxy (`vite.config.ts` → `:8090`), so there is no
+cross-origin/CORS step on localhost; staging/prod set `VITE_API_BASE_URL` to the
+real API URL and are genuinely cross-origin.
 
 Scripts: `dev`, `build`, `test` (Vitest), `typecheck`, `lint`/`lint:fix` (Biome),
 `format`.

@@ -11,7 +11,10 @@ function required(name: string): string {
 }
 
 export const env = {
-  apiBaseUrl: required("VITE_API_BASE_URL"),
+  // Empty in local dev: the app calls the API same-origin and the Vite proxy
+  // forwards to the Go service (see vite.config.ts). Set to the full cross-origin
+  // API URL in staging/prod.
+  apiBaseUrl: (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "",
   firebase: {
     apiKey: required("VITE_FIREBASE_API_KEY"),
     authDomain: required("VITE_FIREBASE_AUTH_DOMAIN"),
