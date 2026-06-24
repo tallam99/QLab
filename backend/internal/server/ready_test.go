@@ -32,6 +32,9 @@ func (fakeStore) SlotByID(context.Context, uuid.UUID, uuid.UUID) (store.Slot, er
 func (fakeStore) ListSlots(context.Context, uuid.UUID, uuid.UUID) ([]store.Slot, error) {
 	return nil, nil
 }
+func (fakeStore) ListResources(context.Context, uuid.UUID, uuid.UUID) ([]store.Resource, error) {
+	return nil, nil
+}
 func (fakeStore) WithPool(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, func(store.PoolState) (store.PoolMutation, error)) error {
 	return nil
 }

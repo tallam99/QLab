@@ -128,6 +128,25 @@ func (s *Service) ListSlots(ctx context.Context, req *connect.Request[v1.ListSlo
 	return connect.NewResponse(out), nil
 }
 
+// GetSchedule returns the pool's current schedule (the engine run read-only against
+// now) for the caller's lab — the read the UI loads a pool's queue from. Mutates
+// nothing.
+func (s *Service) GetSchedule(ctx context.Context, req *connect.Request[v1.GetScheduleRequest]) (*connect.Response[v1.GetScheduleResponse], error) {
+	p, svc, err := s.caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	poolID, err := parseUUID(req.Msg.GetResourcePoolId())
+	if err != nil {
+		return nil, err
+	}
+	result, err := svc.Schedule(ctx, p, poolID)
+	if err != nil {
+		return nil, connectError(err)
+	}
+	return connect.NewResponse(&v1.GetScheduleResponse{Result: resultToProto(result)}), nil
+}
+
 // CreateSlot books a slot for the caller and returns the recomputed schedule.
 func (s *Service) CreateSlot(ctx context.Context, req *connect.Request[v1.CreateSlotRequest]) (*connect.Response[v1.CreateSlotResponse], error) {
 	p, svc, err := s.caller(ctx)

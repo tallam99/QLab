@@ -68,6 +68,10 @@ type Store interface {
 	// for display.
 	ListSlots(ctx context.Context, labID, poolID uuid.UUID) ([]Slot, error)
 
+	// ListResources returns a pool's resources scoped to labID — the read behind the
+	// non-mutating GetSchedule (WithPool exposes them too, but only under its lock).
+	ListResources(ctx context.Context, labID, poolID uuid.UUID) ([]Resource, error)
+
 	// WithPool runs fn inside one transaction with the lab's RLS scope set
 	// (app.current_lab_id), the pool serialized by an advisory lock, and the pool's
 	// live slots locked FOR UPDATE — the "one transaction per event" contract
