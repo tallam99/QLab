@@ -4,24 +4,6 @@ package config
 
 import "testing"
 
-// TestDevAuthEnabled checks the dev-auth gate: development aids exist in every
-// environment except production (decision 0007).
-func TestDevAuthEnabled(t *testing.T) {
-	tests := []struct {
-		env  Environment
-		want bool
-	}{
-		{EnvLocal, true},
-		{EnvStaging, true},
-		{EnvProduction, false},
-	}
-	for _, tt := range tests {
-		if got := (Config{Env: tt.env}).DevAuthEnabled(); got != tt.want {
-			t.Errorf("DevAuthEnabled(env=%v) = %v, want %v", tt.env, got, tt.want)
-		}
-	}
-}
-
 // TestOperatorEnabled checks the operator-surface gate: enabled only outside
 // production and only when a secret is configured.
 func TestOperatorEnabled(t *testing.T) {

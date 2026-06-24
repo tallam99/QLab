@@ -107,27 +107,47 @@ acting in). A call with no token is rejected:
       -d '{"resourcePoolId":"11111111-1111-1111-1111-111111111111"}'
     # → HTTP 401, {"code":"unauthenticated", ...}
 
-## Auth locally (dev-login)
+## Operator surface (staging/local dev experience)
 
-Locally and in staging the **dev-login endpoint** mints a usable token for a seeded
-user without the Google OAuth dance (decision 0007; absent in production). It
-returns an ID token you paste straight into `Authorization: Bearer`:
+The **operator surface** (`qlab.dev.v1.DevService`, decision 0008) provisions demo
+workspaces and mints tokens to act as their users — the staging dev loop. It is a
+separate Connect service mounted only outside production, gated by the operator
+secret (`X-QLab-Operator-Secret`). Locally the secret is `local-operator-secret`
+(docker-compose) and the elevated DB connection is the local superuser. Drive it
+with curl (JSON over Connect):
 
-    # Mint a token for a seeded user's email (the user must exist — see mage seed).
-    TOKEN=$(curl -s -X POST localhost:8090/devlogin \
-      -H 'Content-Type: application/json' \
-      -d '{"email":"someone@example.com"}' | jq -r .idToken)
+    OP=localhost:8090/qlab.dev.v1.DevService
+    SECRET='X-QLab-Operator-Secret: local-operator-secret'
 
-    # Call the API as that user, acting in a given lab.
+    # Provision a per-feature workspace: a head + 3 members, 2 resources.
+    curl -s -X POST $OP/ProvisionLab -H "$SECRET" -H 'Content-Type: application/json' \
+      -d '{"feature":"search","memberCount":3,"resourceCount":2}'
+    # → {lab:{id,name}, pool:{...}, members:[{user:{id,email},role}], resources:[...]}
+
+    # Mint a token to act as one of those users (use a member's user id from above).
+    TOKEN=$(curl -s -X POST $OP/MintToken -H "$SECRET" -H 'Content-Type: application/json' \
+      -d '{"userId":"<user-uuid>"}' | jq -r .idToken)
+
+    # Act as them against the data API, in their lab.
     curl -s -X POST localhost:8090/qlab.v1.QlabService/ListSlots \
-      -H "Authorization: Bearer $TOKEN" \
-      -H "X-QLab-Lab: <lab-uuid>" \
-      -H 'Content-Type: application/json' \
-      -d '{"resourcePoolId":"<pool-uuid>"}'
+      -H "Authorization: Bearer $TOKEN" -H "X-QLab-Lab: <lab-uuid>" \
+      -H 'Content-Type: application/json' -d '{"resourcePoolId":"<pool-uuid>"}'
 
-First login provisions invited users: dev-login (or a real Google login) links the
+Other methods: `ListLabs` (`{"feature":"..."}` filter, or `{}` for all), `GetLab`
+(`{"labId":"..."}` — full state export), `TeardownLab` (`{"labId":"..."}`). A call
+with a wrong/missing secret is `permission_denied`.
+
+First login provisions invited users: minting (or a real Google login) links the
 Firebase identity to the `users` row matched by the verified email. A valid token
 for an un-invited email is rejected with `permission_denied` (not provisioned).
+
+> **Staging operator setup (you run; Claude drafts).** The operator surface needs
+> two env vars on the staging Cloud Run service, provisioned from staging's Secret
+> Manager (never committed): `OPERATOR_SECRET` (the gate) and `OPERATOR_DATABASE_URL`
+> (a connection as an elevated role that bypasses RLS — e.g. a dedicated `BYPASSRLS`
+> role on the same Neon branch, distinct from the RLS-bound app role). Both MUST be
+> absent on production — the service refuses to boot otherwise.
+> Exact `gcloud secrets` / Cloud Run `--set-secrets` commands live in `docs/deploy.md`.
 
 ## Debugging
 

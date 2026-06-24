@@ -245,6 +245,42 @@ live revision references them.
 
 ---
 
+## Operator surface (staging only — you run these)
+
+The operator tooling (`qlab.dev.v1.DevService`: provision workspaces, mint tokens to
+act as seeded users — decision 0008) is enabled by two env vars on the **staging**
+Cloud Run service. **Never set either on production** — the service refuses to boot
+if they are present there, and the surface is not mounted in prod regardless.
+
+```sh
+# 1. The operator gate secret (the value the CLI / dev switcher must present).
+openssl rand -base64 32 \
+  | gcloud secrets create operator-secret --data-file=- --project qlab-staging
+gcloud secrets add-iam-policy-binding operator-secret \
+  --member="serviceAccount:qlab-api@qlab-staging.iam.gserviceaccount.com" \
+  --role=roles/secretmanager.secretAccessor --project qlab-staging
+
+# 2. An elevated DB role that bypasses RLS (operator work is cross-tenant), distinct
+#    from the RLS-bound app role. Run in Neon's SQL editor on the STAGING branch:
+#       CREATE ROLE qlab_operator LOGIN PASSWORD '<pw>' NOSUPERUSER BYPASSRLS;
+#       GRANT ALL ON ALL TABLES IN SCHEMA public TO qlab_operator;
+#       GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO qlab_operator;
+#    then store its connection string + grant the runtime SA read:
+printf '%s' "postgres://qlab_operator:<pw>@<host>/<db>?sslmode=require" \
+  | gcloud secrets create db-url-staging-operator --data-file=- --project qlab-staging
+gcloud secrets add-iam-policy-binding db-url-staging-operator \
+  --member="serviceAccount:qlab-api@qlab-staging.iam.gserviceaccount.com" \
+  --role=roles/secretmanager.secretAccessor --project qlab-staging
+```
+
+Then wire both onto the **staging** Cloud Run service (so the runtime sees
+`OPERATOR_SECRET` and `OPERATOR_DATABASE_URL`). Add to the staging deploy step only —
+e.g. `--set-secrets=OPERATOR_SECRET=operator-secret:latest,OPERATOR_DATABASE_URL=db-url-staging-operator:latest`
+— and leave the production deploy without them. Drive the surface with the curl flow
+in `docs/runbook.md` → "Operator surface", pointing it at the staging API URL.
+
+---
+
 ## One-time GCP setup
 
 > ✅ **Done (2026-06-20)** for both `qlab-staging` and `qlab-production`, by Claude

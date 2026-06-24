@@ -62,8 +62,8 @@ services:
 
   firebase-auth:
     # Local Firebase Auth emulator (see docker/firebase-emulator/Dockerfile). Token
-    # verification and dev-login run against this offline, so no real Firebase
-    # project is needed for local dev or the integration suite.
+    # verification and the operator token-minting run against this offline, so no real
+    # Firebase project is needed for local dev or the integration suite.
     build:
       context: .
       dockerfile: docker/firebase-emulator/Dockerfile

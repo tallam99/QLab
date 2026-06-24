@@ -43,7 +43,7 @@ type Config struct {
 	// FirebaseAuthEmulatorHost, when set (host:port), points the Firebase Admin SDK
 	// at a local Auth emulator instead of Google's servers — local/CI only, never
 	// set in staging/prod. The SDK reads the same env var itself; config carries it
-	// so the dev-login token exchange targets the same host. Empty = real Firebase.
+	// so the operator token-mint exchange targets the same host. Empty = real Firebase.
 	FirebaseAuthEmulatorHost string `envconfig:"FIREBASE_AUTH_EMULATOR_HOST" default:""`
 	// FirebaseWebAPIKey is the Identity Toolkit web API key the operator MintToken
 	// path uses to exchange a custom token for an ID token. Required only where the
@@ -78,9 +78,7 @@ func Load() (Config, error) {
 // validate enforces cross-field invariants envconfig's per-field rules can't.
 func (c Config) validate() error {
 	// The Auth emulator is a development stand-in that skips signature verification;
-	// pointing production at it would accept forged tokens. Refuse to boot. (This is
-	// the config-side half of the dev-auth prod guard; the dev-login route is the
-	// other half, in the server.)
+	// pointing production at it would accept forged tokens. Refuse to boot.
 	if c.Env == EnvProduction && c.FirebaseAuthEmulatorHost != "" {
 		return fmt.Errorf("FIREBASE_AUTH_EMULATOR_HOST must not be set when QLAB_ENV=production")
 	}
@@ -107,9 +105,3 @@ func (c Config) OperatorEnabled() bool {
 
 // IsLocal reports whether the service is running in the local dev environment.
 func (c Config) IsLocal() bool { return c.Env == EnvLocal }
-
-// DevAuthEnabled reports whether the development authentication aids (the
-// dev-login endpoint) are available. They exist everywhere EXCEPT production —
-// they are the single most dangerous surface if shipped to prod (decision 0007),
-// so this is derived from the environment and cannot be turned on in production.
-func (c Config) DevAuthEnabled() bool { return c.Env != EnvProduction }

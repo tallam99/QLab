@@ -55,8 +55,13 @@ QLab is two separate surfaces plus managed backing services:
   `auth.TokenVerifier` seam over the Admin SDK; the Auth emulator locally), resolves
   it to a user through the `authentication` service, and attaches the principal with
   the selected lab. A bad token is `Unauthenticated`, a valid-but-uninvited one
-  `PermissionDenied`. A staging/local-only **dev-login** endpoint mints a usable
-  token for a seeded user; it is refused at startup in production (decision 0007).
+  `PermissionDenied` (decision 0007).
+- **Operator surface** (`internal/devapi` over `services/operator`) — a
+  **separate** Connect service (`qlab.dev.v1`) for the staging dev experience:
+  provision demo workspaces, mint a token to act as any seeded user, list/inspect/
+  tear down workspaces. Gated by an operator secret and run over an elevated
+  (RLS-bypassing) DB connection. Mounted only outside production — the prod binary
+  contains no operator capability at all (decision 0008).
 
 ## Data model (shape)
 
@@ -89,7 +94,7 @@ simplicity (one-directional, plain HTTP, auto-reconnect).
 
 | Env | Frontend | API | DB | Auth |
 |-----|----------|-----|----|----|
-| local | Vite dev server | Go in Docker Compose | local Postgres | Auth emulator + dev-login |
+| local | Vite dev server | Go in Docker Compose | local Postgres | Auth emulator + operator surface |
 | staging | Firebase Hosting (staging) | Cloud Run (staging) | Neon staging branch | Firebase staging |
 | prod | Firebase Hosting (prod) | Cloud Run (prod) | Neon prod branch | Firebase prod |
 

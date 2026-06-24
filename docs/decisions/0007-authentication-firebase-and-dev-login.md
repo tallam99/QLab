@@ -1,6 +1,10 @@
 # 0007 — Authentication: Firebase verification, the Auth emulator, and dev-login
 
-**Status:** Accepted (2026-06-22)
+**Status:** Accepted (2026-06-22). The **dev-login endpoint** described here was
+superseded by the secret-gated operator surface in **decision 0008** (the
+token-minting primitive moved behind `qlab.dev.v1.DevService.MintToken`); the rest
+— token verification, the emulator-for-local-dev choice, auth-as-Connect-interceptor,
+invite-only provisioning — stands.
 
 Builds on decision 0006 (the principal + lab scoping), which fixed *what* identity
 the handlers see. This records *how* that identity is established: token

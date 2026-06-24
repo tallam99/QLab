@@ -16,11 +16,12 @@ one transaction per event, with a full-stack integration suite
 (`backend/integration_test`, `mage testIntegration`) — are in place, and now **real
 authentication**: every RPC runs behind a Firebase ID-token verifying auth
 interceptor (the `auth.TokenVerifier` seam over the Admin SDK; the Auth emulator
-locally and in CI), with invite-only first-login provisioning and a staging/local
-**dev-login** endpoint (production-guarded). The follow-up auth slice (the head-only
-invite/add-member RPC and the lab state-export endpoint) and real Google sign-in in
-the Firebase projects are still to come. Work proceeds through the phases in
-`docs/PLAN.md`.
+locally and in CI), with invite-only first-login provisioning, plus a **staging/local
+operator surface** (`qlab.dev.v1`, a separate secret-gated Connect service the prod
+binary never mounts) to provision demo workspaces, mint tokens to act as seeded
+users, and inspect/tear down workspaces (decision 0008). The head-only
+invite/add-member RPC and real Google sign-in in the Firebase projects are still to
+come. Work proceeds through the phases in `docs/PLAN.md`.
 
 ## Read these first
 
