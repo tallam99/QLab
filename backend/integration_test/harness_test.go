@@ -108,7 +108,9 @@ func startHarness(appURL string) (*harness, error) {
 		return nil, fmt.Errorf("build operator store: %w", err)
 	}
 	operatorSvc := operatorv1.New(operatorv1.Options{Store: operatorStore, Minter: minter})
-	opPath, opHandler := devapi.New(operatorSvc, itestOperatorSecret).Handler()
+	// The suite exercises the secret gate; the allowlist (browser) path has its own
+	// unit coverage in devapi.
+	opPath, opHandler := devapi.New(devapi.Options{Svc: operatorSvc, Secret: itestOperatorSecret}).Handler()
 
 	clock := &testClock{now: base}
 	srv := server.New(server.Options{
