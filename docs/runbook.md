@@ -158,7 +158,10 @@ for an un-invited email is rejected with `permission_denied` (not provisioned).
   Every line carries a `request_id` (echoed in the `X-Request-Id` response header)
   and a `trace_id` so a single request's full story can be filtered out and handed
   to Claude as a self-contained slice. The authenticated RPC line also carries
-  `lab_id`/`user_id`. Follow with `mage serviceLogs`.
+  `lab_id`/`user_id`, and each mutating event logs its **reschedule outcome** — the
+  slots whose start moved at `Info` (`reschedule moved slots`), the full placement
+  list at `Debug` (verbose locally, off in the cloud) — so a reschedule can be
+  reconstructed from logs without re-running the engine. Follow with `mage serviceLogs`.
 - **Traces:** every reschedule emits a span tree (`POST …` → `…/ClockIn` →
   `scheduling.<event>` → `engine.reschedule` + `store.with_pool`), annotated with
   `qlab.lab_id`/`qlab.resource_pool_id`/`qlab.event` and the recommit/upsert counts.

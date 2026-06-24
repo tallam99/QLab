@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
+	"github.com/tallam99/qlab/backend/internal/logging"
 	"github.com/tallam99/qlab/backend/internal/observability"
 	"github.com/tallam99/qlab/backend/internal/principal"
 	"github.com/tallam99/qlab/backend/internal/services/authz"
@@ -29,6 +30,9 @@ type Options struct {
 	Notifications notifications.Builder
 	Clock         scheduling.Clock
 	ClockInGrace  dynamicqueue.Minutes
+	// Logger records the reschedule outcome of each mutating event. Optional —
+	// defaults to a no-op so a caller that doesn't supply one (and tests) don't panic.
+	Logger logging.Logger
 }
 
 // service is the concrete scheduling.Service. Stateless apart from its
@@ -40,13 +44,19 @@ type service struct {
 	notify notifications.Builder
 	now    scheduling.Clock
 	grace  dynamicqueue.Minutes
+	logger logging.Logger
 }
 
-// New returns a scheduling.Service. Clock defaults to time.Now when not supplied.
+// New returns a scheduling.Service. Clock defaults to time.Now and Logger to a no-op
+// when not supplied.
 func New(opts Options) scheduling.Service {
 	clock := opts.Clock
 	if clock == nil {
 		clock = time.Now
+	}
+	logger := opts.Logger
+	if logger == nil {
+		logger = logging.Noop()
 	}
 	return &service{
 		store:  opts.Store,
@@ -55,6 +65,7 @@ func New(opts Options) scheduling.Service {
 		notify: opts.Notifications,
 		now:    clock,
 		grace:  opts.ClockInGrace,
+		logger: logger,
 	}
 }
 
@@ -113,7 +124,63 @@ func (s *service) mutate(ctx context.Context, p principal.Principal, event strin
 		result = res
 		return mut, nil
 	})
+	if err == nil {
+		s.logReschedule(ctx, event, p.LabID, poolID, result)
+	}
 	return result, err
+}
+
+// placement is a slot's reschedule outcome, rendered into a structured log line. It
+// is the per-slot detail the engine.reschedule span deliberately does NOT carry (a
+// span wants low-cardinality dimensions + counts; a variable-length list belongs in
+// logs, where a request's story is filtered out and fed back). RFC3339 keeps the
+// start human- and Claude-readable.
+type placement struct {
+	SlotID      string `json:"slot_id"`
+	NewStart    string `json:"new_start"`
+	ResourceID  string `json:"resource_id"`
+	Recommitted bool   `json:"recommitted"`
+	Reclaimable bool   `json:"reclaimable"`
+}
+
+// logReschedule records what a mutating event did to the queue, correlated to the
+// trace by trace_id. The meaningful state changes — the slots whose committed start
+// moved (and so triggered a notification) — log at Info; the full placement list logs
+// at Debug (on locally, off in the cloud by default), for reconstructing a reschedule
+// without re-running it. No live slots (e.g. a cancel that emptied the pool) logs
+// nothing.
+func (s *service) logReschedule(ctx context.Context, event string, labID, poolID uuid.UUID, result scheduling.Result) {
+	logger := s.logger.With(
+		observability.KeyEvent, event,
+		observability.KeyLabID, labID.String(),
+		observability.KeyResourcePool, poolID.String(),
+	)
+	if traceID := observability.TraceID(ctx); traceID != "" {
+		logger = logger.With(observability.KeyTraceID, traceID)
+	}
+
+	all := make([]placement, 0, len(result.Positions))
+	recommitted := make([]placement, 0)
+	for _, pos := range result.Positions {
+		pl := placement{
+			SlotID:      pos.SlotID.String(),
+			NewStart:    pos.ActualStart.Format(time.RFC3339),
+			ResourceID:  pos.AssignedResourceID.String(),
+			Recommitted: pos.Recommitted,
+			Reclaimable: pos.Reclaimable,
+		}
+		all = append(all, pl)
+		if pos.Recommitted {
+			recommitted = append(recommitted, pl)
+		}
+	}
+
+	if len(recommitted) > 0 {
+		logger.Info("reschedule moved slots", "recommitted_count", len(recommitted), "slots", recommitted)
+	}
+	if len(all) > 0 {
+		logger.Debug("reschedule placements", "count", len(all), "slots", all)
+	}
 }
 
 // settleOwn is the shared body of the owner-driven settle events: load the

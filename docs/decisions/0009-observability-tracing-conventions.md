@@ -61,6 +61,16 @@ RPC span, not a half-formed event span.
 `lab_id`/`user_id` once the principal is known and emits one line per RPC — again, no
 per-handler code.
 
+**Engine output goes to logs, not the span.** A reschedule's per-slot outcome (which
+slots got which start/resource, which were re-committed) is a variable-length list, so
+it logs (one line in the scheduling layer: the moved slots at `Info`, the full
+placement list at `Debug`), correlated by `trace_id`. The `engine.reschedule` span
+keeps only the **counts** (`recommitted_count`, `input_slots`). Rationale: span
+attributes are for low-cardinality, queryable dimensions you filter/aggregate traces
+by; a per-slot list would bloat trace storage, isn't usefully queryable, and works
+against the "filter a request's log lines and feed Claude a bounded slice" model —
+which is a logs story.
+
 **Exporters, by environment.** `QLAB_ENV` drives the exporter: a stdout exporter
 locally (so a span tree is visible immediately) and Google Cloud Trace in
 staging/prod (project auto-detected from the Cloud Run service account). Tracing is

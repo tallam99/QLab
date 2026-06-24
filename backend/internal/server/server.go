@@ -375,6 +375,7 @@ func WithSchedulingService(grace dynamicqueue.Minutes, clock scheduling.Clock) f
 			Notifications: notificationsv1.New(),
 			Clock:         clock,
 			ClockInGrace:  grace,
+			Logger:        s.logger,
 		})
 		s.apiService.SetScheduling(schedulingService)
 		return nil
