@@ -146,8 +146,10 @@ for an un-invited email is rejected with `permission_denied` (not provisioned).
 > gate), `OPERATOR_DATABASE_URL` (the elevated cross-tenant connection — it reuses the
 > migrator/owner secret, which bypasses RLS), and `FIREBASE_WEB_API_KEY` (for
 > `MintToken`'s exchange). All MUST be absent on production — the service refuses to
-> boot otherwise. Most of this is already wired; the exact commands and the one
-> remaining step (the Web API key) live in `docs/deploy.md`.
+> boot otherwise. The runtime SA also needs `roles/firebaseauth.admin` so
+> `MintToken` can create/look-up Auth users (only enforced against real Firebase, not
+> the emulator). Fully wired and smoke-tested in staging; the exact grants live in
+> `docs/deploy.md`.
 
 ## Debugging
 
