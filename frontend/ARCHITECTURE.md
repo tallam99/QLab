@@ -43,6 +43,7 @@ src/
     ProvisionModal.tsx          new-workspace form (feature, member/resource counts)
     ActAsSwitcher.tsx           pick which user to act as + which pool
     SlotList.tsx                list / add / cancel slots for the acting-as user
+    ComingSoon.tsx              inert placeholder shown when the switcher is disabled (prod)
     *.test.tsx                  one test file beside each non-trivial unit
   protogen/                     GENERATED Connect/protobuf TS (never hand-edited)
 ```
@@ -72,10 +73,13 @@ as implemented. Styling is inline Tailwind; there is no shared component library
 ### `App` (`App.tsx`)
 - **Props/owned state:** none.
 - **Reads:** `useSession()` → `{ user, initializing }`; `useWorkspace()` → `{ workspace, error }`.
-- **Renders:** header (`<h1>QLab</h1>` + `<SignIn />`); then `"Starting…"` while
-  `initializing`, a sign-in prompt when there is no operator `user`, else the operator
-  `error` (if any) + `<WorkspacePicker />` and — once a `workspace` is loaded —
-  `<ActAsSwitcher />` + `<SlotList />`.
+- **Prod gate:** if `env.devSwitcherEnabled` is false (the default — production), renders
+  `<ComingSoon />` and nothing else. The switcher below only renders in local/staging
+  builds (`VITE_DEV_SWITCHER=true`), where the operator surface it needs is mounted.
+- **Renders (switcher enabled):** header (`<h1>QLab</h1>` + `<SignIn />`); then
+  `"Starting…"` while `initializing`, a sign-in prompt when there is no operator
+  `user`, else the operator `error` (if any) + `<WorkspacePicker />` and — once a
+  `workspace` is loaded — `<ActAsSwitcher />` + `<SlotList />`.
 
 ### `SignIn` (`components/SignIn.tsx`)
 - **Owned state:** `error: string | null`.
