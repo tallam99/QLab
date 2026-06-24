@@ -7,6 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/tallam99/qlab/backend/internal/httpmw"
+	"github.com/tallam99/qlab/backend/internal/observability"
 	"github.com/tallam99/qlab/backend/internal/principal"
 	"github.com/tallam99/qlab/backend/internal/services/authentication"
 )
@@ -61,6 +63,19 @@ func (s *Service) authInterceptor() connect.UnaryInterceptorFunc {
 			}
 
 			ctx = principal.NewContext(ctx, principal.Principal{UserID: user.ID, LabID: labID})
+
+			// Now that the caller is known, tag the RPC span and enrich the
+			// request-scoped logger so every line this request emits — and the span tree —
+			// carries lab_id/user_id. One structured line per authenticated RPC records the
+			// procedure (the observability per-request log line; deeper layers add spans).
+			observability.Annotate(ctx, observability.LabID(labID), observability.UserID(user.ID))
+			logger := httpmw.LoggerFromContext(ctx).With(
+				observability.KeyLabID, labID.String(),
+				observability.KeyUserID, user.ID.String(),
+			)
+			ctx = httpmw.WithLogger(ctx, logger)
+			logger.Info("rpc", "procedure", req.Spec().Procedure)
+
 			return next(ctx, req)
 		}
 	}

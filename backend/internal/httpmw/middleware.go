@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/tallam99/qlab/backend/internal/logging"
+	"github.com/tallam99/qlab/backend/internal/observability"
 )
 
 // Request/response header and log attribute keys, kept as consts so they're
@@ -61,6 +62,13 @@ func RequestLogger(base logging.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqID := middleware.GetReqID(r.Context())
 			l := base.With(attrRequestID, reqID)
+			// Stamp the trace id so every line this request emits (this one and any a
+			// handler writes via LoggerFromContext) correlates to its span tree. The
+			// Tracing middleware runs above this one, so the span is already in context;
+			// outside a sampled request the id is empty and the field is simply omitted.
+			if traceID := observability.TraceID(r.Context()); traceID != "" {
+				l = l.With(observability.KeyTraceID, traceID)
+			}
 
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			start := time.Now()
@@ -91,6 +99,13 @@ func RequestLogger(base logging.Logger) func(http.Handler) http.Handler {
 			l.Info("http request", args...)
 		})
 	}
+}
+
+// WithLogger returns a context carrying logger as the request-scoped logger, so a
+// later layer can enrich it (e.g. the auth interceptor adding lab_id/user_id once the
+// principal is known) and have handlers see the enriched logger via LoggerFromContext.
+func WithLogger(ctx context.Context, logger logging.Logger) context.Context {
+	return context.WithValue(ctx, loggerKey, logger)
 }
 
 // LoggerFromContext returns the request-scoped logger placed by RequestLogger.

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
+	"github.com/tallam99/qlab/backend/internal/observability"
 	"github.com/tallam99/qlab/backend/internal/principal"
 	"github.com/tallam99/qlab/backend/internal/services/authz"
 	"github.com/tallam99/qlab/backend/internal/services/notifications"
@@ -92,16 +93,20 @@ func (s *service) poolInLab(ctx context.Context, labID, poolID uuid.UUID) error 
 // mutate is the transactional skeleton every rescheduling event shares: open the
 // pool's unit of work, hand build a private clone of the locked slots to apply the
 // event to, then run the engine and persist the result atomically. The Result is
-// captured out of the callback.
-func (s *service) mutate(ctx context.Context, p principal.Principal, poolID uuid.UUID, build func(working []store.Slot, resources []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error)) (scheduling.Result, error) {
+// captured out of the callback. event names the ALGORITHM §6 event (e.g. "clock_in")
+// for the span and is this layer's single tracing site for all mutating events.
+func (s *service) mutate(ctx context.Context, p principal.Principal, event string, poolID uuid.UUID, build func(working []store.Slot, resources []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error)) (result scheduling.Result, err error) {
+	ctx, span := observability.Start(ctx, "scheduling."+event,
+		observability.Event(event), observability.LabID(p.LabID), observability.PoolID(poolID), observability.UserID(p.UserID))
+	defer observability.End(span, &err)
+
 	now := s.now()
-	var result scheduling.Result
-	err := s.store.WithPool(ctx, p.LabID, poolID, p.UserID, func(state store.PoolState) (store.PoolMutation, error) {
+	err = s.store.WithPool(ctx, p.LabID, poolID, p.UserID, func(state store.PoolState) (store.PoolMutation, error) {
 		working, extra, err := build(cloneSlots(state.Slots), state.Resources, now)
 		if err != nil {
 			return store.PoolMutation{}, err
 		}
-		mut, res, err := s.applyEngine(p.UserID, poolID, working, state.Resources, now, extra)
+		mut, res, err := s.applyEngine(ctx, p.UserID, poolID, working, state.Resources, now, extra)
 		if err != nil {
 			return store.PoolMutation{}, err
 		}
@@ -112,8 +117,9 @@ func (s *service) mutate(ctx context.Context, p principal.Principal, poolID uuid
 }
 
 // settleOwn is the shared body of the owner-driven settle events: load the
-// caller's own slot, require the from-status, set the to-status, reschedule.
-func (s *service) settleOwn(ctx context.Context, p principal.Principal, slotID uuid.UUID, from, to store.SlotStatus) (scheduling.Result, error) {
+// caller's own slot, require the from-status, set the to-status, reschedule. event
+// names the §6 event for the span.
+func (s *service) settleOwn(ctx context.Context, p principal.Principal, slotID uuid.UUID, event string, from, to store.SlotStatus) (scheduling.Result, error) {
 	if err := s.authorize(ctx, p); err != nil {
 		return scheduling.Result{}, err
 	}
@@ -121,7 +127,7 @@ func (s *service) settleOwn(ctx context.Context, p principal.Principal, slotID u
 	if err != nil {
 		return scheduling.Result{}, err
 	}
-	return s.mutate(ctx, p, target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, _ time.Time) ([]store.Slot, []store.OutboxRow, error) {
+	return s.mutate(ctx, p, event, target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, _ time.Time) ([]store.Slot, []store.OutboxRow, error) {
 		t := findSlot(working, slotID)
 		if t == nil || t.Status != from {
 			return nil, nil, scheduling.ErrInvalidState
