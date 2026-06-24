@@ -50,6 +50,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Node is needed for the Vite web build (below) and the Firebase CLI. Pinned
+      # to the version the CI `frontend` job uses, with the npm cache keyed on the
+      # frontend lockfile.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install mage
         run: go install github.com/magefile/mage@v1.17.2
 
@@ -113,9 +122,9 @@ jobs:
           url="$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
             --project "${{ vars.GCP_PROJECT_ID }}" --region "${{ vars.GCP_REGION }}" \
             --format='value(status.url)')"
-          # Fail loudly rather than build a page pointed at an empty URL: an empty
-          # value here would otherwise ship a green deploy serving a non-functional
-          # hello-world (CORS check can't run without an API base URL).
+          # Fail loudly rather than build a bundle pointed at an empty URL: an empty
+          # value here would otherwise ship a green deploy whose frontend can't reach
+          # the API (and our env.ts requires VITE_API_BASE_URL in production builds).
           if [ -z "$url" ]; then
             echo "::error::Cloud Run service URL was empty after deploy" >&2
             exit 1
@@ -124,8 +133,29 @@ jobs:
           echo "API_BASE_URL=$url" >> "$GITHUB_ENV"
           echo "Deployed API: $url"
 
-      - name: Build hello-world (inject API base URL)
-        run: frontend/build.sh # reads $API_BASE_URL set by the step above
+      - name: Build web (Vite)
+        # Vite inlines VITE_* at build time, so the API URL and the Firebase web
+        # config must be present here (not at container runtime). VITE_API_BASE_URL
+        # is the Cloud Run URL from the deploy step above; the Firebase web config is
+        # public client config (it ships in the bundle) sourced from env-scoped
+        # Actions variables. authDomain is the project's default Firebase domain
+        # (<project>.firebaseapp.com). The build's output (frontend/dist) is the
+        # Firebase Hosting public dir (firebase.json).
+        env:
+          VITE_API_BASE_URL: ${{ env.API_BASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_WEB_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_PROJECT_ID }}.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: |
+          # Fail the deploy rather than ship a bundle that throws on first load: the
+          # Firebase web API key is required for auth and is not derivable. (The API
+          # URL is already guaranteed non-empty by the deploy step's check above.)
+          if [ -z "$VITE_FIREBASE_API_KEY" ]; then
+            echo "::error::FIREBASE_WEB_API_KEY variable is not set for ${{ inputs.environment }}" >&2
+            exit 1
+          fi
+          npm --prefix frontend ci
+          npm --prefix frontend run build
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools

@@ -4,12 +4,12 @@ The React + TypeScript PWA, deployed to Firebase Hosting.
 
 > **Status:** Phase 9 (frontend scaffold). The Vite/React/TypeScript app is in
 > place — Google sign-in (Firebase), the generated Connect client wired through
-> Connect-Query, and one real authenticated call (`ListSlots`). The product UI
-> (queue + timeline, clock in/out, live updates) lands in Phase 10; PWA basics +
-> Playwright + the staging-deploy swap land in this phase's second PR.
->
-> The Phase 3 hello-world (`public/` + `build.sh`) still backs the CD deploy until
-> that swap; `vite build` currently sets `publicDir: false` so it doesn't clash.
+> Connect-Query, and one real authenticated call (`ListSlots`). The CD pipeline now
+> ships the real `vite build` to Firebase Hosting (the Phase 3 hello-world is gone);
+> the API URL + Firebase web config are injected at build time (see
+> `docs/deploy.md`). The product UI (queue + timeline, clock in/out, live updates)
+> lands in Phase 10; PWA basics, Playwright, and the in-app staging dev switcher
+> are follow-ups.
 
 ## Local development
 
