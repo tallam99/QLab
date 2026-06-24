@@ -61,3 +61,25 @@ rule. **Current status: Phase 9 (scaffold)** — Google sign-in + one authentica
 
 See `frontend/README.md` for the sign-in / minted-token flow and `docs/runbook.md`
 → "Frontend dev loop".
+
+## Frontend Architecture Rules
+
+The file `frontend/ARCHITECTURE.md` is the source of truth for frontend structure.
+Before implementing any frontend feature:
+- Check whether the required state, components, or API calls already exist
+- Fit new work into the existing architecture; do not create parallel patterns
+- If the feature genuinely requires an architectural change, update ARCHITECTURE.md first and flag the change in your response
+
+## Complexity Constraints
+
+- No component file should exceed 300 lines. If a component is growing beyond this, decompose it before continuing.
+- State should live as close to where it's used as possible. Do not lift state or introduce context unless two or more components need it.
+- Do not introduce a new dependency to solve a problem that can be solved in under ~20 lines of vanilla React.
+- If a single subtask or task requires touching more than 5 files, stop and ask whether there's a simpler approach before proceeding. (Exception: a deliberately large epic done in one pass may span more than 5 files in aggregate — the limit is about keeping each unit of change small, not capping a planned multi-part effort. The check still applies to each constituent subtask.)
+
+## Periodic Cleanup
+
+After every 3 completed features, before starting the next one, perform a consolidation pass:
+- Identify any duplication introduced since the last pass
+- Identify any components or state that have grown beyond their original responsibility
+- Refactor without changing behavior, then summarize what changed and why.
