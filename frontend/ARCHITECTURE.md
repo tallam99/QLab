@@ -252,11 +252,17 @@ Both transports use `baseUrl = env.apiBaseUrl || window.location.origin`:
 ### Storing / clearing
 - All tokens are **in-memory only** (no `localStorage`/cookies written by app code).
   `tokenCache` lives for the session; loading/provisioning a different workspace
-  `clear()`s it (its tokens belong to the prior lab's users), and `reset()` clears
+  invalidates it (its tokens belong to the prior lab's users), and `reset()` clears
   everything.
-- `canQuery` (workspace + acting-as user + pool) gates `SlotList`'s query; `signOut`
-  drops the operator identity (the switcher UI hides). No explicit cache eviction —
-  TanStack Query's default `gcTime` + the `enabled` gate suffice.
+- **Sign-out / account switch fully resets the session.** `WorkspaceProvider` watches
+  the operator's uid (`useSession().user?.uid`) and `reset()`s on any change — clearing
+  the workspace, the acting-as selection, **and the cached minted tokens** — so a
+  signed-out or different operator can never see or act on the previous session's data
+  (a token refresh keeps the same uid, so this doesn't fire spuriously). This is the
+  one place `WorkspaceProvider` depends on `SessionProvider`.
+- `canQuery` (workspace + acting-as user + pool) gates `SlotList`'s query. No explicit
+  query-cache eviction — TanStack Query's default `gcTime` + the `enabled` gate suffice
+  once the holder stops yielding a token.
 
 ## Constraints captured for future work
 

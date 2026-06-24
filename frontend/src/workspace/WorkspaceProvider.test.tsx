@@ -14,6 +14,11 @@ const ops = vi.hoisted(() => ({
 }));
 vi.mock("../api/operatorClient", () => ({ operatorClient: ops }));
 
+// Mock the operator identity so tests can drive sign-out (a uid change) without
+// pulling in Firebase. Defaults to a signed-in operator.
+const session = vi.hoisted(() => ({ user: { uid: "op-1" } as { uid: string } | null }));
+vi.mock("../session/SessionProvider", () => ({ useSession: () => ({ user: session.user }) }));
+
 function setup() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <WorkspaceProvider>{children}</WorkspaceProvider>
@@ -33,6 +38,7 @@ const provisionResponse = {
 
 describe("WorkspaceProvider", () => {
   beforeEach(() => {
+    session.user = { uid: "op-1" };
     ops.provisionLab.mockReset();
     ops.mintToken.mockReset();
     ops.provisionLab.mockResolvedValue(provisionResponse);
@@ -80,5 +86,31 @@ describe("WorkspaceProvider", () => {
     expect(result.current.canQuery).toBe(true);
     expect(getAuthHolder().labId).toBe("lab-1");
     await expect(getAuthHolder().getToken()).resolves.toBe("token-u1");
+  });
+
+  // Signing out (or switching operator accounts) must drop the prior session entirely
+  // — workspace, selection, AND the cached minted tokens — so the next operator can't
+  // see or act on it. The api auth holder must stop yielding the old token.
+  it("clears the workspace and token cache when the operator changes", async () => {
+    const { result, rerender } = setup();
+    await act(async () => {
+      await result.current.provision("demo", 1, 1);
+    });
+    await act(async () => {
+      await result.current.actAs("u1");
+    });
+    expect(result.current.canQuery).toBe(true);
+    await expect(getAuthHolder().getToken()).resolves.toBe("token-u1");
+
+    // Operator signs out → uid changes → WorkspaceProvider resets.
+    await act(async () => {
+      session.user = null;
+      rerender();
+    });
+
+    expect(result.current.workspace).toBeNull();
+    expect(result.current.actingUserId).toBeNull();
+    expect(result.current.poolId).toBeNull();
+    await expect(getAuthHolder().getToken()).resolves.toBeNull();
   });
 });
