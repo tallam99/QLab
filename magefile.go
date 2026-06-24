@@ -28,6 +28,9 @@ const (
 	// relative output paths and the npm-pinned TS plugin resolve.
 	protoDir      = "proto"
 	bufConfigFile = "proto/buf.gen.yaml"
+	// frontendDir is the Vite/React PWA root (its own npm package); `mage frontend`
+	// runs the frontend gate there.
+	frontendDir = "frontend"
 	// schemaTestDir holds the DB-level schema tests (constraints/triggers/seed),
 	// tagged `database`; schemaTestDB is the throwaway database mage testSchema
 	// creates, migrates, and drops so the tests never touch dev data.
@@ -461,4 +464,21 @@ func GenProto() error {
 		return err
 	}
 	return runIn(protoDir, "buf", "generate", "--template", "buf.gen.ts.yaml", "--include-imports")
+}
+
+// Frontend runs the frontend gate — a clean install then typecheck, lint (Biome),
+// unit tests (Vitest), and a production build — the same set the CI `frontend` job
+// enforces. Mirrors the npm scripts in frontend/package.json so a green run means
+// the same thing locally and in CI. Uses `npm ci` for a reproducible, lockfile-
+// pinned install (it wipes and reinstalls node_modules).
+func Frontend() error {
+	if err := runIn(frontendDir, "npm", "ci"); err != nil {
+		return err
+	}
+	for _, script := range []string{"typecheck", "lint", "test", "build"} {
+		if err := runIn(frontendDir, "npm", "run", script); err != nil {
+			return err
+		}
+	}
+	return nil
 }
