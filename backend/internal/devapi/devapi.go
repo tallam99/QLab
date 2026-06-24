@@ -12,12 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
 	"connectrpc.com/validate"
 	"github.com/google/uuid"
 
+	"github.com/tallam99/qlab/backend/internal/auth"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/protoconv"
 	devv1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/dev/v1"
@@ -27,63 +29,165 @@ import (
 	"github.com/tallam99/qlab/backend/internal/store"
 )
 
-// HeaderOperatorSecret carries the operator secret on every DevService call. It is
-// the gate that, together with the service not being mounted in production, keeps
-// the provision/impersonate capability out of prod (decision 0008).
+// HeaderOperatorSecret carries the operator secret on every DevService call from the
+// CLI/curl/tests. Together with the service not being mounted in production, it keeps
+// the provision/impersonate capability out of prod (decision 0008). The browser dev
+// switcher uses the allowlist path below instead — never a secret in the browser.
 const HeaderOperatorSecret = "X-QLab-Operator-Secret"
+
+// headerAuthorization carries the operator's Firebase ID token (Bearer) on the
+// allowlist path. Mirrors api.HeaderAuthorization; kept local to avoid coupling the
+// operator transport to the public API package.
+const headerAuthorization = "Authorization"
 
 // Service implements devv1connect.DevServiceHandler over operator.Service.
 type Service struct {
 	devv1connect.UnimplementedDevServiceHandler
 	svc operator.Service
-	// secretHash is the SHA-256 of the operator secret. Storing only the digest keeps
-	// the plaintext secret out of resident memory; the interceptor compares digests.
+	// hasSecret records whether the shared-secret gate is configured; secretHash is
+	// the SHA-256 of that secret (storing only the digest keeps the plaintext out of
+	// resident memory; the gate compares digests in constant time).
+	hasSecret  bool
 	secretHash [sha256.Size]byte
-	validate   connect.Interceptor
+	// verifier + allowedEmails back the browser allowlist gate: a verified Firebase
+	// (Google) login whose email is allowlisted is accepted in lieu of the secret.
+	// allowedEmails is lowercased; verifier is nil when no allowlist is configured.
+	verifier      auth.TokenVerifier
+	allowedEmails map[string]struct{}
+	validate      connect.Interceptor
 	// otel opens an RPC span (named for the procedure) on every operator call, so the
 	// staging operator surface is traced like the public API.
 	otel connect.Interceptor
 }
 
-// New builds the DevService transport. It panics on a missing dependency, an empty
-// secret, or a failure building the otel interceptor — a wiring bug should fail loudly
-// (and an empty secret would mean no gate).
-func New(svc operator.Service, secret string) *Service {
-	if svc == nil {
+// Options configures the DevService transport. At least one gate must be present:
+// the shared Secret (CLI/curl/tests) or a non-empty AllowedEmails allowlist with a
+// Verifier (the browser dev switcher). Both may be set — two front doors to the same
+// capability (decision 0008).
+type Options struct {
+	// Svc is the operator domain service the handlers delegate to. Required.
+	Svc operator.Service
+	// Secret, when non-empty, enables the X-QLab-Operator-Secret gate.
+	Secret string
+	// Verifier verifies an operator's Firebase ID token for the allowlist gate.
+	// Required when AllowedEmails is non-empty.
+	Verifier auth.TokenVerifier
+	// AllowedEmails enumerates the operator Google accounts allowed to drive the
+	// surface from a browser via a verified login instead of the secret.
+	AllowedEmails []string
+}
+
+// New builds the DevService transport. It panics on a missing dependency, no gate
+// configured, an allowlist without a verifier, or a failure building the otel
+// interceptor — a wiring bug should fail loudly (no gate would mean an open surface).
+func New(opts Options) *Service {
+	if opts.Svc == nil {
 		panic("devapi: New requires an operator.Service")
 	}
-	if secret == "" {
-		panic("devapi: New requires a non-empty operator secret")
+	allowed := emailSet(opts.AllowedEmails)
+	if opts.Secret == "" && len(allowed) == 0 {
+		panic("devapi: New requires an operator secret or a non-empty email allowlist")
+	}
+	if len(allowed) > 0 && opts.Verifier == nil {
+		panic("devapi: New requires a TokenVerifier when an email allowlist is configured")
 	}
 	otelInterceptor, err := otelconnect.NewInterceptor()
 	if err != nil {
 		panic(fmt.Sprintf("devapi: build otelconnect interceptor: %v", err))
 	}
-	return &Service{svc: svc, secretHash: sha256.Sum256([]byte(secret)), validate: validate.NewInterceptor(), otel: otelInterceptor}
+	s := &Service{
+		svc:           opts.Svc,
+		verifier:      opts.Verifier,
+		allowedEmails: allowed,
+		validate:      validate.NewInterceptor(),
+		otel:          otelInterceptor,
+	}
+	if opts.Secret != "" {
+		s.hasSecret = true
+		s.secretHash = sha256.Sum256([]byte(opts.Secret))
+	}
+	return s
+}
+
+// emailSet lowercases and de-blanks an allowlist into a set for O(1) membership.
+func emailSet(emails []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(emails))
+	for _, e := range emails {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			set[e] = struct{}{}
+		}
+	}
+	return set
 }
 
 // Handler returns the mount path and HTTP handler, with the OpenTelemetry span, the
-// operator-secret gate, and protovalidate in front of every method (otel outermost so
-// the span wraps the gate; secret before validate: reject before validating).
+// operator gate, and protovalidate in front of every method (otel outermost so the
+// span wraps the gate; gate before validate: reject before validating).
 func (s *Service) Handler() (string, http.Handler) {
-	return devv1connect.NewDevServiceHandler(s, connect.WithInterceptors(s.otel, s.secretInterceptor(), s.validate))
+	return devv1connect.NewDevServiceHandler(s, connect.WithInterceptors(s.otel, s.operatorGate(), s.validate))
 }
 
-// secretInterceptor rejects any call without the matching operator secret. A
-// constant-time compare avoids leaking the secret via timing.
-func (s *Service) secretInterceptor() connect.UnaryInterceptorFunc {
+// operatorGate authorizes a call by EITHER the shared operator secret (CLI/curl/
+// tests) OR an allowlisted, verified Google login (the browser dev switcher) —
+// decision 0008. A call presenting neither is PermissionDenied.
+func (s *Service) operatorGate() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			if req.Spec().IsClient {
 				return next(ctx, req)
 			}
-			got := sha256.Sum256([]byte(req.Header().Get(HeaderOperatorSecret)))
-			if subtle.ConstantTimeCompare(got[:], s.secretHash[:]) != 1 {
-				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("invalid or missing operator secret"))
+			// Secret path: constant-time compare (avoids leaking the secret via timing).
+			if s.hasSecret {
+				got := sha256.Sum256([]byte(req.Header().Get(HeaderOperatorSecret)))
+				if subtle.ConstantTimeCompare(got[:], s.secretHash[:]) == 1 {
+					return next(ctx, req)
+				}
 			}
-			return next(ctx, req)
+			// Allowlist path: a verified Google login whose email is allowlisted.
+			if len(s.allowedEmails) > 0 {
+				if email, ok := s.verifyOperator(ctx, req.Header().Get(headerAuthorization)); ok {
+					// Audit which operator account drove the call, to bound the blast
+					// radius the same way MintToken records the impersonated user.
+					httpmw.LoggerFromContext(ctx).Info("operator authenticated via allowlist", "operator_email", email)
+					return next(ctx, req)
+				}
+			}
+			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("invalid or missing operator credentials"))
 		}
 	}
+}
+
+// verifyOperator returns the verified, allowlisted operator email for a bearer
+// Authorization header, or ok=false when the token is absent, invalid, has an
+// unverified email, or names an email that is not allowlisted.
+func (s *Service) verifyOperator(ctx context.Context, authorization string) (string, bool) {
+	if s.verifier == nil {
+		return "", false
+	}
+	raw := bearerToken(authorization)
+	if raw == "" {
+		return "", false
+	}
+	identity, err := s.verifier.Verify(ctx, raw)
+	// An unverified email must not be trusted to claim an allowlisted address.
+	if err != nil || !identity.EmailVerified {
+		return "", false
+	}
+	email := strings.ToLower(strings.TrimSpace(identity.Email))
+	if _, ok := s.allowedEmails[email]; !ok {
+		return "", false
+	}
+	return email, true
+}
+
+// bearerToken extracts the token from an "Authorization: Bearer <token>" value,
+// tolerating any case for the scheme. Returns "" when absent or malformed.
+func bearerToken(header string) string {
+	const prefix = "Bearer "
+	if len(header) < len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return ""
+	}
+	return strings.TrimSpace(header[len(prefix):])
 }
 
 func (s *Service) ProvisionLab(ctx context.Context, req *connect.Request[devv1.ProvisionLabRequest]) (*connect.Response[devv1.ProvisionLabResponse], error) {

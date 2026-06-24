@@ -61,6 +61,13 @@ type Config struct {
 	// (creating labs, listing all workspaces). Required when the operator surface is
 	// enabled; like OperatorSecret, must be absent in production.
 	OperatorDatabaseURL string `envconfig:"OPERATOR_DATABASE_URL" default:""`
+	// OperatorAllowedEmails is the staging-only allowlist of operator Google accounts
+	// that may drive the operator surface from a browser (the in-app dev switcher)
+	// via a verified login instead of the shared secret — a second front door to the
+	// same capability, never a secret in the browser (decision 0008). Comma-separated;
+	// compared case-insensitively. Like the other operator config, MUST be absent in
+	// production. Empty = no browser operator path.
+	OperatorAllowedEmails []string `envconfig:"OPERATOR_ALLOWED_EMAILS"`
 }
 
 // Load reads and validates configuration from the environment.
@@ -86,8 +93,8 @@ func (c Config) validate() error {
 	// production — refuse to boot if any operator config is present there
 	// (decision 0008). This is the config-side half; the server also never mounts
 	// the operator service in production.
-	if c.Env == EnvProduction && (c.OperatorSecret != "" || c.OperatorDatabaseURL != "") {
-		return fmt.Errorf("OPERATOR_SECRET / OPERATOR_DATABASE_URL must not be set when QLAB_ENV=production")
+	if c.Env == EnvProduction && (c.OperatorSecret != "" || c.OperatorDatabaseURL != "" || len(c.OperatorAllowedEmails) > 0) {
+		return fmt.Errorf("OPERATOR_SECRET / OPERATOR_DATABASE_URL / OPERATOR_ALLOWED_EMAILS must not be set when QLAB_ENV=production")
 	}
 	// Outside production, enabling the operator surface (a secret) requires the
 	// elevated DB connection it runs its cross-tenant work on.
@@ -105,9 +112,10 @@ func (c Config) validate() error {
 }
 
 // OperatorEnabled reports whether the staging/local-only operator surface should be
-// mounted: never in production, and only when a gating secret is configured.
+// mounted: never in production, and only when at least one gate is configured — the
+// shared secret (CLI/curl/tests) or the browser allowlist (the in-app dev switcher).
 func (c Config) OperatorEnabled() bool {
-	return c.Env != EnvProduction && c.OperatorSecret != ""
+	return c.Env != EnvProduction && (c.OperatorSecret != "" || len(c.OperatorAllowedEmails) > 0)
 }
 
 // IsLocal reports whether the service is running in the local dev environment.
