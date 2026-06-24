@@ -4,6 +4,112 @@ package config
 
 import "testing"
 
+// cleanEnv sets a minimal valid environment for Load, overlaying overrides. Every
+// var Load reads is set explicitly (to a known value or empty) so a stray var in the
+// test runner's environment can't leak in and make a case flaky. Empty operator/
+// emulator vars keep the baseline a plain local config.
+func cleanEnv(t *testing.T, overrides map[string]string) {
+	t.Helper()
+	base := map[string]string{
+		"PORT":                        "8090",
+		"QLAB_ENV":                    "local",
+		"DATABASE_URL":                "postgres://qlab:qlab@localhost:5432/qlab",
+		"CORS_ALLOWED_ORIGINS":        "http://localhost:5173",
+		"CLOCK_IN_GRACE_MINUTES":      "15",
+		"FIREBASE_PROJECT_ID":         "demo-qlab",
+		"FIREBASE_AUTH_EMULATOR_HOST": "",
+		"FIREBASE_WEB_API_KEY":        "",
+		"OPERATOR_SECRET":             "",
+		"OPERATOR_DATABASE_URL":       "",
+	}
+	for k, v := range overrides {
+		base[k] = v
+	}
+	for k, v := range base {
+		t.Setenv(k, v)
+	}
+}
+
+// TestLoad checks the happy path (env parsed into the typed Config) and the two ways
+// Load fails: an unparseable field (a bogus QLAB_ENV, via Environment.Decode) and a
+// cross-field validate failure (the emulator in production), so both error branches
+// of Load are exercised.
+func TestLoad(t *testing.T) {
+	t.Run("happy path parses and applies defaults", func(t *testing.T) {
+		cleanEnv(t, map[string]string{"DATABASE_URL": "postgres://app/db"})
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.Env != EnvLocal || cfg.Port != "8090" || cfg.DatabaseURL != "postgres://app/db" {
+			t.Errorf("unexpected config: %+v", cfg)
+		}
+		if cfg.ClockInGraceMinutes != 15 || len(cfg.AllowedOrigins) != 1 {
+			t.Errorf("defaults not applied: %+v", cfg)
+		}
+	})
+
+	t.Run("invalid environment is rejected", func(t *testing.T) {
+		cleanEnv(t, map[string]string{"QLAB_ENV": "bogus"})
+		if _, err := Load(); err == nil {
+			t.Error("Load() with QLAB_ENV=bogus: expected error, got nil")
+		}
+	})
+
+	t.Run("cross-field validate failure surfaces", func(t *testing.T) {
+		cleanEnv(t, map[string]string{"QLAB_ENV": "production", "FIREBASE_AUTH_EMULATOR_HOST": "localhost:9099"})
+		if _, err := Load(); err == nil {
+			t.Error("Load() with emulator in production: expected error, got nil")
+		}
+	})
+}
+
+// TestEnvironmentDecode pins the QLAB_ENV parser: known values decode, and the empty
+// string, an unknown label, and "unknown" itself are all rejected (the zero value is
+// never valid).
+func TestEnvironmentDecode(t *testing.T) {
+	tests := []struct {
+		value   string
+		want    Environment
+		wantErr bool
+	}{
+		{"local", EnvLocal, false},
+		{"staging", EnvStaging, false},
+		{"production", EnvProduction, false},
+		{"unknown", EnvUnknown, true},
+		{"", EnvUnknown, true},
+		{"prod", EnvUnknown, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			var e Environment
+			err := e.Decode(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Decode(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+			if err == nil && e != tt.want {
+				t.Errorf("Decode(%q) = %v, want %v", tt.value, e, tt.want)
+			}
+		})
+	}
+}
+
+// TestIsLocal checks the local-environment predicate the logger/exporter wiring keys on.
+func TestIsLocal(t *testing.T) {
+	for _, tt := range []struct {
+		env  Environment
+		want bool
+	}{
+		{EnvLocal, true},
+		{EnvStaging, false},
+		{EnvProduction, false},
+	} {
+		if got := (Config{Env: tt.env}).IsLocal(); got != tt.want {
+			t.Errorf("IsLocal(%v) = %v, want %v", tt.env, got, tt.want)
+		}
+	}
+}
+
 // TestOperatorEnabled checks the operator-surface gate: enabled only outside
 // production and only when a secret is configured.
 func TestOperatorEnabled(t *testing.T) {
