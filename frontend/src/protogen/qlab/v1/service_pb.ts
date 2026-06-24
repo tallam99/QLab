@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file qlab/v1/service.proto.
  */
 export const file_qlab_v1_service: GenFile = /*@__PURE__*/
-  fileDesc("ChVxbGFiL3YxL3NlcnZpY2UucHJvdG8SB3FsYWIudjEiNgoQTGlzdFNsb3RzUmVxdWVzdBIiChByZXNvdXJjZV9wb29sX2lkGAEgASgJQgi6SAVyA7ABASIxChFMaXN0U2xvdHNSZXNwb25zZRIcCgVzbG90cxgBIAMoCzINLnFsYWIudjEuU2xvdCLHAQoRQ3JlYXRlU2xvdFJlcXVlc3QSIgoQcmVzb3VyY2VfcG9vbF9pZBgBIAEoCUIIukgFcgOwAQESOQoNZGVzaXJlZF9zdGFydBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCBrpIA8gBARIiChFsb29rYWhlYWRfbWludXRlcxgDIAEoBUIHukgEGgIoABIhChBkdXJhdGlvbl9taW51dGVzGAQgASgFQge6SAQaAiAAEgwKBG5vdGUYBSABKAkiKwoOQ2xvY2tJblJlcXVlc3QSGQoHc2xvdF9pZBgBIAEoCUIIukgFcgOwAQEiLAoPQ2xvY2tPdXRSZXF1ZXN0EhkKB3Nsb3RfaWQYASABKAlCCLpIBXIDsAEBIi4KEUNhbmNlbFNsb3RSZXF1ZXN0EhkKB3Nsb3RfaWQYASABKAlCCLpIBXIDsAEBIjAKE1Bva2VPY2N1cGFudFJlcXVlc3QSGQoHc2xvdF9pZBgBIAEoCUIIukgFcgOwAQEiMQoURm9yY2VDbG9ja091dFJlcXVlc3QSGQoHc2xvdF9pZBgBIAEoCUIIukgFcgOwAQEiLwoSRm9yY2VOb1Nob3dSZXF1ZXN0EhkKB3Nsb3RfaWQYASABKAlCCLpIBXIDsAEBIj8KEkNyZWF0ZVNsb3RSZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQiPAoPQ2xvY2tJblJlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCI9ChBDbG9ja091dFJlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCI/ChJDYW5jZWxTbG90UmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0IkIKFUZvcmNlQ2xvY2tPdXRSZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQiQAoTRm9yY2VOb1Nob3dSZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQiFgoUUG9rZU9jY3VwYW50UmVzcG9uc2UyxQQKC1FsYWJTZXJ2aWNlEkIKCUxpc3RTbG90cxIZLnFsYWIudjEuTGlzdFNsb3RzUmVxdWVzdBoaLnFsYWIudjEuTGlzdFNsb3RzUmVzcG9uc2USRQoKQ3JlYXRlU2xvdBIaLnFsYWIudjEuQ3JlYXRlU2xvdFJlcXVlc3QaGy5xbGFiLnYxLkNyZWF0ZVNsb3RSZXNwb25zZRI8CgdDbG9ja0luEhcucWxhYi52MS5DbG9ja0luUmVxdWVzdBoYLnFsYWIudjEuQ2xvY2tJblJlc3BvbnNlEj8KCENsb2NrT3V0EhgucWxhYi52MS5DbG9ja091dFJlcXVlc3QaGS5xbGFiLnYxLkNsb2NrT3V0UmVzcG9uc2USRQoKQ2FuY2VsU2xvdBIaLnFsYWIudjEuQ2FuY2VsU2xvdFJlcXVlc3QaGy5xbGFiLnYxLkNhbmNlbFNsb3RSZXNwb25zZRJLCgxQb2tlT2NjdXBhbnQSHC5xbGFiLnYxLlBva2VPY2N1cGFudFJlcXVlc3QaHS5xbGFiLnYxLlBva2VPY2N1cGFudFJlc3BvbnNlEk4KDUZvcmNlQ2xvY2tPdXQSHS5xbGFiLnYxLkZvcmNlQ2xvY2tPdXRSZXF1ZXN0Gh4ucWxhYi52MS5Gb3JjZUNsb2NrT3V0UmVzcG9uc2USSAoLRm9yY2VOb1Nob3cSGy5xbGFiLnYxLkZvcmNlTm9TaG93UmVxdWVzdBocLnFsYWIudjEuRm9yY2VOb1Nob3dSZXNwb25zZUJYCgtjb20ucWxhYi52MUIMU2VydmljZVByb3RvUAGiAgNRWFiqAgdRbGFiLlYxygIHUWxhYlxWMeICE1FsYWJcVjFcR1BCTWV0YWRhdGHqAghRbGFiOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp, file_qlab_v1_types]);
+  fileDesc("ChVxbGFiL3YxL3NlcnZpY2UucHJvdG8SB3FsYWIudjEiNgoQTGlzdFNsb3RzUmVxdWVzdBIiChByZXNvdXJjZV9wb29sX2lkGAEgASgJQgi6SAVyA7ABASIxChFMaXN0U2xvdHNSZXNwb25zZRIcCgVzbG90cxgBIAMoCzINLnFsYWIudjEuU2xvdCI4ChJHZXRTY2hlZHVsZVJlcXVlc3QSIgoQcmVzb3VyY2VfcG9vbF9pZBgBIAEoCUIIukgFcgOwAQEiQAoTR2V0U2NoZWR1bGVSZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQixwEKEUNyZWF0ZVNsb3RSZXF1ZXN0EiIKEHJlc291cmNlX3Bvb2xfaWQYASABKAlCCLpIBXIDsAEBEjkKDWRlc2lyZWRfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESIgoRbG9va2FoZWFkX21pbnV0ZXMYAyABKAVCB7pIBBoCKAASIQoQZHVyYXRpb25fbWludXRlcxgEIAEoBUIHukgEGgIgABIMCgRub3RlGAUgASgJIisKDkNsb2NrSW5SZXF1ZXN0EhkKB3Nsb3RfaWQYASABKAlCCLpIBXIDsAEBIiwKD0Nsb2NrT3V0UmVxdWVzdBIZCgdzbG90X2lkGAEgASgJQgi6SAVyA7ABASIuChFDYW5jZWxTbG90UmVxdWVzdBIZCgdzbG90X2lkGAEgASgJQgi6SAVyA7ABASIwChNQb2tlT2NjdXBhbnRSZXF1ZXN0EhkKB3Nsb3RfaWQYASABKAlCCLpIBXIDsAEBIjEKFEZvcmNlQ2xvY2tPdXRSZXF1ZXN0EhkKB3Nsb3RfaWQYASABKAlCCLpIBXIDsAEBIi8KEkZvcmNlTm9TaG93UmVxdWVzdBIZCgdzbG90X2lkGAEgASgJQgi6SAVyA7ABASI/ChJDcmVhdGVTbG90UmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0IjwKD0Nsb2NrSW5SZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQiPQoQQ2xvY2tPdXRSZXNwb25zZRIpCgZyZXN1bHQYASABKAsyGS5xbGFiLnYxLlJlc2NoZWR1bGVSZXN1bHQiPwoSQ2FuY2VsU2xvdFJlc3BvbnNlEikKBnJlc3VsdBgBIAEoCzIZLnFsYWIudjEuUmVzY2hlZHVsZVJlc3VsdCJCChVGb3JjZUNsb2NrT3V0UmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0IkAKE0ZvcmNlTm9TaG93UmVzcG9uc2USKQoGcmVzdWx0GAEgASgLMhkucWxhYi52MS5SZXNjaGVkdWxlUmVzdWx0IhYKFFBva2VPY2N1cGFudFJlc3BvbnNlMo8FCgtRbGFiU2VydmljZRJCCglMaXN0U2xvdHMSGS5xbGFiLnYxLkxpc3RTbG90c1JlcXVlc3QaGi5xbGFiLnYxLkxpc3RTbG90c1Jlc3BvbnNlEkgKC0dldFNjaGVkdWxlEhsucWxhYi52MS5HZXRTY2hlZHVsZVJlcXVlc3QaHC5xbGFiLnYxLkdldFNjaGVkdWxlUmVzcG9uc2USRQoKQ3JlYXRlU2xvdBIaLnFsYWIudjEuQ3JlYXRlU2xvdFJlcXVlc3QaGy5xbGFiLnYxLkNyZWF0ZVNsb3RSZXNwb25zZRI8CgdDbG9ja0luEhcucWxhYi52MS5DbG9ja0luUmVxdWVzdBoYLnFsYWIudjEuQ2xvY2tJblJlc3BvbnNlEj8KCENsb2NrT3V0EhgucWxhYi52MS5DbG9ja091dFJlcXVlc3QaGS5xbGFiLnYxLkNsb2NrT3V0UmVzcG9uc2USRQoKQ2FuY2VsU2xvdBIaLnFsYWIudjEuQ2FuY2VsU2xvdFJlcXVlc3QaGy5xbGFiLnYxLkNhbmNlbFNsb3RSZXNwb25zZRJLCgxQb2tlT2NjdXBhbnQSHC5xbGFiLnYxLlBva2VPY2N1cGFudFJlcXVlc3QaHS5xbGFiLnYxLlBva2VPY2N1cGFudFJlc3BvbnNlEk4KDUZvcmNlQ2xvY2tPdXQSHS5xbGFiLnYxLkZvcmNlQ2xvY2tPdXRSZXF1ZXN0Gh4ucWxhYi52MS5Gb3JjZUNsb2NrT3V0UmVzcG9uc2USSAoLRm9yY2VOb1Nob3cSGy5xbGFiLnYxLkZvcmNlTm9TaG93UmVxdWVzdBocLnFsYWIudjEuRm9yY2VOb1Nob3dSZXNwb25zZUJYCgtjb20ucWxhYi52MUIMU2VydmljZVByb3RvUAGiAgNRWFiqAgdRbGFiLlYxygIHUWxhYlxWMeICE1FsYWJcVjFcR1BCTWV0YWRhdGHqAghRbGFiOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp, file_qlab_v1_types]);
 
 /**
  * @generated from message qlab.v1.ListSlotsRequest
@@ -55,6 +55,46 @@ export type ListSlotsResponse = Message<"qlab.v1.ListSlotsResponse"> & {
  */
 export const ListSlotsResponseSchema: GenMessage<ListSlotsResponse> = /*@__PURE__*/
   messageDesc(file_qlab_v1_service, 1);
+
+/**
+ * GetSchedule returns the pool's current schedule WITHOUT mutating anything: it runs
+ * the engine read-only against now and returns the same RescheduleResult a mutating
+ * event would (the live slots + each one's placement and notify/reclaim verdicts).
+ * The read the UI loads a pool's queue from; mutations and the SSE stream return the
+ * same shape, so the frontend has one data model.
+ *
+ * @generated from message qlab.v1.GetScheduleRequest
+ */
+export type GetScheduleRequest = Message<"qlab.v1.GetScheduleRequest"> & {
+  /**
+   * @generated from field: string resource_pool_id = 1;
+   */
+  resourcePoolId: string;
+};
+
+/**
+ * Describes the message qlab.v1.GetScheduleRequest.
+ * Use `create(GetScheduleRequestSchema)` to create a new message.
+ */
+export const GetScheduleRequestSchema: GenMessage<GetScheduleRequest> = /*@__PURE__*/
+  messageDesc(file_qlab_v1_service, 2);
+
+/**
+ * @generated from message qlab.v1.GetScheduleResponse
+ */
+export type GetScheduleResponse = Message<"qlab.v1.GetScheduleResponse"> & {
+  /**
+   * @generated from field: qlab.v1.RescheduleResult result = 1;
+   */
+  result?: RescheduleResult | undefined;
+};
+
+/**
+ * Describes the message qlab.v1.GetScheduleResponse.
+ * Use `create(GetScheduleResponseSchema)` to create a new message.
+ */
+export const GetScheduleResponseSchema: GenMessage<GetScheduleResponse> = /*@__PURE__*/
+  messageDesc(file_qlab_v1_service, 3);
 
 /**
  * CreateSlot books a slot. user_id comes from the authenticated caller (Phase 8)
@@ -94,7 +134,7 @@ export type CreateSlotRequest = Message<"qlab.v1.CreateSlotRequest"> & {
  * Use `create(CreateSlotRequestSchema)` to create a new message.
  */
 export const CreateSlotRequestSchema: GenMessage<CreateSlotRequest> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 2);
+  messageDesc(file_qlab_v1_service, 4);
 
 /**
  * @generated from message qlab.v1.ClockInRequest
@@ -111,7 +151,7 @@ export type ClockInRequest = Message<"qlab.v1.ClockInRequest"> & {
  * Use `create(ClockInRequestSchema)` to create a new message.
  */
 export const ClockInRequestSchema: GenMessage<ClockInRequest> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 3);
+  messageDesc(file_qlab_v1_service, 5);
 
 /**
  * ClockOut covers clock-out and early-finish (both settle the slot COMPLETE and
@@ -131,7 +171,7 @@ export type ClockOutRequest = Message<"qlab.v1.ClockOutRequest"> & {
  * Use `create(ClockOutRequestSchema)` to create a new message.
  */
 export const ClockOutRequestSchema: GenMessage<ClockOutRequest> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 4);
+  messageDesc(file_qlab_v1_service, 6);
 
 /**
  * @generated from message qlab.v1.CancelSlotRequest
@@ -148,7 +188,7 @@ export type CancelSlotRequest = Message<"qlab.v1.CancelSlotRequest"> & {
  * Use `create(CancelSlotRequestSchema)` to create a new message.
  */
 export const CancelSlotRequestSchema: GenMessage<CancelSlotRequest> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 5);
+  messageDesc(file_qlab_v1_service, 7);
 
 /**
  * PokeOccupant nudges the user holding an overrunning slot to wrap up (the backend
@@ -170,7 +210,7 @@ export type PokeOccupantRequest = Message<"qlab.v1.PokeOccupantRequest"> & {
  * Use `create(PokeOccupantRequestSchema)` to create a new message.
  */
 export const PokeOccupantRequestSchema: GenMessage<PokeOccupantRequest> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 6);
+  messageDesc(file_qlab_v1_service, 8);
 
 /**
  * ForceClockOut boots the user holding an overrunning slot (settles it COMPLETE and
@@ -193,7 +233,7 @@ export type ForceClockOutRequest = Message<"qlab.v1.ForceClockOutRequest"> & {
  * Use `create(ForceClockOutRequestSchema)` to create a new message.
  */
 export const ForceClockOutRequestSchema: GenMessage<ForceClockOutRequest> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 7);
+  messageDesc(file_qlab_v1_service, 9);
 
 /**
  * ForceNoShow reclaims a slot whose clock-in grace lapsed (settles it NO_SHOW and
@@ -217,7 +257,7 @@ export type ForceNoShowRequest = Message<"qlab.v1.ForceNoShowRequest"> & {
  * Use `create(ForceNoShowRequestSchema)` to create a new message.
  */
 export const ForceNoShowRequestSchema: GenMessage<ForceNoShowRequest> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 8);
+  messageDesc(file_qlab_v1_service, 10);
 
 /**
  * Most mutating RPCs return the recomputed schedule. They carry the same
@@ -238,7 +278,7 @@ export type CreateSlotResponse = Message<"qlab.v1.CreateSlotResponse"> & {
  * Use `create(CreateSlotResponseSchema)` to create a new message.
  */
 export const CreateSlotResponseSchema: GenMessage<CreateSlotResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 9);
+  messageDesc(file_qlab_v1_service, 11);
 
 /**
  * @generated from message qlab.v1.ClockInResponse
@@ -255,7 +295,7 @@ export type ClockInResponse = Message<"qlab.v1.ClockInResponse"> & {
  * Use `create(ClockInResponseSchema)` to create a new message.
  */
 export const ClockInResponseSchema: GenMessage<ClockInResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 10);
+  messageDesc(file_qlab_v1_service, 12);
 
 /**
  * @generated from message qlab.v1.ClockOutResponse
@@ -272,7 +312,7 @@ export type ClockOutResponse = Message<"qlab.v1.ClockOutResponse"> & {
  * Use `create(ClockOutResponseSchema)` to create a new message.
  */
 export const ClockOutResponseSchema: GenMessage<ClockOutResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 11);
+  messageDesc(file_qlab_v1_service, 13);
 
 /**
  * @generated from message qlab.v1.CancelSlotResponse
@@ -289,7 +329,7 @@ export type CancelSlotResponse = Message<"qlab.v1.CancelSlotResponse"> & {
  * Use `create(CancelSlotResponseSchema)` to create a new message.
  */
 export const CancelSlotResponseSchema: GenMessage<CancelSlotResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 12);
+  messageDesc(file_qlab_v1_service, 14);
 
 /**
  * @generated from message qlab.v1.ForceClockOutResponse
@@ -306,7 +346,7 @@ export type ForceClockOutResponse = Message<"qlab.v1.ForceClockOutResponse"> & {
  * Use `create(ForceClockOutResponseSchema)` to create a new message.
  */
 export const ForceClockOutResponseSchema: GenMessage<ForceClockOutResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 13);
+  messageDesc(file_qlab_v1_service, 15);
 
 /**
  * @generated from message qlab.v1.ForceNoShowResponse
@@ -323,7 +363,7 @@ export type ForceNoShowResponse = Message<"qlab.v1.ForceNoShowResponse"> & {
  * Use `create(ForceNoShowResponseSchema)` to create a new message.
  */
 export const ForceNoShowResponseSchema: GenMessage<ForceNoShowResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 14);
+  messageDesc(file_qlab_v1_service, 16);
 
 /**
  * PokeOccupant only sends a nudge, so it changes no schedule state and its response
@@ -339,7 +379,7 @@ export type PokeOccupantResponse = Message<"qlab.v1.PokeOccupantResponse"> & {
  * Use `create(PokeOccupantResponseSchema)` to create a new message.
  */
 export const PokeOccupantResponseSchema: GenMessage<PokeOccupantResponse> = /*@__PURE__*/
-  messageDesc(file_qlab_v1_service, 15);
+  messageDesc(file_qlab_v1_service, 17);
 
 /**
  * QlabService is the data API. Every method requires a Firebase JWT (Phase 8) and
@@ -360,6 +400,14 @@ export const QlabService: GenService<{
     methodKind: "unary";
     input: typeof ListSlotsRequestSchema;
     output: typeof ListSlotsResponseSchema;
+  },
+  /**
+   * @generated from rpc qlab.v1.QlabService.GetSchedule
+   */
+  getSchedule: {
+    methodKind: "unary";
+    input: typeof GetScheduleRequestSchema;
+    output: typeof GetScheduleResponseSchema;
   },
   /**
    * @generated from rpc qlab.v1.QlabService.CreateSlot

@@ -39,6 +39,8 @@ const (
 const (
 	// QlabServiceListSlotsProcedure is the fully-qualified name of the QlabService's ListSlots RPC.
 	QlabServiceListSlotsProcedure = "/qlab.v1.QlabService/ListSlots"
+	// QlabServiceGetScheduleProcedure is the fully-qualified name of the QlabService's GetSchedule RPC.
+	QlabServiceGetScheduleProcedure = "/qlab.v1.QlabService/GetSchedule"
 	// QlabServiceCreateSlotProcedure is the fully-qualified name of the QlabService's CreateSlot RPC.
 	QlabServiceCreateSlotProcedure = "/qlab.v1.QlabService/CreateSlot"
 	// QlabServiceClockInProcedure is the fully-qualified name of the QlabService's ClockIn RPC.
@@ -60,6 +62,7 @@ const (
 // QlabServiceClient is a client for the qlab.v1.QlabService service.
 type QlabServiceClient interface {
 	ListSlots(context.Context, *connect.Request[v1.ListSlotsRequest]) (*connect.Response[v1.ListSlotsResponse], error)
+	GetSchedule(context.Context, *connect.Request[v1.GetScheduleRequest]) (*connect.Response[v1.GetScheduleResponse], error)
 	CreateSlot(context.Context, *connect.Request[v1.CreateSlotRequest]) (*connect.Response[v1.CreateSlotResponse], error)
 	ClockIn(context.Context, *connect.Request[v1.ClockInRequest]) (*connect.Response[v1.ClockInResponse], error)
 	ClockOut(context.Context, *connect.Request[v1.ClockOutRequest]) (*connect.Response[v1.ClockOutResponse], error)
@@ -84,6 +87,12 @@ func NewQlabServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+QlabServiceListSlotsProcedure,
 			connect.WithSchema(qlabServiceMethods.ByName("ListSlots")),
+			connect.WithClientOptions(opts...),
+		),
+		getSchedule: connect.NewClient[v1.GetScheduleRequest, v1.GetScheduleResponse](
+			httpClient,
+			baseURL+QlabServiceGetScheduleProcedure,
+			connect.WithSchema(qlabServiceMethods.ByName("GetSchedule")),
 			connect.WithClientOptions(opts...),
 		),
 		createSlot: connect.NewClient[v1.CreateSlotRequest, v1.CreateSlotResponse](
@@ -134,6 +143,7 @@ func NewQlabServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 // qlabServiceClient implements QlabServiceClient.
 type qlabServiceClient struct {
 	listSlots     *connect.Client[v1.ListSlotsRequest, v1.ListSlotsResponse]
+	getSchedule   *connect.Client[v1.GetScheduleRequest, v1.GetScheduleResponse]
 	createSlot    *connect.Client[v1.CreateSlotRequest, v1.CreateSlotResponse]
 	clockIn       *connect.Client[v1.ClockInRequest, v1.ClockInResponse]
 	clockOut      *connect.Client[v1.ClockOutRequest, v1.ClockOutResponse]
@@ -146,6 +156,11 @@ type qlabServiceClient struct {
 // ListSlots calls qlab.v1.QlabService.ListSlots.
 func (c *qlabServiceClient) ListSlots(ctx context.Context, req *connect.Request[v1.ListSlotsRequest]) (*connect.Response[v1.ListSlotsResponse], error) {
 	return c.listSlots.CallUnary(ctx, req)
+}
+
+// GetSchedule calls qlab.v1.QlabService.GetSchedule.
+func (c *qlabServiceClient) GetSchedule(ctx context.Context, req *connect.Request[v1.GetScheduleRequest]) (*connect.Response[v1.GetScheduleResponse], error) {
+	return c.getSchedule.CallUnary(ctx, req)
 }
 
 // CreateSlot calls qlab.v1.QlabService.CreateSlot.
@@ -186,6 +201,7 @@ func (c *qlabServiceClient) ForceNoShow(ctx context.Context, req *connect.Reques
 // QlabServiceHandler is an implementation of the qlab.v1.QlabService service.
 type QlabServiceHandler interface {
 	ListSlots(context.Context, *connect.Request[v1.ListSlotsRequest]) (*connect.Response[v1.ListSlotsResponse], error)
+	GetSchedule(context.Context, *connect.Request[v1.GetScheduleRequest]) (*connect.Response[v1.GetScheduleResponse], error)
 	CreateSlot(context.Context, *connect.Request[v1.CreateSlotRequest]) (*connect.Response[v1.CreateSlotResponse], error)
 	ClockIn(context.Context, *connect.Request[v1.ClockInRequest]) (*connect.Response[v1.ClockInResponse], error)
 	ClockOut(context.Context, *connect.Request[v1.ClockOutRequest]) (*connect.Response[v1.ClockOutResponse], error)
@@ -206,6 +222,12 @@ func NewQlabServiceHandler(svc QlabServiceHandler, opts ...connect.HandlerOption
 		QlabServiceListSlotsProcedure,
 		svc.ListSlots,
 		connect.WithSchema(qlabServiceMethods.ByName("ListSlots")),
+		connect.WithHandlerOptions(opts...),
+	)
+	qlabServiceGetScheduleHandler := connect.NewUnaryHandler(
+		QlabServiceGetScheduleProcedure,
+		svc.GetSchedule,
+		connect.WithSchema(qlabServiceMethods.ByName("GetSchedule")),
 		connect.WithHandlerOptions(opts...),
 	)
 	qlabServiceCreateSlotHandler := connect.NewUnaryHandler(
@@ -254,6 +276,8 @@ func NewQlabServiceHandler(svc QlabServiceHandler, opts ...connect.HandlerOption
 		switch r.URL.Path {
 		case QlabServiceListSlotsProcedure:
 			qlabServiceListSlotsHandler.ServeHTTP(w, r)
+		case QlabServiceGetScheduleProcedure:
+			qlabServiceGetScheduleHandler.ServeHTTP(w, r)
 		case QlabServiceCreateSlotProcedure:
 			qlabServiceCreateSlotHandler.ServeHTTP(w, r)
 		case QlabServiceClockInProcedure:
@@ -279,6 +303,10 @@ type UnimplementedQlabServiceHandler struct{}
 
 func (UnimplementedQlabServiceHandler) ListSlots(context.Context, *connect.Request[v1.ListSlotsRequest]) (*connect.Response[v1.ListSlotsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.ListSlots is not implemented"))
+}
+
+func (UnimplementedQlabServiceHandler) GetSchedule(context.Context, *connect.Request[v1.GetScheduleRequest]) (*connect.Response[v1.GetScheduleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("qlab.v1.QlabService.GetSchedule is not implemented"))
 }
 
 func (UnimplementedQlabServiceHandler) CreateSlot(context.Context, *connect.Request[v1.CreateSlotRequest]) (*connect.Response[v1.CreateSlotResponse], error) {

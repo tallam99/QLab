@@ -705,6 +705,16 @@ updates.
   timeout for long-lived streams.
 - Apply branding: dark `#0F1117`, teal `#00C9A7`, amber `#F59E0B`, red `#F87171`,
   monospace for all time/data elements (map to the Tailwind theme).
+- **PWA basics** *(carried from Phase 9)*: `manifest.json` + service worker via
+  **`vite-plugin-pwa`**. Deferred out of Phase 9 deliberately — a service worker on the
+  bare scaffold would only have risked serving stale bundles during active development,
+  and there was no real, installable product to make it worthwhile. Do it here, against
+  the real product UI.
+- **Playwright e2e harness** *(carried from Phase 9)*: stand up the harness against the
+  local stack + Auth emulator with a **login → queue** smoke. Deferred out of Phase 9
+  because the only UI then was the dev switcher, which this phase replaces — writing
+  e2e against soon-to-change chrome would have been churn. This is the foundation for
+  the clock-out → live-update test the exit criteria require.
 
 **Exit criteria:** Two browsers open the same lab; one clocks out and the other
 sees the queue update live without refresh. Pushed / re-committed slots are visible.

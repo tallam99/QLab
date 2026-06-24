@@ -18,6 +18,19 @@ message ListSlotsResponse {
   repeated Slot slots = 1;
 }
 
+// GetSchedule returns the pool's current schedule WITHOUT mutating anything: it runs
+// the engine read-only against now and returns the same RescheduleResult a mutating
+// event would (the live slots + each one's placement and notify/reclaim verdicts).
+// The read the UI loads a pool's queue from; mutations and the SSE stream return the
+// same shape, so the frontend has one data model.
+message GetScheduleRequest {
+  string resource_pool_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetScheduleResponse {
+  RescheduleResult result = 1;
+}
+
 // CreateSlot books a slot. user_id comes from the authenticated caller (Phase 8)
 // and slot_priority is assigned by the service, so neither is on the request.
 message CreateSlotRequest {
@@ -109,6 +122,7 @@ message PokeOccupantResponse {}
 // clock-in grace has lapsed (no poke there; the grace was the warning).
 service QlabService {
   rpc ListSlots(ListSlotsRequest) returns (ListSlotsResponse);
+  rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse);
   rpc CreateSlot(CreateSlotRequest) returns (CreateSlotResponse);
   rpc ClockIn(ClockInRequest) returns (ClockInResponse);
   rpc ClockOut(ClockOutRequest) returns (ClockOutResponse);

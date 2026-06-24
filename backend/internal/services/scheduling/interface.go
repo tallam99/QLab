@@ -80,6 +80,10 @@ type Result struct {
 // PokeOccupant only sends a nudge.
 type Service interface {
 	ListSlots(ctx context.Context, p principal.Principal, poolID uuid.UUID) ([]store.Slot, error)
+	// Schedule returns the pool's current schedule — the engine run read-only against
+	// now — without mutating state or enqueuing notifications. Same Result shape the
+	// mutating events return, so the UI loads and re-renders off one model.
+	Schedule(ctx context.Context, p principal.Principal, poolID uuid.UUID) (Result, error)
 	CreateSlot(ctx context.Context, p principal.Principal, params CreateParams) (Result, error)
 	ClockUserIn(ctx context.Context, p principal.Principal, slotID uuid.UUID) (Result, error)
 	ClockUserOut(ctx context.Context, p principal.Principal, slotID uuid.UUID) (Result, error)

@@ -20,11 +20,19 @@ export interface Pool {
   name: string;
 }
 
+export interface Resource {
+  id: string;
+  poolId: string;
+}
+
 export interface Workspace {
   labId: string;
   labName: string;
   members: Member[];
   pools: Pool[];
+  // resources across the lab; PoolPanel filters to its pool to label the running-grid
+  // cells ("Hood N") and match an active slot to its cell by id. (Names land later.)
+  resources: Resource[];
 }
 
 function memberOf(m: LabMember): Member {
@@ -35,12 +43,17 @@ function memberOf(m: LabMember): Member {
 
 // ProvisionLab returns a single freshly-created pool; GetLab returns all of a lab's
 // pools — hence the two converters.
+function resourceOf(r: { id: string; resourcePoolId: string }): Resource {
+  return { id: r.id, poolId: r.resourcePoolId };
+}
+
 export function workspaceFromProvision(res: ProvisionLabResponse): Workspace {
   return {
     labId: res.lab?.id ?? "",
     labName: res.lab?.name ?? "",
     members: res.members.map(memberOf),
     pools: res.pool ? [{ id: res.pool.id, name: res.pool.name }] : [],
+    resources: res.resources.map(resourceOf),
   };
 }
 
@@ -50,5 +63,6 @@ export function workspaceFromGetLab(res: GetLabResponse): Workspace {
     labName: res.lab?.name ?? "",
     members: res.members.map(memberOf),
     pools: res.pools.map((p) => ({ id: p.id, name: p.name })),
+    resources: res.resources.map(resourceOf),
   };
 }

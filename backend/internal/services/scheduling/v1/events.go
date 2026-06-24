@@ -28,6 +28,36 @@ func (s *service) ListSlots(ctx context.Context, p principal.Principal, poolID u
 	return s.store.ListSlots(ctx, p.LabID, poolID)
 }
 
+// Schedule returns the pool's current schedule, running the engine read-only against
+// now. Unlike ListSlots (which reflects the last event's persisted placement), this
+// re-projects against the current time — so in-progress overruns and lapsed grace are
+// reflected — but writes nothing and notifies no one.
+func (s *service) Schedule(ctx context.Context, p principal.Principal, poolID uuid.UUID) (result scheduling.Result, err error) {
+	ctx, span := observability.Start(ctx, "scheduling.schedule",
+		observability.Event("schedule"), observability.LabID(p.LabID), observability.PoolID(poolID))
+	defer observability.End(span, &err)
+
+	if err = s.authorize(ctx, p); err != nil {
+		return scheduling.Result{}, err
+	}
+	if err = s.poolInLab(ctx, p.LabID, poolID); err != nil {
+		return scheduling.Result{}, err
+	}
+	// Two separate reads, but a consistent snapshot: ListSlots is itself one atomic
+	// transaction, and a pool's resources are immutable after provisioning (no event
+	// adds or removes one), so every resource a slot references exists at both reads.
+	// If a resource-mutation RPC ever lands, fold these into a single tx.
+	slots, err := s.store.ListSlots(ctx, p.LabID, poolID)
+	if err != nil {
+		return scheduling.Result{}, err
+	}
+	resources, err := s.store.ListResources(ctx, p.LabID, poolID)
+	if err != nil {
+		return scheduling.Result{}, err
+	}
+	return s.computeSchedule(ctx, poolID, slots, resources, s.now())
+}
+
 // CreateSlot books a SCHEDULED slot for the caller at the back of the queue, then
 // reschedules (the new slot is placed at its earliest feasible start).
 func (s *service) CreateSlot(ctx context.Context, p principal.Principal, params scheduling.CreateParams) (scheduling.Result, error) {

@@ -31,29 +31,10 @@ func (s *service) applyEngine(ctx context.Context, actor, poolID uuid.UUID, work
 	defer observability.End(span, &err)
 	_ = ctx // the pure engine takes no context; ctx is held only for the span scope.
 
-	input := dynamicqueue.Input{
-		ResourcePoolID: dynamicqueue.ResourcePoolID(poolID.String()),
-		Now:            now,
-		Grace:          s.grace,
+	input, err := s.buildEngineInput(poolID, working, resources, now)
+	if err != nil {
+		return store.PoolMutation{}, scheduling.Result{}, err
 	}
-	for _, r := range resources {
-		input.Resources = append(input.Resources, dynamicqueue.Resource{
-			ID:             dynamicqueue.ResourceID(r.ID.String()),
-			ResourcePoolID: dynamicqueue.ResourcePoolID(r.ResourcePoolID.String()),
-			Kind:           engineKind(r.Kind),
-		})
-	}
-	for _, sl := range working {
-		if !sl.Status.IsLive() {
-			continue
-		}
-		es, err := toEngineSlot(sl, now)
-		if err != nil {
-			return store.PoolMutation{}, scheduling.Result{}, err
-		}
-		input.Slots = append(input.Slots, es)
-	}
-
 	span.SetAttributes(observability.Count("input_slots", len(input.Slots)))
 	out, err := s.engine.Reschedule(input)
 	if err != nil {
@@ -69,16 +50,11 @@ func (s *service) applyEngine(ctx context.Context, actor, poolID uuid.UUID, work
 	for _, sl := range working {
 		switch sl.Status {
 		case store.SlotStatusScheduled:
-			pos, ok := out.Queue[dynamicqueue.SlotID(sl.ID.String())]
-			if !ok {
-				return store.PoolMutation{}, scheduling.Result{}, fmt.Errorf("engine did not place scheduled slot %s", sl.ID)
-			}
-			resID, err := uuid.Parse(string(pos.AssignedResource))
+			placed, pos, err := placeScheduled(sl, out.Queue)
 			if err != nil {
-				return store.PoolMutation{}, scheduling.Result{}, fmt.Errorf("engine returned invalid resource id %q: %w", pos.AssignedResource, err)
+				return store.PoolMutation{}, scheduling.Result{}, err
 			}
-			sl.ActualStart = pos.ActualStart
-			sl.ResourceID = resID
+			sl = placed
 			if pos.Recommitted {
 				// The engine's notify signal: persist the new committed start and
 				// enqueue a re-commit notification (§2.2).
@@ -86,13 +62,7 @@ func (s *service) applyEngine(ctx context.Context, actor, poolID uuid.UUID, work
 				outbox = append(outbox, s.notify.Recommit(actor, sl))
 				recommitted++
 			}
-			positions = append(positions, scheduling.Position{
-				SlotID:             sl.ID,
-				ActualStart:        pos.ActualStart,
-				AssignedResourceID: resID,
-				Recommitted:        pos.Recommitted,
-				Reclaimable:        pos.Reclaimable,
-			})
+			positions = append(positions, pos)
 			live = append(live, sl)
 			writes = append(writes, sl)
 		case store.SlotStatusActive:
@@ -111,6 +81,117 @@ func (s *service) applyEngine(ctx context.Context, actor, poolID uuid.UUID, work
 	return store.PoolMutation{Slots: writes, Outbox: outbox},
 		scheduling.Result{ResourcePoolID: poolID, Slots: live, Positions: positions},
 		nil
+}
+
+// buildEngineInput assembles the pure engine's Input from a pool's resources and its
+// live slots (settled ones are dropped — the engine only sees the live queue). Shared
+// by the mutating path (applyEngine) and the read path (computeSchedule).
+func (s *service) buildEngineInput(poolID uuid.UUID, working []store.Slot, resources []store.Resource, now time.Time) (dynamicqueue.Input, error) {
+	input := dynamicqueue.Input{
+		ResourcePoolID: dynamicqueue.ResourcePoolID(poolID.String()),
+		Now:            now,
+		Grace:          s.grace,
+	}
+	for _, r := range resources {
+		input.Resources = append(input.Resources, dynamicqueue.Resource{
+			ID:             dynamicqueue.ResourceID(r.ID.String()),
+			ResourcePoolID: dynamicqueue.ResourcePoolID(r.ResourcePoolID.String()),
+			Kind:           engineKind(r.Kind),
+		})
+	}
+	for _, sl := range working {
+		if !sl.Status.IsLive() {
+			continue
+		}
+		es, err := toEngineSlot(sl, now)
+		if err != nil {
+			return dynamicqueue.Input{}, err
+		}
+		input.Slots = append(input.Slots, es)
+	}
+	return input, nil
+}
+
+// computeSchedule runs the engine over a pool's live slots and builds the Result —
+// the read path behind GetSchedule. Same shape applyEngine produces, but it persists
+// nothing and enqueues no notifications: it never writes the recommitted start nor an
+// outbox row, so a read can't move committed state or notify anyone.
+func (s *service) computeSchedule(ctx context.Context, poolID uuid.UUID, slots []store.Slot, resources []store.Resource, now time.Time) (_ scheduling.Result, err error) {
+	ctx, span := observability.Start(ctx, "engine.reschedule")
+	defer observability.End(span, &err)
+	_ = ctx
+
+	// The engine rejects a pool with no resources (Input.Validate). A pool can legitimately
+	// have none (e.g. before any are provisioned), so for the read path surface its live
+	// slots unplaced rather than failing the read — there is simply nothing to place them on.
+	if len(resources) == 0 {
+		return scheduling.Result{ResourcePoolID: poolID, Slots: liveSlots(slots)}, nil
+	}
+
+	input, err := s.buildEngineInput(poolID, slots, resources, now)
+	if err != nil {
+		return scheduling.Result{}, err
+	}
+	span.SetAttributes(observability.Count("input_slots", len(input.Slots)))
+	out, err := s.engine.Reschedule(input)
+	if err != nil {
+		return scheduling.Result{}, fmt.Errorf("reschedule: %w", err)
+	}
+
+	live := make([]store.Slot, 0, len(slots))
+	var positions []scheduling.Position
+	for _, sl := range slots {
+		switch sl.Status {
+		case store.SlotStatusScheduled:
+			placed, pos, err := placeScheduled(sl, out.Queue)
+			if err != nil {
+				return scheduling.Result{}, err
+			}
+			positions = append(positions, pos)
+			live = append(live, placed)
+		case store.SlotStatusActive:
+			live = append(live, sl)
+		default:
+			// Settled (COMPLETE/CANCELLED/NO_SHOW): not part of the live schedule.
+		}
+	}
+	return scheduling.Result{ResourcePoolID: poolID, Slots: live, Positions: positions}, nil
+}
+
+// placeScheduled applies the engine's placement for one SCHEDULED slot: it returns the
+// slot with ActualStart/ResourceID set and the matching Position. Shared by the mutating
+// path (applyEngine, which additionally persists recommits + notifies) and the read path
+// (computeSchedule, which ignores recommit), so the placement→Position mapping lives once.
+func placeScheduled(sl store.Slot, queue dynamicqueue.Queue) (store.Slot, scheduling.Position, error) {
+	pos, ok := queue[dynamicqueue.SlotID(sl.ID.String())]
+	if !ok {
+		return store.Slot{}, scheduling.Position{}, fmt.Errorf("engine did not place scheduled slot %s", sl.ID)
+	}
+	resID, err := uuid.Parse(string(pos.AssignedResource))
+	if err != nil {
+		return store.Slot{}, scheduling.Position{}, fmt.Errorf("engine returned invalid resource id %q: %w", pos.AssignedResource, err)
+	}
+	sl.ActualStart = pos.ActualStart
+	sl.ResourceID = resID
+	return sl, scheduling.Position{
+		SlotID:             sl.ID,
+		ActualStart:        pos.ActualStart,
+		AssignedResourceID: resID,
+		Recommitted:        pos.Recommitted,
+		Reclaimable:        pos.Reclaimable,
+	}, nil
+}
+
+// liveSlots returns just the live (SCHEDULED/ACTIVE) slots, preserving order — the
+// schedule's slots when there is nothing for the engine to place them onto.
+func liveSlots(slots []store.Slot) []store.Slot {
+	live := make([]store.Slot, 0, len(slots))
+	for _, sl := range slots {
+		if sl.Status.IsLive() {
+			live = append(live, sl)
+		}
+	}
+	return live
 }
 
 // toEngineSlot converts a live store.Slot to the engine's Slot (opaque string ids).

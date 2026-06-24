@@ -1,7 +1,7 @@
 import { ActAsSwitcher } from "./components/ActAsSwitcher";
 import { ComingSoon } from "./components/ComingSoon";
+import { PoolPanel } from "./components/PoolPanel";
 import { SignIn } from "./components/SignIn";
-import { SlotList } from "./components/SlotList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 import { env } from "./env";
 import { useSession } from "./session/SessionProvider";
@@ -40,7 +40,7 @@ export function App() {
             {workspace && (
               <>
                 <ActAsSwitcher />
-                <SlotList />
+                <PoolPanel />
               </>
             )}
           </>

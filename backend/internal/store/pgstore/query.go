@@ -112,6 +112,39 @@ func (s *Store) ListSlots(ctx context.Context, labID, poolID uuid.UUID) ([]store
 	return out, nil
 }
 
+// ListResources returns a pool's resources scoped to labID.
+func (s *Store) ListResources(ctx context.Context, labID, poolID uuid.UUID) ([]store.Resource, error) {
+	var rows []sqlcgen.ListResourcesRow
+	err := s.inLabTx(ctx, labID, func(q *sqlcgen.Queries) error {
+		var e error
+		rows, e = q.ListResources(ctx, sqlcgen.ListResourcesParams{LabsID: labID, ResourcePoolsID: poolID})
+		return e
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list resources: %w", err)
+	}
+	out := make([]store.Resource, 0, len(rows))
+	for _, r := range rows {
+		res, err := resourceFromList(r)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, res)
+	}
+	return out, nil
+}
+
+// resourceFromList decodes a ListResources row into a store.Resource.
+func resourceFromList(r sqlcgen.ListResourcesRow) (store.Resource, error) {
+	kind, err := store.ResourceKindString(r.Kind)
+	if err != nil {
+		return store.Resource{}, fmt.Errorf("decode resource kind %q: %w", r.Kind, err)
+	}
+	return store.Resource{
+		ID: r.ResourcesID, ResourcePoolID: r.ResourcePoolsID, LabID: r.LabsID, Kind: kind, Name: r.Name,
+	}, nil
+}
+
 // --- sqlc row -> store.Slot. The three read rows are structurally identical; each
 // converter decodes the status label and maps the nullable columns. ---
 
