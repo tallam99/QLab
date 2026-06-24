@@ -23,12 +23,14 @@ func TestCORS(t *testing.T) {
 	})
 
 	tests := []struct {
-		name            string
-		origins         []string
-		method          string
-		origin          string
-		preflightMethod string // non-empty marks an OPTIONS preflight (Access-Control-Request-Method)
-		wantAllowOrigin string
+		name             string
+		origins          []string
+		method           string
+		origin           string
+		preflightMethod  string // non-empty marks an OPTIONS preflight (Access-Control-Request-Method)
+		preflightHeaders string // Access-Control-Request-Headers on the preflight
+		wantAllowOrigin  string
+		wantAllowHeaders bool // expect a non-empty Access-Control-Allow-Headers
 	}{
 		{
 			name:            "allowed origin, simple request",
@@ -53,6 +55,18 @@ func TestCORS(t *testing.T) {
 			wantAllowOrigin: allowed,
 		},
 		{
+			// The browser Connect client preflights its protocol + our auth headers;
+			// all must be permitted or the call is blocked even from an allowed origin.
+			name:             "preflight permits Connect and auth request headers",
+			origins:          []string{allowed},
+			method:           http.MethodOptions,
+			origin:           allowed,
+			preflightMethod:  http.MethodPost,
+			preflightHeaders: "authorization,content-type,x-qlab-lab,connect-protocol-version,connect-timeout-ms",
+			wantAllowOrigin:  allowed,
+			wantAllowHeaders: true,
+		},
+		{
 			name:            "empty allow-list fails closed",
 			origins:         nil,
 			method:          http.MethodGet,
@@ -69,6 +83,9 @@ func TestCORS(t *testing.T) {
 			if tt.preflightMethod != "" {
 				req.Header.Set("Access-Control-Request-Method", tt.preflightMethod)
 			}
+			if tt.preflightHeaders != "" {
+				req.Header.Set("Access-Control-Request-Headers", tt.preflightHeaders)
+			}
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, req)
 
@@ -76,6 +93,10 @@ func TestCORS(t *testing.T) {
 			if tt.preflightMethod != "" {
 				// A preflight response must advertise the permitted methods.
 				assert.NotEmpty(t, rec.Header().Get("Access-Control-Allow-Methods"))
+			}
+			if tt.wantAllowHeaders {
+				// All requested Connect/auth headers must come back as permitted.
+				assert.NotEmpty(t, rec.Header().Get("Access-Control-Allow-Headers"))
 			}
 		})
 	}

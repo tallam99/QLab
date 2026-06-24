@@ -53,6 +53,9 @@ go.work.sum
 .env
 .env.*
 !.env.example.json
+# Committed example env files (real .env / .env.local stay ignored above).
+!.env.example
+!frontend/.env.example
 
 # Editor/IDE
 .vscode/

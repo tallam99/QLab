@@ -2,34 +2,59 @@
 
 The React + TypeScript PWA, deployed to Firebase Hosting.
 
-> **Status:** Phase 3 placeholder. A minimal static **hello-world** page lives in
-> `public/`; the CD pipeline deploys it to Firebase Hosting to prove the
-> two-surface topology end-to-end (it fetches the API `/healthq` cross-origin, so
-> a green status confirms CORS works). The real Vite/React/Tailwind PWA replaces
-> it in Phase 9.
+> **Status:** Phase 9 (frontend scaffold). The Vite/React/TypeScript app is in
+> place — Google sign-in (Firebase), the generated Connect client wired through
+> Connect-Query, and one real authenticated call (`ListSlots`). The product UI
+> (queue + timeline, clock in/out, live updates) lands in Phase 10; PWA basics +
+> Playwright + the staging-deploy swap land in this phase's second PR.
+>
+> The Phase 3 hello-world (`public/` + `build.sh`) still backs the CD deploy until
+> that swap; `vite build` currently sets `publicDir: false` so it doesn't clash.
 
-## Hello-world build (Phase 3)
+## Local development
 
-`build.sh` copies `public/` to `dist/` and injects the target environment's API
-base URL into the page:
+    cd frontend
+    npm install
+    npm run dev          # Vite dev server on http://localhost:5173
 
-    API_BASE_URL=https://<cloud-run-url> frontend/build.sh   # -> frontend/dist/
+`npm run dev` needs the local API + Auth emulator running (`mage startStack` from
+the repo root). Config comes from `.env.local` (copy `.env.example`); the defaults
+target the local stack and the Auth emulator. Locally the app calls the API
+**same-origin** through the Vite proxy (`vite.config.ts` → `:8090`), so there is no
+cross-origin/CORS step on localhost; staging/prod set `VITE_API_BASE_URL` to the
+real API URL and are genuinely cross-origin.
 
-`firebase.json` (repo root) serves `frontend/dist` with an SPA rewrite. The CD
-workflow runs this build and deploys `dist/` (see `docs/deploy.md`). Phase 9
-swaps `build.sh` for `vite build` (same `dist/` output, so the pipeline is
-stable).
+Scripts: `dev`, `build`, `test` (Vitest), `typecheck`, `lint`/`lint:fix` (Biome),
+`format`.
 
-## Stack (planned)
+## Signing in / testing against the API
 
-Vite · React · TypeScript · Tailwind · Connect-Query (generated Connect client) ·
-Firebase JS SDK (Google sign-in) · vite-plugin-pwa · Biome · Vitest + RTL · Playwright.
+Two ways to get an authenticated session (both feed the same Connect transport,
+which attaches `Authorization: Bearer <token>` and `X-QLab-Lab`):
+
+1. **Google sign-in** — the production path. Locally the Firebase SDK is pointed
+   at the Auth emulator, so the popup signs you in as any email with no real
+   Google account. The email must be invited (provisioned) — see below.
+2. **Dev token panel** — paste an operator-minted ID token plus a lab + pool id
+   to act as a seeded user without the OAuth dance (decision 0008). This is the
+   **staging-test** path: mint against staging with no new real identities, and
+   prod stays untouched. There is no public `ListPools` RPC yet (Phase 10), so the
+   lab/pool ids are taken from the operator `ProvisionLab` response.
+
+Provision a workspace and mint a token via the operator surface — see
+`docs/runbook.md` → "Operator surface" and "Frontend dev loop".
+
+## Stack
+
+Vite · React · TypeScript · Tailwind (v4, `@tailwindcss/vite`) · Connect-Query
+(generated Connect client) · Firebase JS SDK (Google sign-in) · Biome · Vitest +
+RTL. (vite-plugin-pwa + Playwright land in this phase's second PR.)
 
 ## Conventions
 
-- API access uses the **generated** Connect TS client (from `proto/`) — no hand-
-  written `fetch` calls.
+- API access uses the **generated** Connect TS client (`src/protogen`, from
+  `proto/`) — no hand-written `fetch` calls.
 - The app is a static bundle served from a CDN; it talks to the Cloud Run API
   cross-origin (CORS). There is no frontend server running our code.
 
-See `docs/PLAN.md` (Phases 9, 10) and `docs/ARCHITECTURE.md`.
+See `frontend/CLAUDE.md`, `docs/PLAN.md` (Phases 9, 10) and `docs/ARCHITECTURE.md`.
