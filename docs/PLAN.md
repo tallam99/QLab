@@ -594,7 +594,7 @@ an easy demo-login path in staging and none in prod.
 SDK, behind the `auth.TokenVerifier` seam, exercised locally and in CI against the
 Auth emulator), invite-only first-login provisioning by verified email, the auth
 Connect interceptor populating the principal, and the production guards (config +
-server refuse dev-auth in prod, test-asserted). See decision 0007. The **staging
+config refuses operator/emulator env in prod, test-asserted). The **staging
 operator surface** (`qlab.dev.v1.DevService`, decision 0008) has also landed:
 provision demo workspaces, mint a token to act as any seeded user, and
 list/inspect (the `lab_id`-scoped **state-export**, via `GetLab`)/tear down

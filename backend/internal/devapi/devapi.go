@@ -7,6 +7,7 @@ package devapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"net/http"
@@ -30,9 +31,11 @@ const HeaderOperatorSecret = "X-QLab-Operator-Secret"
 // Service implements devv1connect.DevServiceHandler over operator.Service.
 type Service struct {
 	devv1connect.UnimplementedDevServiceHandler
-	svc      operator.Service
-	secret   string
-	validate connect.Interceptor
+	svc operator.Service
+	// secretHash is the SHA-256 of the operator secret. Storing only the digest keeps
+	// the plaintext secret out of resident memory; the interceptor compares digests.
+	secretHash [sha256.Size]byte
+	validate   connect.Interceptor
 }
 
 // New builds the DevService transport. It panics on a missing dependency or an empty
@@ -44,7 +47,7 @@ func New(svc operator.Service, secret string) *Service {
 	if secret == "" {
 		panic("devapi: New requires a non-empty operator secret")
 	}
-	return &Service{svc: svc, secret: secret, validate: validate.NewInterceptor()}
+	return &Service{svc: svc, secretHash: sha256.Sum256([]byte(secret)), validate: validate.NewInterceptor()}
 }
 
 // Handler returns the mount path and HTTP handler, with the operator-secret gate and
@@ -61,8 +64,8 @@ func (s *Service) secretInterceptor() connect.UnaryInterceptorFunc {
 			if req.Spec().IsClient {
 				return next(ctx, req)
 			}
-			got := req.Header().Get(HeaderOperatorSecret)
-			if subtle.ConstantTimeCompare([]byte(got), []byte(s.secret)) != 1 {
+			got := sha256.Sum256([]byte(req.Header().Get(HeaderOperatorSecret)))
+			if subtle.ConstantTimeCompare(got[:], s.secretHash[:]) != 1 {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("invalid or missing operator secret"))
 			}
 			return next(ctx, req)

@@ -37,7 +37,7 @@ type Config struct {
 	ClockInGraceMinutes int32 `envconfig:"CLOCK_IN_GRACE_MINUTES" default:"15"`
 	// FirebaseProjectID names the Firebase project whose ID tokens this service
 	// verifies (the token `aud`/`iss` must match it). Each environment verifies
-	// against its own project (decision 0007). Required: auth is mandatory on every
+	// against its own project. Required: auth is mandatory on every
 	// data RPC. Locally it is a `demo-*` id so the Auth emulator runs fully offline.
 	FirebaseProjectID string `envconfig:"FIREBASE_PROJECT_ID" required:"true"`
 	// FirebaseAuthEmulatorHost, when set (host:port), points the Firebase Admin SDK

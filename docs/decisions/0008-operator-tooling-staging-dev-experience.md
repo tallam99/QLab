@@ -2,9 +2,18 @@
 
 **Status:** Accepted (2026-06-23)
 
-Extends decision 0007 (authentication). Where 0007 established real token
-verification and a single dev-login endpoint to act as a seeded user, this records
-the full operator surface that replaces it.
+Builds on decision 0006 (the principal + lab scoping). Real Firebase ID-token
+verification — the Admin SDK behind the `auth.TokenVerifier` seam, an auth Connect
+interceptor populating the principal, and invite-only first-login provisioning by
+verified email — is implemented and clear from the code. The one non-obvious auth
+choice is recorded here: **local and CI exercise the real verify→provision path
+against the Firebase Auth emulator** (the same Admin SDK pointed at the emulator via
+`FIREBASE_AUTH_EMULATOR_HOST`, which skips only the signature check), rather than a
+fake `TokenVerifier` — higher fidelity at the cost of one local dependency (Node + a
+JRE + firebase-tools; a compose service locally, a background process in CI). Config
+refuses to boot if the emulator is configured in production. This decision then
+covers the staging dev tooling built on top, which replaces an earlier
+unauthenticated dev-login endpoint.
 
 ## Context
 
@@ -41,13 +50,13 @@ now and an in-app dev switcher later (Phase 9) both build on.
   lab, a head + members, and a pool with resources in one transaction, returning the
   roster. Users are created unlinked; `MintToken` (or a real first login) links the
   Firebase identity by verified email — exercising the real provisioning path.
-- **Production safety, five independent layers.** (1) The operator package is mounted
-  only when `config.OperatorEnabled()` (env ≠ production AND a secret is set);
-  (2) config refuses to boot if any operator env is set in production; (3) `server.New`
-  refuses to boot if the mount is present in production; (4) "operator" is **not** a
-  product role (`lab_role`) — the product model has no switch-labs-at-will path;
-  (5) a test asserts the prod build exposes none of it. Any one failing is caught by
-  the next.
+- **Production safety, four independent layers.** (1) The operator package is mounted
+  only when `config.OperatorEnabled()` (env ≠ production AND a secret is set), so the
+  prod binary never references it; (2) config refuses to even load if any operator env
+  (`OPERATOR_SECRET`/`OPERATOR_DATABASE_URL`) is set in production — the process exits;
+  (3) "operator" is **not** a product role (`lab_role`) — the product model has no
+  switch-labs-at-will path; (4) a test asserts config rejects operator env in
+  production. Any one failing is caught by the next.
 
 ## Consequences
 

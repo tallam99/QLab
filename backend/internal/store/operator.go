@@ -6,6 +6,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// OperatorActorID is the sentinel actor recorded in created_by/updated_by on rows
+// the operator tooling writes: the operator is automation, not a user. The audit
+// columns are deliberately non-FK so a system actor like this is valid, and a fixed
+// sentinel keeps operator-created rows attributable rather than NULL (decision 0008).
+var OperatorActorID = uuid.MustParse("00000000-0000-0000-0000-0000000050b0")
+
 // OperatorStore is the persistence the staging/local operator tooling needs
 // (decision 0008). It is a SEPARATE interface from Store because its operations are
 // inherently cross-tenant admin work (create a whole lab, list every workspace) —

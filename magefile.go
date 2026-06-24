@@ -342,6 +342,8 @@ func TestIntegration() error {
 // wiring, HTTP lifecycle) aren't good mutation fodder.
 var mutateDirs = []string{
 	engineDir,
+	// The authentication provisioning state machine: branchy logic with unit tests.
+	"./backend/internal/services/authentication/v1",
 }
 
 // Mutate runs mutation testing (gremlins) over mutateDirs to verify the test suite

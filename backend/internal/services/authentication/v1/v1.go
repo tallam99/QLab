@@ -17,7 +17,7 @@ import (
 // Service implements authentication.Service.
 type Service struct {
 	verifier auth.TokenVerifier
-	store    store.Store
+	store    store.AuthStore
 }
 
 // Compile-time guarantee of interface satisfaction.
@@ -27,7 +27,7 @@ var _ authentication.Service = (*Service)(nil)
 // as dependencies grow — the codebase convention).
 type Options struct {
 	Verifier auth.TokenVerifier
-	Store    store.Store
+	Store    store.AuthStore
 }
 
 // New returns a Service. It panics if a required dependency is missing — a wiring

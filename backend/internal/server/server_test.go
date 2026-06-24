@@ -58,20 +58,6 @@ func operatorMountFixture() *OperatorMount {
 	}
 }
 
-// TestNewRefusesOperatorInProduction is the load-bearing operator guard (decision
-// 0008): the server must refuse to boot if the operator surface is enabled in
-// production — the single most dangerous surface if it ever shipped to prod.
-func TestNewRefusesOperatorInProduction(t *testing.T) {
-	assert.PanicsWithValue(t, "server: operator surface must not be enabled in production", func() {
-		New(Options{
-			Logger:        logging.Noop(),
-			FirebaseAuth:  testFirebaseAuth(t),
-			Production:    true,
-			OperatorMount: operatorMountFixture(),
-		})
-	})
-}
-
 // TestOperatorMountedOnlyWhenEnabled verifies the operator surface is reachable when
 // configured and entirely absent (404) otherwise — so a production build
 // (OperatorMount nil) has no operator surface at all.

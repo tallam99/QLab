@@ -18,8 +18,8 @@ end to end by `backend/integration_test`. **Now real auth** (Phase 8): every RPC
 behind an auth Connect interceptor that verifies a Firebase ID token
 (`internal/auth` seam + `auth/firebaseauth` over the Admin SDK; the Auth emulator
 locally) and resolves it to a user via `services/authentication` (invite-only
-first-login provisioning), populating the same `internal/principal` seam
-(decision 0007). A **separate, secret-gated operator service** (`qlab.dev.v1`,
+first-login provisioning), populating the same `internal/principal` seam.
+A **separate, secret-gated operator service** (`qlab.dev.v1`,
 `internal/devapi` over `services/operator`) provides the staging dev experience —
 provision workspaces, mint tokens to act as seeded users, inspect/tear down — and is
 mounted only outside production (decision 0008). The head-only invite RPC is still to

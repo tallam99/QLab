@@ -42,7 +42,7 @@ QLab is two separate surfaces plus managed backing services:
     delivery is Phase 11.
   - **authentication** — resolves a verified bearer token to a local `users` row,
     provisioning invited users on first login by linking their Firebase uid to the
-    row matched by verified email (invite-only; decision 0007).
+    row matched by verified email (invite-only).
 - **Scheduling engine** (`internal/dynamicqueue`) — **pure**, no DB/HTTP/clock.
   The product's core; specified in `docs/ALGORITHM.md`. A single `reschedule()`
   operation re-flows the queue on every event.
@@ -55,7 +55,7 @@ QLab is two separate surfaces plus managed backing services:
   `auth.TokenVerifier` seam over the Admin SDK; the Auth emulator locally), resolves
   it to a user through the `authentication` service, and attaches the principal with
   the selected lab. A bad token is `Unauthenticated`, a valid-but-uninvited one
-  `PermissionDenied` (decision 0007).
+  `PermissionDenied`. The Auth emulator backs local/CI verification (decision 0008).
 - **Operator surface** (`internal/devapi` over `services/operator`) — a
   **separate** Connect service (`qlab.dev.v1`) for the staging dev experience:
   provision demo workspaces, mint a token to act as any seeded user, list/inspect/

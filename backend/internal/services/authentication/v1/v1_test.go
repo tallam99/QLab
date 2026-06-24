@@ -24,8 +24,7 @@ func (f fakeVerifier) Verify(context.Context, string) (auth.Identity, error) {
 	return f.identity, f.err
 }
 
-// fakeStore implements store.Store with configurable user-lookup behavior; the
-// non-user methods are unused here and return zero values.
+// fakeStore implements store.AuthStore with configurable user-lookup behavior.
 type fakeStore struct {
 	byUID    map[string]store.User
 	byEmail  map[string]store.User
@@ -62,21 +61,6 @@ func (s *fakeStore) LinkFirebaseUID(_ context.Context, userID uuid.UUID, fbUID, 
 	u := store.User{ID: userID, FirebaseUID: fbUID, FirstName: first, LastName: last}
 	s.linked = &u
 	return u, nil
-}
-
-func (*fakeStore) CountLabs(context.Context) (int, error)                       { return 0, nil }
-func (*fakeStore) IsMember(context.Context, uuid.UUID, uuid.UUID) (bool, error) { return false, nil }
-func (*fakeStore) ResourcePoolByID(context.Context, uuid.UUID, uuid.UUID) (store.ResourcePool, error) {
-	return store.ResourcePool{}, nil
-}
-func (*fakeStore) SlotByID(context.Context, uuid.UUID, uuid.UUID) (store.Slot, error) {
-	return store.Slot{}, nil
-}
-func (*fakeStore) ListSlots(context.Context, uuid.UUID, uuid.UUID) ([]store.Slot, error) {
-	return nil, nil
-}
-func (*fakeStore) WithPool(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, func(store.PoolState) (store.PoolMutation, error)) error {
-	return nil
 }
 
 // TestAuthenticate covers the verify→resolve→provision flow: an invalid token, the
@@ -131,28 +115,12 @@ func TestAuthenticate(t *testing.T) {
 			store:    &fakeStore{},
 			wantErr:  authentication.ErrNotProvisioned,
 		},
-		{
-			name:     "email linked to a different identity is refused",
-			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-new", Email: "taken@x.io"}},
-			store: &fakeStore{
-				byEmail: map[string]store.User{"taken@x.io": {ID: invitedID, FirebaseUID: "fb-old", Email: "taken@x.io"}},
-			},
-			wantErr: nil, // not a sentinel; just must be a non-nil error (checked below)
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := New(Options{Verifier: tt.verifier, Store: tt.store})
 			user, err := svc.Authenticate(context.Background(), "token")
-
-			// The conflict case: expect a non-nil error that is none of the sentinels.
-			if tt.name == "email linked to a different identity is refused" {
-				if err == nil {
-					t.Fatal("expected an error for the identity conflict")
-				}
-				return
-			}
 
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
@@ -175,6 +143,32 @@ func TestAuthenticate(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestAuthenticateIdentityConflict: an invited email already linked to a DIFFERENT
+// Firebase identity is refused (not silently rebound) — a data conflict that is none
+// of the auth sentinels.
+func TestAuthenticateIdentityConflict(t *testing.T) {
+	st := &fakeStore{
+		byEmail: map[string]store.User{
+			"taken@x.io": {ID: uuid.New(), FirebaseUID: "fb-old", Email: "taken@x.io"},
+		},
+	}
+	svc := New(Options{
+		Verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-new", Email: "taken@x.io"}},
+		Store:    st,
+	})
+
+	_, err := svc.Authenticate(context.Background(), "token")
+	if err == nil {
+		t.Fatal("expected an error for the identity conflict")
+	}
+	if errors.Is(err, authentication.ErrUnauthenticated) || errors.Is(err, authentication.ErrNotProvisioned) {
+		t.Errorf("conflict should be a distinct error, got %v", err)
+	}
+	if st.linked != nil {
+		t.Error("must not rebind the existing identity")
 	}
 }
 

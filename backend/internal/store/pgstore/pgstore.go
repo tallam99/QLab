@@ -28,6 +28,7 @@ type Store struct {
 // store.OperatorStore (decision 0008).
 var (
 	_ store.Store         = (*Store)(nil)
+	_ store.AuthStore     = (*Store)(nil)
 	_ store.OperatorStore = (*Store)(nil)
 )
 

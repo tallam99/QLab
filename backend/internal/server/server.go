@@ -85,13 +85,10 @@ type Options struct {
 	// FirebaseAuth is the Firebase Auth client backing token verification. Required:
 	// every data RPC is authenticated.
 	FirebaseAuth *auth.Client
-	// Production reports whether this is the production environment. It exists solely
-	// to enforce the operator guard: New refuses to boot if OperatorMount is set here.
-	Production bool
 	// OperatorMount, when non-nil, mounts the staging/local-only operator surface
-	// (qlab.dev.v1; decision 0008) at its Connect path. It is nil in production by
-	// construction; New panics if it is set together with Production, a load-bearing
-	// defense so the operator capability can never exist in prod.
+	// (qlab.dev.v1; decision 0008) at its Connect path. The caller builds it only
+	// outside production — config refuses to load OPERATOR_* in production, so it is
+	// never non-nil there.
 	OperatorMount *OperatorMount
 }
 
@@ -141,13 +138,6 @@ func New(opts Options) *Server {
 	}
 	if opts.FirebaseAuth == nil {
 		panic("server: New requires a FirebaseAuth client")
-	}
-	// Load-bearing operator guard: the operator surface (provision/impersonate at
-	// will) must never exist in production (decision 0008). main never sets
-	// OperatorMount in prod, but assert it here so a wiring mistake fails to boot
-	// rather than shipping the most dangerous surface.
-	if opts.Production && opts.OperatorMount != nil {
-		panic("server: operator surface must not be enabled in production")
 	}
 	s := &Server{logger: opts.Logger, apiService: api.New(), firebaseAuth: opts.FirebaseAuth}
 
@@ -349,9 +339,15 @@ func WithAuthentication() func(context.Context, *Server) error {
 		if s.firebaseAuth == nil {
 			return errors.New("WithAuthentication requires a Firebase Auth client")
 		}
+		// The store field is the (narrow) scheduling surface; recover the identity
+		// surface from the same concrete store. The real pgstore satisfies both.
+		authStore, ok := s.store.(store.AuthStore)
+		if !ok {
+			return errors.New("WithAuthentication requires a store that implements AuthStore")
+		}
 		authnService := authenticationv1.New(authenticationv1.Options{
 			Verifier: firebaseauth.New(s.firebaseAuth),
-			Store:    s.store,
+			Store:    authStore,
 		})
 		s.apiService.SetAuthentication(authnService)
 		return nil

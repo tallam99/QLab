@@ -26,7 +26,7 @@
   `docker/firebase-emulator/Dockerfile`: Node + a JRE + pinned `firebase-tools`,
   Auth-only, offline under the demo project `demo-qlab`), host port 9099, gated by a
   healthcheck. Token verification and dev-login run against it locally, so **no real
-  Firebase project is needed for local dev** (decision 0007).
+  Firebase project is needed for local dev** (decision 0008).
 - **`api`** — the Go service built from `backend/Dockerfile`, on host port 8090.
   Waits for Postgres and the emulator to be healthy, then connects + pings Postgres
   on boot (a failed connection is a hard boot failure, not a stream of failing

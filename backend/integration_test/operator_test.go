@@ -12,6 +12,7 @@ import (
 
 	devv1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/dev/v1"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
+	"github.com/tallam99/qlab/backend/internal/store"
 )
 
 // TestOperatorProvisionAndMint: the operator provisions a workspace, then mints a
@@ -31,6 +32,11 @@ func (s *IntegrationSuite) TestOperatorProvisionAndMint() {
 	require.Len(t, res.GetMembers(), 3, "1 head + 2 members")
 	require.Len(t, res.GetResources(), 3)
 	assert.Equal(t, v1.LabRole_LAB_ROLE_HEAD, res.GetMembers()[0].GetRole())
+
+	// Operator-written rows are attributed to the operator sentinel actor, not NULL.
+	var createdBy uuid.UUID
+	require.NoError(t, h.admin.QueryRow(ctx, `SELECT created_by FROM labs WHERE labs_id = $1`, res.GetLab().GetId()).Scan(&createdBy))
+	assert.Equal(t, store.OperatorActorID, createdBy, "lab.created_by is the operator sentinel actor")
 
 	// Mint a token for a member and act as them against the public API.
 	member := res.GetMembers()[1]

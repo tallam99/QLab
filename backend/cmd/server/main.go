@@ -72,7 +72,6 @@ func run() error {
 		Addr:           ":" + cfg.Port,
 		AllowedOrigins: cfg.AllowedOrigins,
 		FirebaseAuth:   firebaseAuth,
-		Production:     cfg.Env == config.EnvProduction,
 	}
 
 	// The operator surface (qlab.dev.v1) exists only outside production (decision

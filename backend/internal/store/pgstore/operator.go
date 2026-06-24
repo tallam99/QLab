@@ -21,6 +21,13 @@ import (
 // poolResourceKind is the one resource kind the MVP provisions.
 const poolResourceKind = "VENT_HOOD"
 
+// operatorActor returns a pointer to the operator sentinel actor, stamped on
+// created_by/updated_by for every operator-written row (auditability, decision 0008).
+func operatorActor() *uuid.UUID {
+	id := store.OperatorActorID
+	return &id
+}
+
 // CreateLabWorkspace creates a lab, a head + members, and a pool with resources in
 // one transaction.
 func (s *Store) CreateLabWorkspace(ctx context.Context, spec store.ProvisionSpec) (store.LabWorkspace, error) {
@@ -33,7 +40,7 @@ func (s *Store) CreateLabWorkspace(ctx context.Context, spec store.ProvisionSpec
 
 	feature := strings.TrimSpace(spec.Feature)
 	labID := uuid.New()
-	labRow, err := q.CreateLab(ctx, sqlcgen.CreateLabParams{LabsID: labID, Name: feature})
+	labRow, err := q.CreateLab(ctx, sqlcgen.CreateLabParams{LabsID: labID, Name: feature, Actor: operatorActor()})
 	if err != nil {
 		return store.LabWorkspace{}, fmt.Errorf("create lab: %w", err)
 	}
@@ -54,7 +61,7 @@ func (s *Store) CreateLabWorkspace(ctx context.Context, spec store.ProvisionSpec
 
 	poolID := uuid.New()
 	poolRow, err := q.CreateResourcePool(ctx, sqlcgen.CreateResourcePoolParams{
-		ResourcePoolsID: poolID, LabsID: labID, Kind: poolResourceKind, Name: feature + " pool",
+		ResourcePoolsID: poolID, LabsID: labID, Kind: poolResourceKind, Name: feature + " pool", Actor: operatorActor(),
 	})
 	if err != nil {
 		return store.LabWorkspace{}, fmt.Errorf("create pool: %w", err)
@@ -68,7 +75,7 @@ func (s *Store) CreateLabWorkspace(ctx context.Context, spec store.ProvisionSpec
 	for i := 1; i <= spec.ResourceCount; i++ {
 		rRow, err := q.CreateResource(ctx, sqlcgen.CreateResourceParams{
 			ResourcesID: uuid.New(), ResourcePoolsID: poolID, LabsID: labID,
-			Kind: poolResourceKind, Name: fmt.Sprintf("Hood %d", i),
+			Kind: poolResourceKind, Name: fmt.Sprintf("Hood %d", i), Actor: operatorActor(),
 		})
 		if err != nil {
 			return store.LabWorkspace{}, fmt.Errorf("create resource: %w", err)
@@ -97,15 +104,15 @@ func createMember(ctx context.Context, q *sqlcgen.Queries, labID uuid.UUID, feat
 	userID := uuid.New()
 	email := fmt.Sprintf("%s-%s-%s@qlab.dev", slug(feature), tag, uuid.NewString()[:8])
 	uRow, err := q.CreateUserWithEmail(ctx, sqlcgen.CreateUserWithEmailParams{
-		UsersID: userID, Email: email,
-		// Readable demo names; real names fill from the provider only if these are
-		// blank, so leave them blank to mirror the real invite→login flow.
+		UsersID: userID, Email: email, Actor: operatorActor(),
+		// Names fill from the provider on first login (LinkFirebaseUID only sets blanks),
+		// so leave them blank here to mirror the real invite→login flow.
 	})
 	if err != nil {
 		return store.LabMember{}, fmt.Errorf("create user: %w", err)
 	}
 	if err := q.CreateMembership(ctx, sqlcgen.CreateMembershipParams{
-		LabsID: labID, UsersID: userID, Role: role.String(),
+		LabsID: labID, UsersID: userID, Role: role.String(), Actor: operatorActor(),
 	}); err != nil {
 		return store.LabMember{}, fmt.Errorf("create membership: %w", err)
 	}
