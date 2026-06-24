@@ -151,6 +151,32 @@ for an un-invited email is rejected with `permission_denied` (not provisioned).
 > the emulator). Fully wired and smoke-tested in staging; the exact grants live in
 > `docs/deploy.md`.
 
+## Frontend dev loop
+
+The PWA (`frontend/`, Phase 9) runs against the local stack + Auth emulator:
+
+    mage startStack                # API + Postgres + Auth emulator (repo root)
+    cd frontend && npm install
+    npm run dev                    # http://localhost:5173
+
+Two ways to get an authenticated session (both attach `Authorization: Bearer` +
+`X-QLab-Lab` via the Connect transport):
+
+- **Google sign-in** — the popup is served by the Auth emulator locally, so any
+  email works with no real Google account. The email must be invited; provision
+  one via the operator surface (above), then sign in as that user's email — first
+  login links the Firebase identity to the seeded `users` row.
+- **Dev token panel** — paste an operator-minted ID token plus a lab + pool id to
+  act as a seeded user with no OAuth dance. This is also the **staging-test** path:
+  mint against staging, act as seeded users, leave prod untouched. Get the ids +
+  token from the operator `ProvisionLab` / `MintToken` responses (above); there is
+  no public `ListPools` RPC yet (Phase 10), so the pool id comes from provisioning.
+
+CORS: the API allows the app origin (`CORS_ALLOWED_ORIGINS`, default
+`http://localhost:5173`) and the browser Connect client's headers (Authorization,
+X-QLab-Lab, Connect-Protocol-Version/Timeout-Ms). A blocked call in the browser
+with a green `curl` usually means an origin or header is missing from that list.
+
 ## Debugging
 
 - Logs are structured `slog`: human-readable text locally, JSON in the cloud.
