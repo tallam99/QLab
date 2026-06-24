@@ -3,6 +3,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import {
 import { setAuthHolder } from "../api/authHolder";
 import { operatorClient } from "../api/operatorClient";
 import type { LabSummary } from "../protogen/qlab/dev/v1/dev_pb";
+import { useSession } from "../session/SessionProvider";
 import { type Member, type Workspace, workspaceFromGetLab, workspaceFromProvision } from "./model";
 
 // WorkspaceProvider owns the dev switcher state: which demo workspace is loaded, who
@@ -122,6 +124,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setPoolId(null);
     setError(null);
   }, []);
+
+  // Sign-out / switching operator accounts must drop the prior session entirely —
+  // the workspace, the acting-as selection, AND the cached minted tokens — so a new
+  // (or signed-out) operator can never see or act on the previous session's data.
+  // Keyed on the operator's uid: it changes on logout (→ undefined) and on switching
+  // accounts, but a token refresh keeps the same uid, so this doesn't fire spuriously.
+  const operatorUid = useSession().user?.uid;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset only on identity change.
+  useEffect(() => {
+    reset();
+  }, [operatorUid]);
 
   const value = useMemo<WorkspaceValue>(() => {
     const actingMember = workspace?.members.find((m) => m.userId === actingUserId) ?? null;
