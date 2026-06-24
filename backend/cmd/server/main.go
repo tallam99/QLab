@@ -14,10 +14,14 @@ import (
 	"syscall"
 
 	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
+	"github.com/tallam99/qlab/backend/internal/clients/postgres"
 	"github.com/tallam99/qlab/backend/internal/config"
+	"github.com/tallam99/qlab/backend/internal/devapi"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	slogging "github.com/tallam99/qlab/backend/internal/logging/slog"
 	"github.com/tallam99/qlab/backend/internal/server"
+	operatorv1 "github.com/tallam99/qlab/backend/internal/services/operator/v1"
+	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
 
 func main() {
@@ -50,9 +54,10 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	// Build the Firebase Auth client (token verification + dev-login). Locally it is
-	// pointed at the Auth emulator via FIREBASE_AUTH_EMULATOR_HOST; in staging/prod it
-	// uses Application Default Credentials (the Cloud Run service account).
+	// Build the Firebase Auth client (token verification + the operator token
+	// minter). Locally it is pointed at the Auth emulator via
+	// FIREBASE_AUTH_EMULATOR_HOST; in staging/prod it uses Application Default
+	// Credentials (the Cloud Run service account).
 	firebaseAuth, err := firebaseclient.New(ctx, firebaseclient.Options{ProjectID: cfg.FirebaseProjectID})
 	if err != nil {
 		logger.Error("build firebase client", "error", err)
@@ -69,12 +74,27 @@ func run() error {
 		FirebaseAuth:   firebaseAuth,
 		Production:     cfg.Env == config.EnvProduction,
 	}
-	// Dev-login exists everywhere except production (decision 0007).
-	if cfg.DevAuthEnabled() {
-		opts.DevLogin = &server.DevLoginConfig{
-			EmulatorHost: cfg.FirebaseAuthEmulatorHost,
-			WebAPIKey:    cfg.FirebaseWebAPIKey,
+
+	// The operator surface (qlab.dev.v1) exists only outside production (decision
+	// 0008). It runs over an elevated, cross-tenant DB connection; main owns that
+	// pool and closes it on shutdown.
+	if cfg.OperatorEnabled() {
+		operatorPool, err := postgres.New(ctx, postgres.Options{DatabaseURL: cfg.OperatorDatabaseURL})
+		if err != nil {
+			logger.Error("build operator db pool", "error", err)
+			return err
 		}
+		defer operatorPool.Close()
+		operatorStore, err := pgstore.New(ctx, operatorPool)
+		if err != nil {
+			logger.Error("connect operator db", "error", err)
+			return err
+		}
+		minter := firebaseclient.NewMinter(firebaseAuth, cfg.FirebaseAuthEmulatorHost, cfg.FirebaseWebAPIKey)
+		operatorSvc := operatorv1.New(operatorv1.Options{Store: operatorStore, Minter: minter})
+		path, handler := devapi.New(operatorSvc, cfg.OperatorSecret).Handler()
+		opts.OperatorMount = &server.OperatorMount{Path: path, Handler: handler}
+		logger.Warn("operator surface (qlab.dev.v1) enabled — staging/local only")
 	}
 
 	s := server.New(opts)

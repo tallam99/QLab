@@ -45,10 +45,22 @@ type Config struct {
 	// set in staging/prod. The SDK reads the same env var itself; config carries it
 	// so the dev-login token exchange targets the same host. Empty = real Firebase.
 	FirebaseAuthEmulatorHost string `envconfig:"FIREBASE_AUTH_EMULATOR_HOST" default:""`
-	// FirebaseWebAPIKey is the Identity Toolkit web API key the dev-login endpoint
-	// uses to exchange a custom token for an ID token. Required only where dev-login
-	// runs (local/staging); against the emulator any non-empty value works.
+	// FirebaseWebAPIKey is the Identity Toolkit web API key the operator MintToken
+	// path uses to exchange a custom token for an ID token. Required only where the
+	// operator surface runs (local/staging); against the emulator any non-empty value
+	// works (a fallback is used if empty).
 	FirebaseWebAPIKey string `envconfig:"FIREBASE_WEB_API_KEY" default:""`
+	// OperatorSecret gates the staging/local-only operator surface (qlab.dev.v1:
+	// provision workspaces, mint tokens, list/teardown). When set (outside
+	// production) the operator service is mounted and every call must present this
+	// secret. MUST be absent in production — the service refuses to boot otherwise
+	// (decision 0008). Empty = operator surface disabled.
+	OperatorSecret string `envconfig:"OPERATOR_SECRET" default:""`
+	// OperatorDatabaseURL is the elevated (BYPASS row-level-security) Postgres
+	// connection the operator service uses for its inherently cross-tenant admin work
+	// (creating labs, listing all workspaces). Required when the operator surface is
+	// enabled; like OperatorSecret, must be absent in production.
+	OperatorDatabaseURL string `envconfig:"OPERATOR_DATABASE_URL" default:""`
 }
 
 // Load reads and validates configuration from the environment.
@@ -72,7 +84,25 @@ func (c Config) validate() error {
 	if c.Env == EnvProduction && c.FirebaseAuthEmulatorHost != "" {
 		return fmt.Errorf("FIREBASE_AUTH_EMULATOR_HOST must not be set when QLAB_ENV=production")
 	}
+	// The operator surface (provision/impersonate at will) must never exist in
+	// production — refuse to boot if any operator config is present there
+	// (decision 0008). This is the config-side half; the server also never mounts
+	// the operator service in production.
+	if c.Env == EnvProduction && (c.OperatorSecret != "" || c.OperatorDatabaseURL != "") {
+		return fmt.Errorf("OPERATOR_SECRET / OPERATOR_DATABASE_URL must not be set when QLAB_ENV=production")
+	}
+	// Outside production, enabling the operator surface (a secret) requires the
+	// elevated DB connection it runs its cross-tenant work on.
+	if c.OperatorEnabled() && c.OperatorDatabaseURL == "" {
+		return fmt.Errorf("OPERATOR_DATABASE_URL is required when OPERATOR_SECRET is set")
+	}
 	return nil
+}
+
+// OperatorEnabled reports whether the staging/local-only operator surface should be
+// mounted: never in production, and only when a gating secret is configured.
+func (c Config) OperatorEnabled() bool {
+	return c.Env != EnvProduction && c.OperatorSecret != ""
 }
 
 // IsLocal reports whether the service is running in the local dev environment.

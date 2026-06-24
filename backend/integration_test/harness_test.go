@@ -3,9 +3,7 @@
 package integrationtest
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -21,10 +19,14 @@ import (
 
 	"github.com/tallam99/qlab/backend/internal/api"
 	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
+	"github.com/tallam99/qlab/backend/internal/devapi"
 	"github.com/tallam99/qlab/backend/internal/logging"
+	"github.com/tallam99/qlab/backend/internal/protogen/qlab/dev/v1/devv1connect"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	"github.com/tallam99/qlab/backend/internal/protogen/qlab/v1/qlabv1connect"
 	"github.com/tallam99/qlab/backend/internal/server"
+	operatorv1 "github.com/tallam99/qlab/backend/internal/services/operator/v1"
+	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
 
 // base anchors every test's clock; tests advance from here. A fixed instant keeps
@@ -55,26 +57,32 @@ func (c *testClock) set(t time.Time) {
 
 // harness holds everything a test touches: the admin pool (superuser, bypasses RLS
 // — for arranging state and reading ground truth), the running server, the HTTP
-// client + base URL for building Connect clients, the clock, and the auth helpers
-// (a userID→email map and a per-email ID-token cache, both minted via the real
-// Auth emulator through the dev-login endpoint).
+// client + base URL for building Connect clients, the clock, the auth helpers (a
+// userID→email map and a per-email ID-token cache, minted in-process against the
+// real Auth emulator), and the operator-secret used by the DevService.
 type harness struct {
-	admin   *pgxpool.Pool
-	baseURL string
-	http    *http.Client
-	clock   *testClock
-	cancel  context.CancelFunc
-	done    chan struct{}
+	admin          *pgxpool.Pool
+	baseURL        string
+	http           *http.Client
+	clock          *testClock
+	cancel         context.CancelFunc
+	done           chan struct{}
+	minter         *firebaseclient.Minter
+	operatorSecret string
 
 	mu     sync.Mutex
 	emails map[string]string // userID -> email (for minting that user's token)
 	tokens map[string]string // email -> cached ID token
 }
 
+// operatorSecret is the gate for the DevService in the suite.
+const itestOperatorSecret = "itest-operator-secret"
+
 // startHarness boots the real server (connecting as the app role) on an ephemeral
 // port, waits for readiness, and opens the admin pool for arranging state. The
-// server verifies tokens against the Auth emulator and has the dev-login endpoint
-// enabled (a non-production environment), which the harness uses to mint tokens.
+// server verifies tokens against the Auth emulator and mounts the operator
+// (qlab.dev.v1) surface over the admin (elevated) pool. The harness mints auth
+// tokens in-process via the same Auth emulator.
 func startHarness(appURL string) (*harness, error) {
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, adminDatabaseURL)
@@ -90,13 +98,24 @@ func startHarness(appURL string) (*harness, error) {
 		admin.Close()
 		return nil, fmt.Errorf("build firebase client: %w", err)
 	}
+	minter := firebaseclient.NewMinter(firebaseAuth, emulatorHost, "")
+
+	// Operator surface over the admin pool (the elevated, RLS-bypassing connection),
+	// mounted as the production binary would mount it outside prod.
+	operatorStore, err := pgstore.New(ctx, admin)
+	if err != nil {
+		admin.Close()
+		return nil, fmt.Errorf("build operator store: %w", err)
+	}
+	operatorSvc := operatorv1.New(operatorv1.Options{Store: operatorStore, Minter: minter})
+	opPath, opHandler := devapi.New(operatorSvc, itestOperatorSecret).Handler()
 
 	clock := &testClock{now: base}
 	srv := server.New(server.Options{
-		Logger:       logging.Noop(),
-		Addr:         "127.0.0.1:0", // ephemeral; discovered via srv.Addr()
-		FirebaseAuth: firebaseAuth,
-		DevLogin:     &server.DevLoginConfig{EmulatorHost: emulatorHost},
+		Logger:        logging.Noop(),
+		Addr:          "127.0.0.1:0", // ephemeral; discovered via srv.Addr()
+		FirebaseAuth:  firebaseAuth,
+		OperatorMount: &server.OperatorMount{Path: opPath, Handler: opHandler},
 	})
 	srv.InjectDependency(server.WithPostgres(appURL))
 	srv.InjectDependency(server.WithAuthentication())
@@ -110,13 +129,15 @@ func startHarness(appURL string) (*harness, error) {
 	}()
 
 	h := &harness{
-		admin:  admin,
-		http:   &http.Client{},
-		clock:  clock,
-		cancel: cancel,
-		done:   done,
-		emails: make(map[string]string),
-		tokens: make(map[string]string),
+		admin:          admin,
+		http:           &http.Client{},
+		clock:          clock,
+		cancel:         cancel,
+		done:           done,
+		minter:         minter,
+		operatorSecret: itestOperatorSecret,
+		emails:         make(map[string]string),
+		tokens:         make(map[string]string),
 	}
 	if err := h.waitReady(srv); err != nil {
 		cancel()
@@ -206,9 +227,8 @@ func (h *harness) emailOf(t *testing.T, userID string) string {
 	return email
 }
 
-// tokenFor returns an emulator ID token for email, minting one via the real
-// dev-login endpoint on first use and caching it. Exercising dev-login here also
-// keeps it covered.
+// tokenFor returns an emulator ID token for email, minting one in-process against
+// the Auth emulator on first use and caching it.
 func (h *harness) tokenFor(t *testing.T, email string) string {
 	t.Helper()
 	h.mu.Lock()
@@ -218,22 +238,38 @@ func (h *harness) tokenFor(t *testing.T, email string) string {
 	}
 	h.mu.Unlock()
 
-	body, err := json.Marshal(map[string]string{"email": email})
-	require.NoError(t, err)
-	resp, err := h.http.Post(h.baseURL+"/devlogin", "application/json", bytes.NewReader(body))
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	require.Equalf(t, http.StatusOK, resp.StatusCode, "dev-login should succeed for %s", email)
-	var out struct {
-		IDToken string `json:"idToken"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
-	require.NotEmpty(t, out.IDToken, "dev-login returned an empty token")
+	token, err := h.minter.MintToken(context.Background(), email)
+	require.NoErrorf(t, err, "mint token for %s", email)
+	require.NotEmpty(t, token, "minted an empty token")
 
 	h.mu.Lock()
-	h.tokens[email] = out.IDToken
+	h.tokens[email] = token
 	h.mu.Unlock()
-	return out.IDToken
+	return token
+}
+
+// operatorClient returns a DevService client carrying the operator secret.
+func (h *harness) operatorClient() devv1connect.DevServiceClient {
+	return h.operatorClientWithSecret(h.operatorSecret)
+}
+
+// operatorClientWithSecret returns a DevService client carrying the given secret
+// (used to exercise the gate: a wrong or empty secret is rejected).
+func (h *harness) operatorClientWithSecret(secret string) devv1connect.DevServiceClient {
+	return devv1connect.NewDevServiceClient(h.http, h.baseURL,
+		connect.WithInterceptors(operatorSecretInterceptor(secret)))
+}
+
+// operatorSecretInterceptor stamps the operator-secret header on outgoing requests.
+func operatorSecretInterceptor(secret string) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if secret != "" {
+				req.Header().Set(devapi.HeaderOperatorSecret, secret)
+			}
+			return next(ctx, req)
+		}
+	})
 }
 
 // reset returns the database to a clean slate and the clock to base between tests.

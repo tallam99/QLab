@@ -23,8 +23,13 @@ type Store struct {
 	q    *sqlcgen.Queries
 }
 
-// Compile-time guarantee that *Store satisfies the store interface.
-var _ store.Store = (*Store)(nil)
+// Compile-time guarantee that *Store satisfies the store interfaces. The same type
+// serves both: the per-request app pool is used as store.Store, an elevated pool as
+// store.OperatorStore (decision 0008).
+var (
+	_ store.Store         = (*Store)(nil)
+	_ store.OperatorStore = (*Store)(nil)
+)
 
 // New verifies the pool is reachable and returns a Store, so a returned Store is
 // guaranteed ready — callers neither re-check nor health-probe it. An error here

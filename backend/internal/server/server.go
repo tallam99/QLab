@@ -24,7 +24,6 @@ import (
 	"github.com/tallam99/qlab/backend/internal/api"
 	"github.com/tallam99/qlab/backend/internal/auth/firebaseauth"
 	"github.com/tallam99/qlab/backend/internal/clients/postgres"
-	"github.com/tallam99/qlab/backend/internal/devlogin"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue/basic"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
@@ -44,9 +43,8 @@ import (
 // reaches this service (it returns a Google 404). /healthq and /readyq are not
 // reserved, so they reach our handlers.
 const (
-	pathHealthq  = "/healthq"
-	pathReadyq   = "/readyq"
-	pathDevLogin = "/devlogin"
+	pathHealthq = "/healthq"
+	pathReadyq  = "/readyq"
 )
 
 const (
@@ -84,25 +82,25 @@ type Options struct {
 	// AllowedOrigins is the CORS allow-list for the browser PWA (a separate origin
 	// from the API; decision 0001). Empty means same-origin only.
 	AllowedOrigins []string
-	// FirebaseAuth is the Firebase Auth client backing token verification (and the
-	// dev-login endpoint). Required: every data RPC is authenticated.
+	// FirebaseAuth is the Firebase Auth client backing token verification. Required:
+	// every data RPC is authenticated.
 	FirebaseAuth *auth.Client
 	// Production reports whether this is the production environment. It exists solely
-	// to enforce the dev-auth guard: New refuses to boot if DevLogin is set here.
+	// to enforce the operator guard: New refuses to boot if OperatorMount is set here.
 	Production bool
-	// DevLogin, when non-nil, mounts the staging/local-only dev-login endpoint
-	// (decision 0007). It is nil in production by construction; New panics if it is
-	// set together with Production, as a load-bearing defense.
-	DevLogin *DevLoginConfig
+	// OperatorMount, when non-nil, mounts the staging/local-only operator surface
+	// (qlab.dev.v1; decision 0008) at its Connect path. It is nil in production by
+	// construction; New panics if it is set together with Production, a load-bearing
+	// defense so the operator capability can never exist in prod.
+	OperatorMount *OperatorMount
 }
 
-// DevLoginConfig configures the dev-login endpoint's token exchange.
-type DevLoginConfig struct {
-	// EmulatorHost routes the exchange at the local Auth emulator when set.
-	EmulatorHost string
-	// WebAPIKey is the Identity Toolkit key for the exchange (any non-empty value
-	// against the emulator; the real key in staging).
-	WebAPIKey string
+// OperatorMount is a built operator (qlab.dev.v1) Connect handler and the path to
+// mount it on. Construction lives in the caller (main / the test harness), which
+// owns the elevated DB connection it needs; the server just mounts it (non-prod only).
+type OperatorMount struct {
+	Path    string
+	Handler http.Handler
 }
 
 // Server is the service: its HTTP handler plus the lifecycle that initializes
@@ -144,11 +142,12 @@ func New(opts Options) *Server {
 	if opts.FirebaseAuth == nil {
 		panic("server: New requires a FirebaseAuth client")
 	}
-	// Load-bearing dev-auth guard: the dev-login endpoint must never exist in
-	// production (decision 0007). main never sets DevLogin in prod, but assert it here
-	// so a wiring mistake fails to boot rather than shipping the most dangerous surface.
-	if opts.Production && opts.DevLogin != nil {
-		panic("server: dev-login must not be enabled in production")
+	// Load-bearing operator guard: the operator surface (provision/impersonate at
+	// will) must never exist in production (decision 0008). main never sets
+	// OperatorMount in prod, but assert it here so a wiring mistake fails to boot
+	// rather than shipping the most dangerous surface.
+	if opts.Production && opts.OperatorMount != nil {
+		panic("server: operator surface must not be enabled in production")
 	}
 	s := &Server{logger: opts.Logger, apiService: api.New(), firebaseAuth: opts.FirebaseAuth}
 
@@ -165,15 +164,11 @@ func New(opts Options) *Server {
 	r.Get(pathHealthq, s.healthq) // liveness: is the process up? (always 200)
 	r.Get(pathReadyq, s.readyq)   // readiness: have dependencies initialized?
 
-	// Dev-login: staging/local only (decision 0007). Mounted only when configured;
-	// absent entirely in production. It is a plain route (not Connect), so it sits
-	// outside the auth interceptor — it is what issues the token.
-	if opts.DevLogin != nil {
-		r.Handle(pathDevLogin, devlogin.Handler(devlogin.Options{
-			Auth:         opts.FirebaseAuth,
-			EmulatorHost: opts.DevLogin.EmulatorHost,
-			WebAPIKey:    opts.DevLogin.WebAPIKey,
-		}))
+	// Operator surface (qlab.dev.v1): staging/local only (decision 0008). Mounted
+	// only when configured; absent entirely in production. It is a separate Connect
+	// service with its own operator-secret gate, built by the caller.
+	if opts.OperatorMount != nil {
+		r.Mount(opts.OperatorMount.Path, opts.OperatorMount.Handler)
 	}
 
 	// Mount the Connect-RPC data API. The handler matches the full procedure paths

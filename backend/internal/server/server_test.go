@@ -47,40 +47,50 @@ func TestNewRequiresDependencies(t *testing.T) {
 	})
 }
 
-// TestNewRefusesDevLoginInProduction is the load-bearing dev-auth guard (decision
-// 0007): the server must refuse to boot if the dev-login endpoint is enabled in
+// operatorMountFixture is a stand-in operator mount: a path and a trivial handler,
+// enough to test mounting/guard behavior without the real operator service.
+func operatorMountFixture() *OperatorMount {
+	return &OperatorMount{
+		Path: "/operator-probe/",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	}
+}
+
+// TestNewRefusesOperatorInProduction is the load-bearing operator guard (decision
+// 0008): the server must refuse to boot if the operator surface is enabled in
 // production — the single most dangerous surface if it ever shipped to prod.
-func TestNewRefusesDevLoginInProduction(t *testing.T) {
-	assert.PanicsWithValue(t, "server: dev-login must not be enabled in production", func() {
+func TestNewRefusesOperatorInProduction(t *testing.T) {
+	assert.PanicsWithValue(t, "server: operator surface must not be enabled in production", func() {
 		New(Options{
-			Logger:       logging.Noop(),
-			FirebaseAuth: testFirebaseAuth(t),
-			Production:   true,
-			DevLogin:     &DevLoginConfig{},
+			Logger:        logging.Noop(),
+			FirebaseAuth:  testFirebaseAuth(t),
+			Production:    true,
+			OperatorMount: operatorMountFixture(),
 		})
 	})
 }
 
-// TestDevLoginMountedOnlyWhenEnabled verifies the route exists when configured and
-// is entirely absent (404) otherwise — so a production build (DevLogin nil) has no
-// dev-login surface at all.
-func TestDevLoginMountedOnlyWhenEnabled(t *testing.T) {
-	// Disabled: the route is not registered, so a request 404s.
+// TestOperatorMountedOnlyWhenEnabled verifies the operator surface is reachable when
+// configured and entirely absent (404) otherwise — so a production build
+// (OperatorMount nil) has no operator surface at all.
+func TestOperatorMountedOnlyWhenEnabled(t *testing.T) {
+	// Disabled: nothing registered under the path, so a request 404s.
 	off := httptest.NewServer(New(testOptions(t)))
 	defer off.Close()
-	resp, err := off.Client().Post(off.URL+pathDevLogin, "application/json", http.NoBody)
+	resp, err := off.Client().Get(off.URL + "/operator-probe/x")
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "dev-login must be absent when not configured")
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "operator surface must be absent when not configured")
 
-	// Enabled: the route is registered. An empty body fails the handler's own
-	// validation (400), proving the route exists (not 404).
+	// Enabled: the mount handles the path (200 from the fixture handler).
 	opts := testOptions(t)
-	opts.DevLogin = &DevLoginConfig{}
+	opts.OperatorMount = operatorMountFixture()
 	on := httptest.NewServer(New(opts))
 	defer on.Close()
-	resp, err = on.Client().Post(on.URL+pathDevLogin, "application/json", http.NoBody)
+	resp, err = on.Client().Get(on.URL + "/operator-probe/x")
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.NotEqual(t, http.StatusNotFound, resp.StatusCode, "dev-login must be mounted when configured")
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "operator surface must be mounted when configured")
 }

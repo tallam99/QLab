@@ -47,6 +47,11 @@ services:
       # verification and needs no credentials — local only.
       FIREBASE_PROJECT_ID: "demo-qlab"
       FIREBASE_AUTH_EMULATOR_HOST: "firebase-auth:9099"
+      # Operator surface (qlab.dev.v1): staging/local only. The secret gates it; the
+      # elevated DB URL is the local superuser (which already bypasses RLS locally).
+      # Both are absent in production by construction (decision 0008).
+      OPERATOR_SECRET: "local-operator-secret"
+      OPERATOR_DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
     ports:
       - "8090:8090"
     depends_on:

@@ -1,6 +1,6 @@
 //go:build testunit
 
-package devlogin
+package firebase
 
 import "testing"
 

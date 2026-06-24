@@ -94,3 +94,68 @@ ON CONFLICT (slots_id) DO UPDATE SET
 INSERT INTO outbox (labs_id, dedup_key, event_type, payload, recipient_user_id, created_by, updated_by)
 VALUES (@labs_id, @dedup_key, @event_type, @payload::jsonb, @recipient_user_id, @actor, @actor)
 ON CONFLICT (dedup_key) DO NOTHING;
+
+-- Operator tooling (staging/local only; runs on an elevated, RLS-bypassing
+-- connection). These are cross-tenant admin queries — see store.OperatorStore.
+
+-- name: CreateLab :one
+INSERT INTO labs (labs_id, name, created_by, updated_by)
+VALUES (@labs_id, @name, @actor, @actor)
+RETURNING labs_id, name;
+
+-- name: CreateUserWithEmail :one
+INSERT INTO users (users_id, email, first_name, last_name, created_by, updated_by)
+VALUES (@users_id, @email, @first_name, @last_name, @actor, @actor)
+RETURNING users_id, firebase_uid, email, first_name, last_name;
+
+-- name: CreateMembership :exec
+INSERT INTO labs_users (labs_id, users_id, role, created_by, updated_by)
+VALUES (@labs_id, @users_id, @role::lab_role, @actor, @actor);
+
+-- name: CreateResourcePool :one
+INSERT INTO resource_pools (resource_pools_id, labs_id, kind, name, created_by, updated_by)
+VALUES (@resource_pools_id, @labs_id, @kind::resource_kind, @name, @actor, @actor)
+RETURNING resource_pools_id, labs_id, kind, name;
+
+-- name: CreateResource :one
+INSERT INTO resources (resources_id, resource_pools_id, labs_id, kind, name, created_by, updated_by)
+VALUES (@resources_id, @resource_pools_id, @labs_id, @kind::resource_kind, @name, @actor, @actor)
+RETURNING resources_id, resource_pools_id, labs_id, kind, name;
+
+-- name: ListLabsWithCounts :many
+SELECT l.labs_id, l.name,
+       (SELECT count(*) FROM labs_users lu WHERE lu.labs_id = l.labs_id) AS user_count,
+       (SELECT count(*) FROM resources r WHERE r.labs_id = l.labs_id) AS resource_count
+FROM labs l
+WHERE @feature::text = '' OR l.name ILIKE '%' || @feature || '%'
+ORDER BY l.name, l.labs_id;
+
+-- name: LabByID :one
+SELECT labs_id, name FROM labs WHERE labs_id = $1;
+
+-- name: ListLabMembers :many
+SELECT u.users_id, u.firebase_uid, u.email, u.first_name, u.last_name, lu.role
+FROM labs_users lu JOIN users u ON u.users_id = lu.users_id
+WHERE lu.labs_id = $1
+ORDER BY lu.role, u.email;
+
+-- name: ListLabResourcePools :many
+SELECT resource_pools_id, labs_id, kind, name FROM resource_pools
+WHERE labs_id = $1 ORDER BY name, resource_pools_id;
+
+-- name: ListLabResources :many
+SELECT resources_id, resource_pools_id, labs_id, kind, name FROM resources
+WHERE labs_id = $1 ORDER BY name, resources_id;
+
+-- name: ListLabSlots :many
+SELECT slots_id, labs_id, users_id, resource_pools_id, resources_id,
+       slot_priority, status, desired_start, lookahead, duration,
+       committed_start, actual_start, note
+FROM slots WHERE labs_id = $1
+ORDER BY resource_pools_id, slot_priority, slots_id;
+
+-- name: UserByID :one
+SELECT users_id, firebase_uid, email, first_name, last_name FROM users WHERE users_id = $1;
+
+-- name: DeleteLab :execrows
+DELETE FROM labs WHERE labs_id = $1;

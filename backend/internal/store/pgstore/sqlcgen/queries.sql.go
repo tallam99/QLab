@@ -28,6 +28,190 @@ func (q *Queries) CountLabs(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const createLab = `-- name: CreateLab :one
+
+INSERT INTO labs (labs_id, name, created_by, updated_by)
+VALUES ($1, $2, $3, $3)
+RETURNING labs_id, name
+`
+
+type CreateLabParams struct {
+	LabsID uuid.UUID
+	Name   string
+	Actor  *uuid.UUID
+}
+
+type CreateLabRow struct {
+	LabsID uuid.UUID
+	Name   string
+}
+
+// Operator tooling (staging/local only; runs on an elevated, RLS-bypassing
+// connection). These are cross-tenant admin queries — see store.OperatorStore.
+func (q *Queries) CreateLab(ctx context.Context, arg CreateLabParams) (CreateLabRow, error) {
+	row := q.db.QueryRow(ctx, createLab, arg.LabsID, arg.Name, arg.Actor)
+	var i CreateLabRow
+	err := row.Scan(&i.LabsID, &i.Name)
+	return i, err
+}
+
+const createMembership = `-- name: CreateMembership :exec
+INSERT INTO labs_users (labs_id, users_id, role, created_by, updated_by)
+VALUES ($1, $2, $3::lab_role, $4, $4)
+`
+
+type CreateMembershipParams struct {
+	LabsID  uuid.UUID
+	UsersID uuid.UUID
+	Role    string
+	Actor   *uuid.UUID
+}
+
+func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) error {
+	_, err := q.db.Exec(ctx, createMembership,
+		arg.LabsID,
+		arg.UsersID,
+		arg.Role,
+		arg.Actor,
+	)
+	return err
+}
+
+const createResource = `-- name: CreateResource :one
+INSERT INTO resources (resources_id, resource_pools_id, labs_id, kind, name, created_by, updated_by)
+VALUES ($1, $2, $3, $4::resource_kind, $5, $6, $6)
+RETURNING resources_id, resource_pools_id, labs_id, kind, name
+`
+
+type CreateResourceParams struct {
+	ResourcesID     uuid.UUID
+	ResourcePoolsID uuid.UUID
+	LabsID          uuid.UUID
+	Kind            string
+	Name            string
+	Actor           *uuid.UUID
+}
+
+type CreateResourceRow struct {
+	ResourcesID     uuid.UUID
+	ResourcePoolsID uuid.UUID
+	LabsID          uuid.UUID
+	Kind            string
+	Name            string
+}
+
+func (q *Queries) CreateResource(ctx context.Context, arg CreateResourceParams) (CreateResourceRow, error) {
+	row := q.db.QueryRow(ctx, createResource,
+		arg.ResourcesID,
+		arg.ResourcePoolsID,
+		arg.LabsID,
+		arg.Kind,
+		arg.Name,
+		arg.Actor,
+	)
+	var i CreateResourceRow
+	err := row.Scan(
+		&i.ResourcesID,
+		&i.ResourcePoolsID,
+		&i.LabsID,
+		&i.Kind,
+		&i.Name,
+	)
+	return i, err
+}
+
+const createResourcePool = `-- name: CreateResourcePool :one
+INSERT INTO resource_pools (resource_pools_id, labs_id, kind, name, created_by, updated_by)
+VALUES ($1, $2, $3::resource_kind, $4, $5, $5)
+RETURNING resource_pools_id, labs_id, kind, name
+`
+
+type CreateResourcePoolParams struct {
+	ResourcePoolsID uuid.UUID
+	LabsID          uuid.UUID
+	Kind            string
+	Name            string
+	Actor           *uuid.UUID
+}
+
+type CreateResourcePoolRow struct {
+	ResourcePoolsID uuid.UUID
+	LabsID          uuid.UUID
+	Kind            string
+	Name            string
+}
+
+func (q *Queries) CreateResourcePool(ctx context.Context, arg CreateResourcePoolParams) (CreateResourcePoolRow, error) {
+	row := q.db.QueryRow(ctx, createResourcePool,
+		arg.ResourcePoolsID,
+		arg.LabsID,
+		arg.Kind,
+		arg.Name,
+		arg.Actor,
+	)
+	var i CreateResourcePoolRow
+	err := row.Scan(
+		&i.ResourcePoolsID,
+		&i.LabsID,
+		&i.Kind,
+		&i.Name,
+	)
+	return i, err
+}
+
+const createUserWithEmail = `-- name: CreateUserWithEmail :one
+INSERT INTO users (users_id, email, first_name, last_name, created_by, updated_by)
+VALUES ($1, $2, $3, $4, $5, $5)
+RETURNING users_id, firebase_uid, email, first_name, last_name
+`
+
+type CreateUserWithEmailParams struct {
+	UsersID   uuid.UUID
+	Email     string
+	FirstName string
+	LastName  string
+	Actor     *uuid.UUID
+}
+
+type CreateUserWithEmailRow struct {
+	UsersID     uuid.UUID
+	FirebaseUid *string
+	Email       string
+	FirstName   string
+	LastName    string
+}
+
+func (q *Queries) CreateUserWithEmail(ctx context.Context, arg CreateUserWithEmailParams) (CreateUserWithEmailRow, error) {
+	row := q.db.QueryRow(ctx, createUserWithEmail,
+		arg.UsersID,
+		arg.Email,
+		arg.FirstName,
+		arg.LastName,
+		arg.Actor,
+	)
+	var i CreateUserWithEmailRow
+	err := row.Scan(
+		&i.UsersID,
+		&i.FirebaseUid,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+	)
+	return i, err
+}
+
+const deleteLab = `-- name: DeleteLab :execrows
+DELETE FROM labs WHERE labs_id = $1
+`
+
+func (q *Queries) DeleteLab(ctx context.Context, labsID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLab, labsID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertOutbox = `-- name: InsertOutbox :exec
 INSERT INTO outbox (labs_id, dedup_key, event_type, payload, recipient_user_id, created_by, updated_by)
 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $6)
@@ -71,6 +255,22 @@ func (q *Queries) IsMember(ctx context.Context, arg IsMemberParams) (bool, error
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const labByID = `-- name: LabByID :one
+SELECT labs_id, name FROM labs WHERE labs_id = $1
+`
+
+type LabByIDRow struct {
+	LabsID uuid.UUID
+	Name   string
+}
+
+func (q *Queries) LabByID(ctx context.Context, labsID uuid.UUID) (LabByIDRow, error) {
+	row := q.db.QueryRow(ctx, labByID, labsID)
+	var i LabByIDRow
+	err := row.Scan(&i.LabsID, &i.Name)
+	return i, err
 }
 
 const linkFirebaseUID = `-- name: LinkFirebaseUID :one
@@ -120,6 +320,224 @@ func (q *Queries) LinkFirebaseUID(ctx context.Context, arg LinkFirebaseUIDParams
 		&i.LastName,
 	)
 	return i, err
+}
+
+const listLabMembers = `-- name: ListLabMembers :many
+SELECT u.users_id, u.firebase_uid, u.email, u.first_name, u.last_name, lu.role
+FROM labs_users lu JOIN users u ON u.users_id = lu.users_id
+WHERE lu.labs_id = $1
+ORDER BY lu.role, u.email
+`
+
+type ListLabMembersRow struct {
+	UsersID     uuid.UUID
+	FirebaseUid *string
+	Email       string
+	FirstName   string
+	LastName    string
+	Role        string
+}
+
+func (q *Queries) ListLabMembers(ctx context.Context, labsID uuid.UUID) ([]ListLabMembersRow, error) {
+	rows, err := q.db.Query(ctx, listLabMembers, labsID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLabMembersRow{}
+	for rows.Next() {
+		var i ListLabMembersRow
+		if err := rows.Scan(
+			&i.UsersID,
+			&i.FirebaseUid,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.Role,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLabResourcePools = `-- name: ListLabResourcePools :many
+SELECT resource_pools_id, labs_id, kind, name FROM resource_pools
+WHERE labs_id = $1 ORDER BY name, resource_pools_id
+`
+
+type ListLabResourcePoolsRow struct {
+	ResourcePoolsID uuid.UUID
+	LabsID          uuid.UUID
+	Kind            string
+	Name            string
+}
+
+func (q *Queries) ListLabResourcePools(ctx context.Context, labsID uuid.UUID) ([]ListLabResourcePoolsRow, error) {
+	rows, err := q.db.Query(ctx, listLabResourcePools, labsID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLabResourcePoolsRow{}
+	for rows.Next() {
+		var i ListLabResourcePoolsRow
+		if err := rows.Scan(
+			&i.ResourcePoolsID,
+			&i.LabsID,
+			&i.Kind,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLabResources = `-- name: ListLabResources :many
+SELECT resources_id, resource_pools_id, labs_id, kind, name FROM resources
+WHERE labs_id = $1 ORDER BY name, resources_id
+`
+
+type ListLabResourcesRow struct {
+	ResourcesID     uuid.UUID
+	ResourcePoolsID uuid.UUID
+	LabsID          uuid.UUID
+	Kind            string
+	Name            string
+}
+
+func (q *Queries) ListLabResources(ctx context.Context, labsID uuid.UUID) ([]ListLabResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listLabResources, labsID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLabResourcesRow{}
+	for rows.Next() {
+		var i ListLabResourcesRow
+		if err := rows.Scan(
+			&i.ResourcesID,
+			&i.ResourcePoolsID,
+			&i.LabsID,
+			&i.Kind,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLabSlots = `-- name: ListLabSlots :many
+SELECT slots_id, labs_id, users_id, resource_pools_id, resources_id,
+       slot_priority, status, desired_start, lookahead, duration,
+       committed_start, actual_start, note
+FROM slots WHERE labs_id = $1
+ORDER BY resource_pools_id, slot_priority, slots_id
+`
+
+type ListLabSlotsRow struct {
+	SlotsID         uuid.UUID
+	LabsID          uuid.UUID
+	UsersID         uuid.UUID
+	ResourcePoolsID uuid.UUID
+	ResourcesID     *uuid.UUID
+	SlotPriority    int64
+	Status          string
+	DesiredStart    time.Time
+	Lookahead       int32
+	Duration        int32
+	CommittedStart  *time.Time
+	ActualStart     *time.Time
+	Note            string
+}
+
+func (q *Queries) ListLabSlots(ctx context.Context, labsID uuid.UUID) ([]ListLabSlotsRow, error) {
+	rows, err := q.db.Query(ctx, listLabSlots, labsID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLabSlotsRow{}
+	for rows.Next() {
+		var i ListLabSlotsRow
+		if err := rows.Scan(
+			&i.SlotsID,
+			&i.LabsID,
+			&i.UsersID,
+			&i.ResourcePoolsID,
+			&i.ResourcesID,
+			&i.SlotPriority,
+			&i.Status,
+			&i.DesiredStart,
+			&i.Lookahead,
+			&i.Duration,
+			&i.CommittedStart,
+			&i.ActualStart,
+			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLabsWithCounts = `-- name: ListLabsWithCounts :many
+SELECT l.labs_id, l.name,
+       (SELECT count(*) FROM labs_users lu WHERE lu.labs_id = l.labs_id) AS user_count,
+       (SELECT count(*) FROM resources r WHERE r.labs_id = l.labs_id) AS resource_count
+FROM labs l
+WHERE $1::text = '' OR l.name ILIKE '%' || $1 || '%'
+ORDER BY l.name, l.labs_id
+`
+
+type ListLabsWithCountsRow struct {
+	LabsID        uuid.UUID
+	Name          string
+	UserCount     int64
+	ResourceCount int64
+}
+
+func (q *Queries) ListLabsWithCounts(ctx context.Context, feature string) ([]ListLabsWithCountsRow, error) {
+	rows, err := q.db.Query(ctx, listLabsWithCounts, feature)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLabsWithCountsRow{}
+	for rows.Next() {
+		var i ListLabsWithCountsRow
+		if err := rows.Scan(
+			&i.LabsID,
+			&i.Name,
+			&i.UserCount,
+			&i.ResourceCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLiveSlotsForUpdate = `-- name: ListLiveSlotsForUpdate :many
@@ -480,6 +898,31 @@ type UserByFirebaseUIDRow struct {
 func (q *Queries) UserByFirebaseUID(ctx context.Context, firebaseUid string) (UserByFirebaseUIDRow, error) {
 	row := q.db.QueryRow(ctx, userByFirebaseUID, firebaseUid)
 	var i UserByFirebaseUIDRow
+	err := row.Scan(
+		&i.UsersID,
+		&i.FirebaseUid,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+	)
+	return i, err
+}
+
+const userByID = `-- name: UserByID :one
+SELECT users_id, firebase_uid, email, first_name, last_name FROM users WHERE users_id = $1
+`
+
+type UserByIDRow struct {
+	UsersID     uuid.UUID
+	FirebaseUid *string
+	Email       string
+	FirstName   string
+	LastName    string
+}
+
+func (q *Queries) UserByID(ctx context.Context, usersID uuid.UUID) (UserByIDRow, error) {
+	row := q.db.QueryRow(ctx, userByID, usersID)
+	var i UserByIDRow
 	err := row.Scan(
 		&i.UsersID,
 		&i.FirebaseUid,
