@@ -1,5 +1,6 @@
 import { SlotStatus } from "../protogen/qlab/v1/types_pb";
 import {
+  type ResourceCell,
   SlotActions,
   type SlotHandlers,
   type SlotRow,
@@ -16,7 +17,7 @@ import {
 
 interface PoolViewProps extends SlotHandlers {
   poolName: string;
-  resourceCount: number;
+  resources: ResourceCell[];
   rows: SlotRow[];
   pending?: boolean;
   onBook: () => void;
@@ -70,32 +71,33 @@ function ForwardReach({ minutes, earliest }: { minutes: number; earliest: Date }
   );
 }
 
-// RunningGrid shows what's on each resource right now: the active slot pinned to it, or
-// "Free". Resource names are generic for now (interchangeable; named resources later).
+// RunningGrid shows what's on each resource right now: the active slot pinned to it
+// (matched by resource id), or "Free". Labels come from the container (generic for now;
+// named resources later) so the id↔label scheme isn't re-derived here.
 function RunningGrid({
-  resourceCount,
+  resources,
   active,
   pending,
   handlers,
 }: {
-  resourceCount: number;
+  resources: ResourceCell[];
   active: SlotRow[];
   pending?: boolean;
   handlers: SlotHandlers;
 }) {
-  const cells = Array.from({ length: resourceCount }, (_, i) => {
-    const name = `Hood ${i + 1}`;
-    return { name, slot: active.find((s) => s.resourceLabel === name) ?? null };
-  });
+  const cells = resources.map((r) => ({
+    ...r,
+    slot: active.find((s) => s.resourceId === r.id) ?? null,
+  }));
   return (
     <div className="grid grid-cols-2 gap-2">
-      {cells.map(({ name, slot }) => (
+      {cells.map(({ id, label, slot }) => (
         <div
-          key={name}
+          key={id}
           className={`rounded-lg border bg-base p-3 ${slot?.overrun ? "border-danger/50" : "border-edge"}`}
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-muted text-xs">{name}</span>
+            <span className="text-muted text-xs">{label}</span>
             {slot && <StatusPill row={slot} />}
           </div>
           {slot ? (
@@ -259,7 +261,7 @@ export function PoolView(props: PoolViewProps) {
       <header className="flex items-center justify-between border-edge border-b px-4 py-3">
         <h2 className="text-sm">
           <span className="font-semibold text-teal">{props.poolName}</span>
-          <span className="text-muted"> · {props.resourceCount} resources</span>
+          <span className="text-muted"> · {props.resources.length} resources</span>
         </h2>
         <button type="button" disabled={pending} className={bookButtonClass} onClick={props.onBook}>
           + Book slot
@@ -267,7 +269,7 @@ export function PoolView(props: PoolViewProps) {
       </header>
       <div className="flex flex-col gap-5 p-4">
         <RunningGrid
-          resourceCount={props.resourceCount}
+          resources={props.resources}
           active={active}
           pending={pending}
           handlers={handlers}

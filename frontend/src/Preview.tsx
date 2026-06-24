@@ -1,7 +1,12 @@
 import { PoolView } from "./components/PoolView";
 import { ThemeToggle } from "./components/ThemeToggle";
-import type { SlotRow } from "./components/slot-ui";
+import type { ResourceCell, SlotRow } from "./components/slot-ui";
 import { SlotStatus } from "./protogen/qlab/v1/types_pb";
+
+const resources: ResourceCell[] = [
+  { id: "h1", label: "Hood 1" },
+  { id: "h2", label: "Hood 2" },
+];
 
 // Preview is the dev-only component gallery (Stage B of the design loop): product
 // components rendered with mock data in every state, so the visual can be reviewed and
@@ -24,7 +29,7 @@ const rows: SlotRow[] = [
     overrun: false,
     reclaimable: false,
     youAreNext: false,
-    resourceLabel: "Hood 1",
+    resourceId: "h1",
   },
   {
     slotId: "2",
@@ -38,7 +43,7 @@ const rows: SlotRow[] = [
     overrun: true,
     reclaimable: false,
     youAreNext: true,
-    resourceLabel: "Hood 2",
+    resourceId: "h2",
   },
   {
     slotId: "3",
@@ -106,11 +111,11 @@ export function Preview() {
           <p className="mb-2 text-muted text-xs uppercase tracking-wide">
             Populated (viewer = Mia)
           </p>
-          <PoolView poolName="Vent Hoods" resourceCount={2} rows={rows} {...handlers} />
+          <PoolView poolName="Vent Hoods" resources={resources} rows={rows} {...handlers} />
         </div>
         <div>
           <p className="mb-2 text-muted text-xs uppercase tracking-wide">Empty</p>
-          <PoolView poolName="Vent Hoods" resourceCount={2} rows={[]} {...handlers} />
+          <PoolView poolName="Vent Hoods" resources={resources} rows={[]} {...handlers} />
         </div>
       </div>
     </div>

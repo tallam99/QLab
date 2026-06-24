@@ -123,13 +123,15 @@ the status `StatusPill`, and `SlotActions` — the contextual action logic in on
   QlabService.method.getSchedule, …, { enabled: canQuery })`; and a `useMutation` per
   mutating RPC (createSlot/clockIn/clockOut/cancelSlot/pokeOccupant/forceClockOut/
   forceNoShow). `resultToRows(result, …)` (exported, pure, unit-tested) maps the
-  engine `RescheduleResult` → `SlotRow[]`, deriving `overrun`/`earliestStart`/resource
-  label client-side and `reclaimable` from `positions` (`youAreNext` approximated —
-  the backend enforces it). Each action `mutateAsync`es then `refetch`es. Renders
-  loading/error then `<PoolView>`.
+  engine `RescheduleResult` → `SlotRow[]`, deriving `overrun`/`earliestStart`/`resourceId`
+  client-side and `reclaimable` from `positions` (`youAreNext` = the owner of the
+  front-most *runnable* scheduled slot, excluding a lapsed no-show — an approximation the
+  backend enforces). A 30s `now` tick re-derives the time-based flags while idle; each
+  action `mutateAsync`es then `refetch`es (settling actions set a transient notice).
+  Renders loading/error then `<PoolView>`.
 - **`PoolView` (`components/PoolView.tsx`)** — purely presentational (data in,
-  callbacks out). A **"running now" grid** (one cell per resource — active slots are
-  pinned to a resource, scheduled ones aren't) atop a **vertical timeline** ("now" at
+  callbacks out). A **"running now" grid** (one cell per resource, active slots matched
+  to cells **by id**; labels are derived once in the container) atop a **vertical timeline** ("now" at
   the top flowing down): booked slots as cards with **proportional compressed heights**
   and a left **accent bar** (amber = flexible/has lookahead, neutral = fixed), striped
   **gap cards** for bookable openings, and a dashed **forward-reach** outline above the

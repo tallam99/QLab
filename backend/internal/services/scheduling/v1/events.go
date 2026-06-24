@@ -43,6 +43,10 @@ func (s *service) Schedule(ctx context.Context, p principal.Principal, poolID uu
 	if err = s.poolInLab(ctx, p.LabID, poolID); err != nil {
 		return scheduling.Result{}, err
 	}
+	// Two separate reads, but a consistent snapshot: ListSlots is itself one atomic
+	// transaction, and a pool's resources are immutable after provisioning (no event
+	// adds or removes one), so every resource a slot references exists at both reads.
+	// If a resource-mutation RPC ever lands, fold these into a single tx.
 	slots, err := s.store.ListSlots(ctx, p.LabID, poolID)
 	if err != nil {
 		return scheduling.Result{}, err

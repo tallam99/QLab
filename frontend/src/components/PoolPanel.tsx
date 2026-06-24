@@ -2,13 +2,13 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { useMutation, useQuery } from "@connectrpc/connect-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { QlabService } from "../protogen/qlab/v1/service_pb";
 import type { RescheduleResult } from "../protogen/qlab/v1/types_pb";
 import { SlotStatus } from "../protogen/qlab/v1/types_pb";
 import { useWorkspace } from "../workspace/WorkspaceProvider";
 import { PoolView } from "./PoolView";
-import type { SlotRow } from "./slot-ui";
+import type { ResourceCell, SlotRow } from "./slot-ui";
 
 function toDate(ts?: Timestamp): Date | undefined {
   return ts ? timestampDate(ts) : undefined;
@@ -22,26 +22,30 @@ interface MapContext {
   currentUserId: string;
   now: Date;
   memberLabel: Map<string, string>;
-  resourceLabel: Map<string, string>;
 }
 
 // resultToRows turns a GetSchedule RescheduleResult into the view's SlotRow[]. The
 // engine supplies placement + reclaimable (via positions); overrun, earliestStart, and
-// the resource label are derived here from data already on the slot.
+// next-in-line are derived here from data already on the slot.
 export function resultToRows(result: RescheduleResult | undefined, ctx: MapContext): SlotRow[] {
   if (!result) {
     return [];
   }
   const posBySlot = new Map(result.positions.map((p) => [p.slotId, p]));
-  // youAreNext is approximated as "you own the front of the queue" — the gate for the
-  // poke/boot/reclaim actions. The backend enforces the real next-in-line check.
-  const front = result.slots
-    .filter((s) => s.status === SlotStatus.SCHEDULED)
+  const reclaimable = (slotId: string) => posBySlot.get(slotId)?.reclaimable ?? false;
+
+  // youAreNext gates poke/boot/reclaim. The next-in-line is whoever owns the front-most
+  // SCHEDULED slot that is itself runnable — i.e. excluding a lapsed no-show, since that
+  // slot is the one being reclaimed, not the one reclaiming it. (Without that exclusion
+  // the no-show owner looks "next" and Reclaim never shows for the actual next user.)
+  // An approximation; the backend enforces the real check.
+  const nextInLine = result.slots
+    .filter((s) => s.status === SlotStatus.SCHEDULED && !reclaimable(s.id))
     .reduce<{ userId: string; slotPriority: number } | null>(
       (min, s) => (!min || s.slotPriority < min.slotPriority ? s : min),
       null,
     );
-  const youOwnFront = front ? front.userId === ctx.currentUserId : false;
+  const youAreNextInLine = nextInLine ? nextInLine.userId === ctx.currentUserId : false;
 
   return result.slots.map((s) => {
     const start = toDate(s.actualStart) ?? toDate(s.desiredStart);
@@ -50,7 +54,7 @@ export function resultToRows(result: RescheduleResult | undefined, ctx: MapConte
       s.status === SlotStatus.ACTIVE &&
       !!start &&
       start.getTime() + s.durationMinutes * 60000 < ctx.now.getTime();
-    const reclaimable = posBySlot.get(s.id)?.reclaimable ?? false;
+    const slotReclaimable = reclaimable(s.id);
 
     let earliestStart: Date | undefined;
     if (isYou && s.status === SlotStatus.SCHEDULED && s.lookaheadMinutes > 0) {
@@ -73,10 +77,9 @@ export function resultToRows(result: RescheduleResult | undefined, ctx: MapConte
       durationMinutes: s.durationMinutes,
       lookaheadMinutes: s.lookaheadMinutes,
       overrun,
-      reclaimable,
-      youAreNext: !isYou && (overrun || reclaimable) ? youOwnFront : false,
-      resourceLabel:
-        s.status === SlotStatus.ACTIVE ? ctx.resourceLabel.get(s.assignedResourceId) : undefined,
+      reclaimable: slotReclaimable,
+      youAreNext: !isYou && (overrun || slotReclaimable) ? youAreNextInLine : false,
+      resourceId: s.status === SlotStatus.ACTIVE ? s.assignedResourceId : undefined,
       earliestStart,
     };
   });
@@ -105,15 +108,29 @@ export function PoolPanel() {
   const pending = mutations.some((m) => m.isPending);
   const actionError = mutations.find((m) => m.error)?.error;
 
+  // A ticking clock so client-derived flags (overrun, the reach floor) recompute as time
+  // passes even while the page is idle — the schedule itself only refetches on a mutation
+  // (and, next phase, on an SSE push). 30s granularity is plenty for minute-scale slots.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // notice: a transient confirmation for actions whose row then disappears (cancel /
+  // clock out), so the change doesn't happen silently. Cleared when the next action runs.
+  const [notice, setNotice] = useState<string | null>(null);
+
   const poolResources = useMemo(
     () => (workspace?.resources ?? []).filter((r) => r.poolId === poolId),
     [workspace, poolId],
   );
-  const resourceLabel = useMemo(() => {
-    const m = new Map<string, string>();
-    poolResources.forEach((r, i) => m.set(r.id, `Hood ${i + 1}`));
-    return m;
-  }, [poolResources]);
+  // The running-grid cells: one per resource, labelled once here (generic for now; named
+  // resources later). The view matches active slots to these by id, never by label.
+  const resources = useMemo<ResourceCell[]>(
+    () => poolResources.map((r, i) => ({ id: r.id, label: `Hood ${i + 1}` })),
+    [poolResources],
+  );
   const memberLabel = useMemo(() => {
     const m = new Map<string, string>();
     for (const mem of workspace?.members ?? []) {
@@ -126,18 +143,22 @@ export function PoolPanel() {
     () =>
       resultToRows(data?.result, {
         currentUserId: actingUserId ?? "",
-        now: new Date(),
-        resourceLabel,
+        now,
         memberLabel,
       }),
-    [data, actingUserId, resourceLabel, memberLabel],
+    [data, actingUserId, now, memberLabel],
   );
 
-  // run fires a mutation then refetches; errors surface via the mutation's own state.
-  async function run(fn: () => Promise<unknown>) {
+  // run fires a mutation, clears any stale notice, then refetches; errors surface via the
+  // mutation's own state. An optional doneMsg confirms an action whose row then vanishes.
+  async function run(fn: () => Promise<unknown>, doneMsg?: string) {
+    setNotice(null);
     try {
       await fn();
       await refetch();
+      if (doneMsg) {
+        setNotice(doneMsg);
+      }
     } catch {
       /* surfaced via actionError */
     }
@@ -145,8 +166,10 @@ export function PoolPanel() {
 
   const handlers = {
     onClockIn: (slotId: string) => void run(() => clockIn.mutateAsync({ slotId })),
-    onClockOut: (slotId: string) => void run(() => clockOut.mutateAsync({ slotId })),
-    onCancel: (slotId: string) => void run(() => cancelSlot.mutateAsync({ slotId })),
+    onClockOut: (slotId: string) =>
+      void run(() => clockOut.mutateAsync({ slotId }), "Clocked out — slot completed."),
+    onCancel: (slotId: string) =>
+      void run(() => cancelSlot.mutateAsync({ slotId }), "Booking cancelled."),
     onPoke: (slotId: string) => void run(() => poke.mutateAsync({ slotId })),
     onForceClockOut: (slotId: string) => void run(() => forceClockOut.mutateAsync({ slotId })),
     onForceNoShow: (slotId: string) => void run(() => forceNoShow.mutateAsync({ slotId })),
@@ -178,9 +201,10 @@ export function PoolPanel() {
   return (
     <div className="flex flex-col gap-2">
       {actionError && <p className="text-danger text-sm">{errMessage(actionError)}</p>}
+      {notice && <p className="text-muted text-sm">{notice}</p>}
       <PoolView
         poolName={poolName}
-        resourceCount={poolResources.length}
+        resources={resources}
         rows={rows}
         pending={pending}
         {...handlers}

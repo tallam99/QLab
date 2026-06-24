@@ -12,6 +12,34 @@ import (
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 )
 
+// TestGetScheduleNoResources guards the read path for a pool with no resources: the
+// engine rejects an empty resource set, so GetSchedule must not run it — it surfaces the
+// pool's live slots unplaced (no positions) rather than failing the read. (A pool can
+// legitimately have no resources yet; the old list view rendered an empty state.)
+func (s *IntegrationSuite) TestGetScheduleNoResources() {
+	t := s.T()
+	ctx := context.Background()
+	lab := h.makeLab(t, 0) // a pool with zero resources
+	c := h.client(t, lab.Member1, lab.LabID)
+
+	// Empty pool: no error, no slots.
+	empty, err := c.GetSchedule(ctx, connect.NewRequest(&v1.GetScheduleRequest{ResourcePoolId: lab.PoolID}))
+	require.NoError(t, err)
+	assert.Empty(t, empty.Msg.GetResult().GetSlots())
+
+	// A SCHEDULED slot exists but can't be placed — it's still returned, just unplaced.
+	slotID := h.seedSlot(t, slotSpec{
+		Lab: lab.LabID, User: lab.Member1, Pool: lab.PoolID,
+		Priority: 1, Status: "SCHEDULED", Desired: at(60), DurationMin: 30,
+	})
+	sched, err := c.GetSchedule(ctx, connect.NewRequest(&v1.GetScheduleRequest{ResourcePoolId: lab.PoolID}))
+	require.NoError(t, err)
+	result := sched.Msg.GetResult()
+	require.Len(t, result.GetSlots(), 1)
+	assert.Equal(t, slotID, result.GetSlots()[0].GetId())
+	assert.Empty(t, result.GetPositions(), "no resources ⇒ nothing placed")
+}
+
 // TestGetScheduleReadOnly covers the read path behind the UI: GetSchedule returns the
 // pool's current schedule (slots + placements) without mutating anything. It must be
 // idempotent and must not re-commit (a read never notifies or moves committed state).

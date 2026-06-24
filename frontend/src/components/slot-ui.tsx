@@ -19,13 +19,22 @@ export interface SlotRow {
   overrun: boolean;
   reclaimable: boolean;
   youAreNext: boolean;
-  // resourceLabel: which resource the slot is on / projected onto (may be empty).
-  resourceLabel?: string;
+  // resourceId: which resource an ACTIVE slot is pinned to (matched to a grid cell by
+  // id). Empty for SCHEDULED slots — they aren't assigned a resource until they start.
+  resourceId?: string;
   // earliestStart: the earliest this slot could be pulled forward to — its
   // lookahead floor (desired_start - lookahead), clamped to now and to reachable
   // capacity. Set only for the viewer's own scheduled slots; drives the "you could
   // move up to here" reach outline. Absent ⇒ no forward room to show.
   earliestStart?: Date;
+}
+
+// A cell in the running-now grid: a stable resource id to match ACTIVE slots against,
+// plus its display label. Built once in the container so the label scheme lives in one
+// place; the view matches by id, never by re-deriving the label.
+export interface ResourceCell {
+  id: string;
+  label: string;
 }
 
 // The per-slot action callbacks a container wires to the mutating RPCs.
@@ -87,10 +96,10 @@ const btnDanger = `${btnBase} bg-danger text-base hover:opacity-90`;
 const btnSubtle = `${btnBase} bg-edge text-fg hover:opacity-90`;
 
 // SlotActions renders only the controls the viewer can use on this slot right now —
-// own ACTIVE → clock out; own SCHEDULED → clock in / cancel; someone ahead overrunning
-// and you're next → poke / boot; ahead no-show grace lapsed and you're next → reclaim.
-// Authorization is enforced server-side; this just hides actions that would obviously
-// fail. Returns null when there's nothing to do.
+// own ACTIVE → clock out / cancel; own SCHEDULED → clock in / cancel; someone ahead
+// overrunning and you're next → poke / boot; ahead no-show grace lapsed and you're next
+// → reclaim. Authorization is enforced server-side; this just hides actions that would
+// obviously fail. Returns null when there's nothing to do.
 export function SlotActions({
   row,
   pending,
@@ -101,15 +110,27 @@ export function SlotActions({
   handlers: SlotHandlers;
 }) {
   if (row.isYou && row.status === SlotStatus.ACTIVE) {
+    // Cancel an in-progress slot too (abandon vs finish) — CancelSlot settles an ACTIVE
+    // slot server-side, freeing the resource as a cancellation rather than a completion.
     return (
-      <button
-        type="button"
-        disabled={pending}
-        className={btnPrimary}
-        onClick={() => handlers.onClockOut(row.slotId)}
-      >
-        Clock out
-      </button>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          disabled={pending}
+          className={btnPrimary}
+          onClick={() => handlers.onClockOut(row.slotId)}
+        >
+          Clock out
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          className={btnSubtle}
+          onClick={() => handlers.onCancel(row.slotId)}
+        >
+          Cancel
+        </button>
+      </div>
     );
   }
   if (row.isYou && row.status === SlotStatus.SCHEDULED) {
