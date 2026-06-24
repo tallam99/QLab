@@ -16,8 +16,9 @@
 
 `_deploy.yml` for one environment: build the backend image → push to Artifact
 Registry → **run database migrations** (`mage migrate` against the migrator secret,
-before the new revision) → deploy to Cloud Run → build the hello-world frontend with
-the live Cloud Run URL injected → deploy to Firebase Hosting.
+before the new revision) → deploy to Cloud Run → **build the frontend** (`vite build`,
+with the live Cloud Run URL and the Firebase web config injected at build time) →
+deploy to Firebase Hosting.
 
 **Auth is Workload Identity Federation (WIF) end to end** — GitHub mints a
 short-lived OIDC token that GCP trusts, so there is **no long-lived
@@ -492,9 +493,11 @@ What's left for you is to add each Environment's **variables** (below).
 ### Environment variables
 
 > ✅ **Already set** for both environments (via `gh`, from the real values the GCP
-> setup produced). Listed here for reference; `gh variable list --env staging`
-> shows the current values. They are configuration, not secrets — WIF means none
-> are credentials.
+> setup produced), **except `FIREBASE_WEB_API_KEY`** — that one is new (added with
+> the Vite-build deploy swap) and must be set per environment before the frontend
+> can sign in; see "What's left for you". Listed here for reference;
+> `gh variable list --env staging` shows the current values. They are configuration,
+> not secrets — WIF means none are credentials.
 
 These are **environment-scoped Variables** (Settings → Environments → *name* →
 Variables), one set for `staging` and one for `production`.
@@ -510,6 +513,7 @@ Variables), one set for `staging` and one for `production`.
 | `CLOUD_RUN_SERVICE` | `api-staging` | `api-prod` for production |
 | `CORS_ALLOWED_ORIGINS` | `https://qlab-staging.web.app,https://qlab-staging.firebaseapp.com` | the Hosting origin(s); comma-separate if more than one |
 | `FIREBASE_PROJECT_ID` | `qlab-staging` | |
+| `FIREBASE_WEB_API_KEY` | `AIza…` | the Firebase **Web "Browser key"** (Firebase console → Project settings → Your apps → Web app → `apiKey`). Public client config — it ships in the browser bundle — so a Variable, not a secret. Injected into `vite build` as `VITE_FIREBASE_API_KEY`. Staging's value is the same key already stored in the `firebase-web-api-key` Secret Manager secret (used server-side by `MintToken`). |
 | `DATABASE_SECRET` | `db-url-staging` | name of the Secret Manager secret holding the app DB URL (`db-url-production` for prod) |
 | `DATABASE_MIGRATOR_SECRET` | `db-url-staging-migrator` | name of the secret holding the migrator (owner) DB URL the pipeline runs migrations with (`db-url-production-migrator` for prod) |
 
@@ -528,13 +532,22 @@ protection and the deploy graph enforce the gate independently.)
 
 ## What's left for you
 
-All setup is **done**: GCP infra, the database secrets (+ runtime-SA access), the
+Most setup is **done**: GCP infra, the database secrets (+ runtime-SA access), the
 Firebase Hosting default sites (`https://qlab-staging.web.app`,
-`https://qlab-production.web.app`), and all GitHub config (Environments, prod
-reviewer, variables). To ship:
+`https://qlab-production.web.app`), and most GitHub config (Environments, prod
+reviewer, variables). The Vite-build deploy swap adds one new requirement. To ship:
 
-1. **Merge this PR.** Staging deploys automatically.
-2. **Approve the production deploy** when the `production` Environment prompts you.
+1. **Set `FIREBASE_WEB_API_KEY`** as an env-scoped Actions Variable in **both**
+   `staging` and `production` (Settings → Environments → *name* → Variables). The
+   value is that project's Firebase **Web "Browser key"** (Firebase console →
+   Project settings → Your apps → **Web app** → `apiKey`; register a Web app first
+   if the project has none). Staging's value = the key already in the
+   `firebase-web-api-key` secret. The deploy **fails fast** if it's unset, so do
+   this before merging. (Also confirm **Google sign-in** is enabled in each
+   project's Authentication providers, and that `CORS_ALLOWED_ORIGINS` already lists
+   the `.web.app` + `.firebaseapp.com` Hosting origins — it does, from Phase 3.)
+2. **Merge this PR.** Staging deploys automatically.
+3. **Approve the production deploy** when the `production` Environment prompts you.
 
 Then verify (below) and paste the URLs back.
 
@@ -587,12 +600,13 @@ curl https://<cloud-run-url>/healthq   # {"status":"ok"}
 curl https://<cloud-run-url>/readyq    # {"status":"ok"} once the DB connects
 
 # PWA served, and reaching the API cross-origin (CORS):
-open https://<PROJECT_ID>.web.app      # hello-world; status line turns teal on success
+open https://<PROJECT_ID>.web.app      # the real app: sign in with Google, then slots load
 ```
 
-A teal status line on the Hosting page = the browser reached the Cloud Run API
-cross-origin, i.e. **CORS works** — the topology tradeoff (decision 0001) is
-closed. Paste the two URLs back to Claude to confirm the exit criteria.
+Signing in with Google and seeing the slots list load (after pasting a lab + pool,
+or via the dev panel) proves the browser reached the Cloud Run API cross-origin —
+i.e. **CORS works** and Firebase auth is wired — closing the topology tradeoff
+(decision 0001). Paste the URLs back to Claude to confirm.
 
 ---
 
