@@ -10,6 +10,19 @@ import (
 // response, so origin/method changes propagate within a few minutes.
 const preflightMaxAgeSeconds = 300
 
+// Request headers the browser Connect client sends that the API must allow, so
+// the CORS preflight succeeds — a header the browser asks for that the server
+// does not list makes the whole preflight fail, blocking the call.
+const (
+	// headerConnectProtocolVersion is sent on every Connect-protocol request.
+	headerConnectProtocolVersion = "Connect-Protocol-Version"
+	// headerConnectTimeoutMs is sent when the client sets a call deadline.
+	headerConnectTimeoutMs = "Connect-Timeout-Ms"
+	// headerSelectedLab selects the lab the caller acts in; mirrors
+	// api.HeaderSelectedLab (defined here to avoid an httpmw→api import).
+	headerSelectedLab = "X-QLab-Lab"
+)
+
 // CORS returns middleware that permits cross-origin browser requests from the
 // given origins. The PWA (Firebase Hosting) and the API (Cloud Run) are separate
 // origins (decision 0001), so the browser preflights every data call and reads
@@ -25,12 +38,20 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 	}
 	return cors.Handler(cors.Options{
 		AllowedOrigins: allowedOrigins,
-		// GET/POST cover liveness checks and (Phase 6) Connect-RPC, which is POST
-		// over HTTP. When the Connect API lands, widen the header list for its
-		// protocol headers (Connect-Protocol-Version, Connect-Timeout-Ms, …) or
-		// adopt connectrpc.com/cors.
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-		AllowedHeaders:   []string{headerAccept, headerContentType, headerAuthorization, HeaderRequestID},
+		// GET/POST cover liveness checks and Connect-RPC, which is POST over HTTP.
+		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
+		// The browser Connect client preflights these: the standard request headers,
+		// our auth pair (Authorization + the selected-lab header), and the Connect
+		// protocol headers. Omitting any one fails the preflight for the whole call.
+		AllowedHeaders: []string{
+			headerAccept,
+			headerContentType,
+			headerAuthorization,
+			HeaderRequestID,
+			headerSelectedLab,
+			headerConnectProtocolVersion,
+			headerConnectTimeoutMs,
+		},
 		ExposedHeaders:   []string{HeaderRequestID},
 		AllowCredentials: false, // auth is a Bearer JWT in a header, not a cookie
 		MaxAge:           preflightMaxAgeSeconds,
