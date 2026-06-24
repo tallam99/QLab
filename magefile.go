@@ -342,10 +342,20 @@ func TestIntegration() error {
 // order. Add logic-dense packages here as they land; glue/infra packages (DB
 // wiring, HTTP lifecycle) aren't good mutation fodder.
 var mutateDirs = []string{
-	// The pure scheduling engine — the product's core logic.
+	// The pure scheduling engine — the product's core logic. The parent holds the
+	// domain types + Input.Validate; basic is the reschedule implementation (its two
+	// surviving mutants are the documented equivalents: a `<`/`<=` on the
+	// unique-by-Validate priority sort and a slice capacity hint — efficacy is not gated).
 	"./backend/internal/dynamicqueue",
+	"./backend/internal/dynamicqueue/basic",
 	// The authentication provisioning state machine: branchy logic with unit tests.
 	"./backend/internal/services/authentication/v1",
+	// The membership-policy gate every RPC runs behind.
+	"./backend/internal/services/authz/v1",
+	// Config cross-field validation + the QLAB_ENV decoder.
+	"./backend/internal/config",
+	// The store-domain → wire conversions shared by both transports.
+	"./backend/internal/protoconv",
 }
 
 // Mutate runs mutation testing (gremlins) over mutateDirs to verify the test suite

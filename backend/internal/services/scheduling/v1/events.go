@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/tallam99/qlab/backend/internal/observability"
 	"github.com/tallam99/qlab/backend/internal/principal"
 	"github.com/tallam99/qlab/backend/internal/services/scheduling"
 	"github.com/tallam99/qlab/backend/internal/store"
@@ -13,11 +14,15 @@ import (
 
 // ListSlots returns the pool's slots after verifying the caller belongs to the
 // lab. Read-only: it reflects the schedule the last event produced.
-func (s *service) ListSlots(ctx context.Context, p principal.Principal, poolID uuid.UUID) ([]store.Slot, error) {
-	if err := s.authorize(ctx, p); err != nil {
+func (s *service) ListSlots(ctx context.Context, p principal.Principal, poolID uuid.UUID) (slots []store.Slot, err error) {
+	ctx, span := observability.Start(ctx, "scheduling.list_slots",
+		observability.Event("list_slots"), observability.LabID(p.LabID), observability.PoolID(poolID))
+	defer observability.End(span, &err)
+
+	if err = s.authorize(ctx, p); err != nil {
 		return nil, err
 	}
-	if err := s.poolInLab(ctx, p.LabID, poolID); err != nil {
+	if err = s.poolInLab(ctx, p.LabID, poolID); err != nil {
 		return nil, err
 	}
 	return s.store.ListSlots(ctx, p.LabID, poolID)
@@ -32,7 +37,7 @@ func (s *service) CreateSlot(ctx context.Context, p principal.Principal, params 
 	if err := s.poolInLab(ctx, p.LabID, params.ResourcePoolID); err != nil {
 		return scheduling.Result{}, err
 	}
-	return s.mutate(ctx, p, params.ResourcePoolID, func(working []store.Slot, _ []store.Resource, _ time.Time) ([]store.Slot, []store.OutboxRow, error) {
+	return s.mutate(ctx, p, "create_slot", params.ResourcePoolID, func(working []store.Slot, _ []store.Resource, _ time.Time) ([]store.Slot, []store.OutboxRow, error) {
 		working = append(working, store.Slot{
 			ID:               uuid.New(),
 			LabID:            p.LabID,
@@ -61,7 +66,7 @@ func (s *service) ClockUserIn(ctx context.Context, p principal.Principal, slotID
 	if err != nil {
 		return scheduling.Result{}, err
 	}
-	return s.mutate(ctx, p, target.ResourcePoolID, func(working []store.Slot, resources []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error) {
+	return s.mutate(ctx, p, "clock_in", target.ResourcePoolID, func(working []store.Slot, resources []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error) {
 		t := findSlot(working, slotID)
 		if t == nil || t.Status != store.SlotStatusScheduled {
 			return nil, nil, scheduling.ErrInvalidState
@@ -87,7 +92,7 @@ func (s *service) ClockUserIn(ctx context.Context, p principal.Principal, slotID
 // ClockUserOut settles the caller's own ACTIVE slot to COMPLETE (covering early
 // finish), freeing its resource, then reschedules (pull-forward).
 func (s *service) ClockUserOut(ctx context.Context, p principal.Principal, slotID uuid.UUID) (scheduling.Result, error) {
-	return s.settleOwn(ctx, p, slotID, store.SlotStatusActive, store.SlotStatusComplete)
+	return s.settleOwn(ctx, p, slotID, "clock_out", store.SlotStatusActive, store.SlotStatusComplete)
 }
 
 // CancelSlot settles the caller's own SCHEDULED or ACTIVE slot to CANCELLED,
@@ -100,7 +105,7 @@ func (s *service) CancelSlot(ctx context.Context, p principal.Principal, slotID 
 	if err != nil {
 		return scheduling.Result{}, err
 	}
-	return s.mutate(ctx, p, target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, _ time.Time) ([]store.Slot, []store.OutboxRow, error) {
+	return s.mutate(ctx, p, "cancel", target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, _ time.Time) ([]store.Slot, []store.OutboxRow, error) {
 		t := findSlot(working, slotID)
 		if t == nil || (t.Status != store.SlotStatusScheduled && t.Status != store.SlotStatusActive) {
 			return nil, nil, scheduling.ErrInvalidState
@@ -118,8 +123,12 @@ func (s *service) CancelSlot(ctx context.Context, p principal.Principal, slotID 
 // PokeOccupant nudges the user holding an overrunning slot to wrap up: it enqueues
 // a poke notification but changes no schedule state. Only the next-in-line user may
 // poke, and only an overrunning occupant.
-func (s *service) PokeOccupant(ctx context.Context, p principal.Principal, slotID uuid.UUID) error {
-	if err := s.authorize(ctx, p); err != nil {
+func (s *service) PokeOccupant(ctx context.Context, p principal.Principal, slotID uuid.UUID) (err error) {
+	ctx, span := observability.Start(ctx, "scheduling.poke",
+		observability.Event("poke"), observability.LabID(p.LabID), observability.SlotID(slotID))
+	defer observability.End(span, &err)
+
+	if err = s.authorize(ctx, p); err != nil {
 		return err
 	}
 	target, err := s.resolveSlot(ctx, p.LabID, slotID)
@@ -149,7 +158,7 @@ func (s *service) ForceClockUserOut(ctx context.Context, p principal.Principal, 
 	if err != nil {
 		return scheduling.Result{}, err
 	}
-	return s.mutate(ctx, p, target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error) {
+	return s.mutate(ctx, p, "force_clock_out", target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error) {
 		t := findSlot(working, slotID)
 		if t == nil || t.Status != store.SlotStatusActive || !overrunning(*t, now) {
 			return nil, nil, scheduling.ErrInvalidState
@@ -173,7 +182,7 @@ func (s *service) ForceUserNoShow(ctx context.Context, p principal.Principal, sl
 	if err != nil {
 		return scheduling.Result{}, err
 	}
-	return s.mutate(ctx, p, target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error) {
+	return s.mutate(ctx, p, "force_no_show", target.ResourcePoolID, func(working []store.Slot, _ []store.Resource, now time.Time) ([]store.Slot, []store.OutboxRow, error) {
 		t := findSlot(working, slotID)
 		if t == nil || t.Status != store.SlotStatusScheduled || !s.graceLapsed(*t, now) {
 			return nil, nil, scheduling.ErrInvalidState

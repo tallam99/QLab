@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/tallam99/qlab/backend/internal/observability"
 	"github.com/tallam99/qlab/backend/internal/store"
 	"github.com/tallam99/qlab/backend/internal/store/pgstore/sqlcgen"
 )
@@ -19,7 +20,11 @@ const lockResourcePoolSQL = `SELECT pg_advisory_xact_lock(hashtextextended($1, 0
 // WithPool runs fn inside one transaction with the lab's RLS scope set, the pool
 // serialized by an advisory lock, and the pool's live slots locked FOR UPDATE,
 // then persists the returned mutation atomically (ALGORITHM §10).
-func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID uuid.UUID, fn func(store.PoolState) (store.PoolMutation, error)) error {
+func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID uuid.UUID, fn func(store.PoolState) (store.PoolMutation, error)) (err error) {
+	ctx, span := observability.Start(ctx, "store.with_pool",
+		observability.LabID(labID), observability.PoolID(poolID))
+	defer observability.End(span, &err)
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -78,6 +83,10 @@ func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID uuid.UU
 			return fmt.Errorf("enqueue outbox %s: %w", row.DedupKey, err)
 		}
 	}
+	span.SetAttributes(
+		observability.Count("slots_upserted", len(mutation.Slots)),
+		observability.Count("outbox_enqueued", len(mutation.Outbox)),
+	)
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)

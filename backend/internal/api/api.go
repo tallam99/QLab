@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"connectrpc.com/validate"
 	"github.com/google/uuid"
 
@@ -42,12 +43,21 @@ type Service struct {
 	authn atomic.Pointer[authentication.Service]
 	// validate enforces the .proto buf.validate rules at the transport edge.
 	validate connect.Interceptor
+	// otel opens an RPC span (named for the procedure) and propagates trace context on
+	// every call — the automatic "handler" node of the span tree, so no per-method code.
+	otel connect.Interceptor
 }
 
-// New builds the service and its request-validation interceptor (which enforces
-// the .proto buf.validate rules on every call).
+// New builds the service and its transport interceptors: an OpenTelemetry interceptor
+// (per-RPC span + trace propagation) and the request-validation interceptor (the
+// .proto buf.validate rules). A failure building the otel interceptor is a wiring bug
+// (bad provider config), so it panics rather than returns an error.
 func New() *Service {
-	return &Service{validate: validate.NewInterceptor()}
+	otelInterceptor, err := otelconnect.NewInterceptor()
+	if err != nil {
+		panic(fmt.Sprintf("api: build otelconnect interceptor: %v", err))
+	}
+	return &Service{validate: validate.NewInterceptor(), otel: otelInterceptor}
 }
 
 // SetScheduling attaches the scheduling service. Called by the server's dependency
@@ -62,12 +72,14 @@ func (s *Service) SetAuthentication(svc authentication.Service) {
 	s.authn.Store(&svc)
 }
 
-// Handler returns the mount path and the HTTP handler for the Connect service. Two
-// interceptors run before every method, outermost first: authentication (reject or
-// attach the principal) then protovalidate (enforce the .proto rules). So a handler
-// runs only for an authenticated caller with a structurally valid request.
+// Handler returns the mount path and the HTTP handler for the Connect service. Three
+// interceptors run before every method, outermost first: OpenTelemetry (open the RPC
+// span so it wraps everything below, including auth/validation failures), then
+// authentication (reject or attach the principal), then protovalidate (enforce the
+// .proto rules). So a handler runs only for an authenticated caller with a
+// structurally valid request, and every call is traced.
 func (s *Service) Handler() (string, http.Handler) {
-	return qlabv1connect.NewQlabServiceHandler(s, connect.WithInterceptors(s.authInterceptor(), s.validate))
+	return qlabv1connect.NewQlabServiceHandler(s, connect.WithInterceptors(s.otel, s.authInterceptor(), s.validate))
 }
 
 // caller resolves the authenticated principal and the ready scheduling service, or

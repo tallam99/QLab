@@ -146,10 +146,11 @@ func New(opts Options) *Server {
 	// Order matters — each line wraps everything below it. Authentication is NOT a
 	// chi middleware: it is a Connect interceptor on the API handler (so it yields
 	// native Connect error codes), which is why there is no principal middleware here.
-	r.Use(httpmw.CORS(opts.AllowedOrigins))  // answer browser preflights / add CORS headers (outermost: skip logging OPTIONS noise)
-	r.Use(middleware.RequestID)              // generate/propagate a per-request id (in ctx + response header)
-	r.Use(httpmw.Recoverer(opts.Logger))     // turn downstream panics into a logged 500, never a crash
-	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
+	r.Use(httpmw.CORS(opts.AllowedOrigins))        // answer browser preflights / add CORS headers (outermost: skip logging OPTIONS noise)
+	r.Use(middleware.RequestID)                    // generate/propagate a per-request id (in ctx + response header)
+	r.Use(httpmw.Tracing(pathHealthq, pathReadyq)) // open a server span + extract inbound trace context (above RequestLogger, which reads its trace id)
+	r.Use(httpmw.Recoverer(opts.Logger))           // turn downstream panics into a logged 500, never a crash
+	r.Use(httpmw.RequestLogger(opts.Logger))       // one structured log line per request + request-scoped logger in ctx
 
 	r.Get(pathHealthq, s.healthq) // liveness: is the process up? (always 200)
 	r.Get(pathReadyq, s.readyq)   // readiness: have dependencies initialized?
@@ -374,6 +375,7 @@ func WithSchedulingService(grace dynamicqueue.Minutes, clock scheduling.Clock) f
 			Notifications: notificationsv1.New(),
 			Clock:         clock,
 			ClockInGrace:  grace,
+			Logger:        s.logger,
 		})
 		s.apiService.SetScheduling(schedulingService)
 		return nil
