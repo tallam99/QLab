@@ -1,1 +1,56 @@
 @import "tailwindcss";
+
+/* Switchable light/dark theme. `@theme inline` maps Tailwind's color utilities to CSS
+   vars (bg-base, text-fg, text-teal, …); :root holds the light values and `.dark`
+   (toggled on <html>) the dark ones, so utilities respond to the toggle at runtime.
+   The brand palette is dark-first; light is a derived, accessible counterpart. Font is
+   a grounded humanist sans (not monospace); numeric columns use tabular-nums to stay
+   aligned. */
+@theme inline {
+  --color-base: var(--base);
+  --color-surface: var(--surface);
+  --color-edge: var(--edge);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-teal: var(--teal);
+  --color-amber: var(--amber);
+  --color-danger: var(--danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+:root {
+  --base: #ffffff;
+  --surface: #f6f7f9;
+  --edge: #e3e6ec;
+  --fg: #1b1e26;
+  --muted: #6b7280;
+  --teal: #0f766e;
+  --amber: #b45309;
+  --danger: #dc2626;
+}
+
+.dark {
+  --base: #0f1117;
+  --surface: #171a21;
+  --edge: #232733;
+  --fg: #e6e8ee;
+  --muted: #8a90a0;
+  --teal: #00c9a7;
+  --amber: #f59e0b;
+  --danger: #f87171;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+/* Faint diagonal stripes marking unfilled (bookable) time in the timeline. Uses the
+   muted token so it adapts to light/dark. */
+.stripe-open {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 6px,
+    color-mix(in oklab, var(--muted) 14%, transparent) 6px 7px
+  );
+}

@@ -42,9 +42,14 @@ src/
     WorkspacePicker.tsx         provision a new / load an existing workspace
     ProvisionModal.tsx          new-workspace form (feature, member/resource counts)
     ActAsSwitcher.tsx           pick which user to act as + which pool
-    SlotList.tsx                list / add / cancel slots for the acting-as user
+    PoolPanel.tsx               container: GetSchedule + the mutating RPCs → PoolView
+    PoolView.tsx                presentational: running grid + proportional timeline
+    slot-ui.tsx                 shared SlotRow + StatusPill + SlotActions
+    ThemeToggle.tsx             light/dark toggle (theme.ts; tokens in index.css)
     ComingSoon.tsx              inert placeholder shown when the switcher is disabled (prod)
     *.test.tsx                  one test file beside each non-trivial unit
+  Preview.tsx                   dev-only (/preview) component gallery with mock data
+  theme.ts                      light/dark persistence (applied as a .dark class)
   protogen/                     GENERATED Connect/protobuf TS (never hand-edited)
 ```
 
@@ -62,7 +67,7 @@ TransportProvider (transport = the api transport)   Connect-Query default transp
 
 `queryClient` is a default `new QueryClient()` (no custom `staleTime`/`gcTime`/retry).
 The `TransportProvider` transport is the **api** transport, so every Connect-Query
-hook (`SlotList`) targets `qlab.v1` as the acting-as user. Operator calls do **not**
+hook (`PoolPanel`) targets `qlab.v1` as the acting-as user. Operator calls do **not**
 go through this provider — they use `operatorClient` (its own transport) imperatively.
 
 ## 1. Component inventory
@@ -79,7 +84,7 @@ as implemented. Styling is inline Tailwind; there is no shared component library
 - **Renders (switcher enabled):** header (`<h1>QLab</h1>` + `<SignIn />`); then
   `"Starting…"` while `initializing`, a sign-in prompt when there is no operator
   `user`, else the operator `error` (if any) + `<WorkspacePicker />` and — once a
-  `workspace` is loaded — `<ActAsSwitcher />` + `<SlotList />`.
+  `workspace` is loaded — `<ActAsSwitcher />` + `<PoolPanel />`.
 
 ### `SignIn` (`components/SignIn.tsx`)
 - **Owned state:** `error: string | null`.
@@ -109,17 +114,31 @@ as implemented. Styling is inline Tailwind; there is no shared component library
   members (→ `actAs(userId)`) and a "Pool" `<select>` (→ `selectPool`), plus the
   current acting member. `memberLabel` formats `name||email (role)`.
 
-### `SlotList` (`components/SlotList.tsx`)
-- **Props/owned state:** none (server state in TanStack Query; mutation state in the
-  Connect-Query mutations).
-- **Reads:** `useWorkspace()` → `{ poolId, canQuery }`.
-- **Data:** `useQuery(QlabService.method.listSlots, { resourcePoolId: poolId ?? "" }, { enabled: canQuery })`,
-  plus `useMutation(QlabService.method.createSlot)` and `…cancelSlot`. After a mutation
-  it `await refetch()`s the list.
-- **Renders:** an "Add 30-min slot" button (creates a now-start, 30-min, 0-lookahead
-  slot); loading / error (`<code-name>: <rawMessage>` for a `ConnectError`) / empty
-  states; else a table (`#`, `Status` with `status <n>` fallback, `Start` via
-  `formatStart`, `Duration`, and a per-row **Cancel** shown only for `SCHEDULED`/`ACTIVE`).
+### The pool/queue view — `PoolPanel` + `PoolView` + `slot-ui` (the Phase 10 product surface)
+A presentational/container split, sharing `slot-ui.tsx` (the `SlotRow` view-model,
+the status `StatusPill`, and `SlotActions` — the contextual action logic in one place).
+
+- **`PoolPanel` (`components/PoolPanel.tsx`)** — the **container**. Reads
+  `useWorkspace()` → `{ poolId, canQuery, actingUserId, workspace }`; `useQuery(
+  QlabService.method.getSchedule, …, { enabled: canQuery })`; and a `useMutation` per
+  mutating RPC (createSlot/clockIn/clockOut/cancelSlot/pokeOccupant/forceClockOut/
+  forceNoShow). `resultToRows(result, …)` (exported, pure, unit-tested) maps the
+  engine `RescheduleResult` → `SlotRow[]`, deriving `overrun`/`earliestStart`/resource
+  label client-side and `reclaimable` from `positions` (`youAreNext` approximated —
+  the backend enforces it). Each action `mutateAsync`es then `refetch`es. Renders
+  loading/error then `<PoolView>`.
+- **`PoolView` (`components/PoolView.tsx`)** — purely presentational (data in,
+  callbacks out). A **"running now" grid** (one cell per resource — active slots are
+  pinned to a resource, scheduled ones aren't) atop a **vertical timeline** ("now" at
+  the top flowing down): booked slots as cards with **proportional compressed heights**
+  and a left **accent bar** (amber = flexible/has lookahead, neutral = fixed), striped
+  **gap cards** for bookable openings, and a dashed **forward-reach** outline above the
+  viewer's own scheduled card (the lookahead visualized). Contextual actions per slot.
+
+### `ComingSoon` (`components/ComingSoon.tsx`) / `ThemeToggle` (`components/ThemeToggle.tsx`)
+`ComingSoon` is the inert production placeholder (the switcher is dev-only — gated by
+`env.devSwitcherEnabled`). `ThemeToggle` flips light/dark (`theme.ts`, persisted; the
+palette is CSS-var tokens in `index.css` that flip on a `.dark` class).
 
 ## 2. State map
 
@@ -132,11 +151,11 @@ the auth-holder singleton.
 | `initializing` | `boolean` | `SessionProvider` (`useState`) | True until the first `onAuthStateChanged`, to avoid flashing the signed-out view. |
 | `workspace` | `Workspace \| null` | `WorkspaceProvider` (`useState`) | The loaded demo lab + roster + pools. Read by `App`/`WorkspacePicker`/`ActAsSwitcher`. |
 | `actingUserId` | `string \| null` | `WorkspaceProvider` (`useState`) | Which member we act as; selects the cached token fed to the api transport. |
-| `poolId` | `string \| null` | `WorkspaceProvider` (`useState`) | The pool `SlotList` queries/mutates. |
+| `poolId` | `string \| null` | `WorkspaceProvider` (`useState`) | The pool `PoolPanel` loads/mutates. |
 | `busy` / `error` | `boolean` / `string \| null` | `WorkspaceProvider` (`useState`) | In-flight + last-error for operator calls (provision/mint/load). |
 | `tokenCache` | `Map<userId, token>` | `WorkspaceProvider` (`useRef`) | Minted ID tokens per acting-as user, so switching back never re-mints. A ref: the interceptor reads it lazily, mutating it needn't re-render. |
 | `SignIn.error`, `WorkspacePicker.*`, `ProvisionModal.*` | various | the component (`useState`) | Single-consumer UI/form state; not lifted. |
-| Server data (`ListSlots`) | `ListSlotsResponse` | TanStack Query cache | Server state, keyed by Connect-Query on method + input. |
+| Server data (`GetSchedule`) | `GetScheduleResponse` | TanStack Query cache | Server state, keyed by Connect-Query on method + input. |
 | Live api credential + lab | `{ getToken, labId }` | `api/authHolder.ts` singleton | Non-React bridge from `WorkspaceProvider` to the api interceptor (below). |
 
 Derived (not stored): `WorkspaceProvider.canQuery = workspace !== null && actingUserId
@@ -174,23 +193,26 @@ Operator path (provision / mint / list / load):
 Acting-as path (the queue):
   WorkspaceProvider state (workspace + actingUserId)
     → render-phase write → authHolder { getToken: cached acting-as token, labId }
-    → SlotList: useQuery(listSlots, {resourcePoolId: poolId}, {enabled: canQuery})
-              + useMutation(createSlot / cancelSlot)
+    → PoolPanel: useQuery(getSchedule, {resourcePoolId: poolId}, {enabled: canQuery})
+              + useMutation(createSlot / clockIn / clockOut / cancelSlot /
+                            pokeOccupant / forceClockOut / forceNoShow)
     → api transport interceptor reads authHolder → Authorization + X-QLab-Lab
     → POST {baseUrl}/qlab.v1.QlabService/<Method>
-    → TanStack Query caches ListSlots; mutations refetch()
+    → resultToRows(GetScheduleResponse.result) → SlotRow[] → PoolView
+    → every mutation refetch()es GetSchedule (the engine reschedule is the truth)
     → DOM
 ```
 
-- **Caching:** TanStack Query with default options; the `ListSlots` key is derived by
-  Connect-Query from method + input (`resourcePoolId`). Mutations don't use cache
-  invalidation — `SlotList` `await refetch()`s after `createSlot`/`cancelSlot`.
+- **One data model:** `GetSchedule` returns the engine's `RescheduleResult`; mutations
+  return the same shape (and the SSE stream will, next phase). `PoolPanel` reads only
+  `GetSchedule` and refetches after each mutation — no optimistic updates, no cache
+  invalidation juggling.
 - **Token cache:** `actAs(userId)` mints via the operator client only on a cache miss;
   a hit (a user already acted as) sets `actingUserId` with no network call.
 - **Local transforms:** `model.ts` flattens operator proto responses to
-  `{Member, Pool, Workspace}`; `SlotList` keeps `formatStart` + the `SlotStatus`
-  name lookup. No normalization layer or SSE/streaming path (the `QueueEvent` envelope
-  is generated but unused).
+  `{Member, Pool, Resource, Workspace}`; `resultToRows` derives the per-slot view
+  flags. No normalization layer; the SSE/streaming path (the `QueueEvent` envelope)
+  is generated but not yet wired (next phase).
 
 ## 4. API boundary
 
@@ -216,9 +238,16 @@ cross-tenant).
 
 | RPC | Called from | Request | Response |
 |---|---|---|---|
-| `ListSlots` | `SlotList` (`useQuery`) | `{ resourcePoolId }` | `{ slots: Slot[] }` |
-| `CreateSlot` | `SlotList` "Add slot" | `{ resourcePoolId, desiredStart, lookaheadMinutes: 0, durationMinutes: 30, note: "" }` | `{ result? }` |
-| `CancelSlot` | `SlotList` per-row | `{ slotId }` | `{ result? }` |
+| `GetSchedule` | `PoolPanel` (`useQuery`) | `{ resourcePoolId }` | `{ result: RescheduleResult }` (slots + positions) |
+| `CreateSlot` | `PoolView` "Book slot" | `{ resourcePoolId, desiredStart, lookaheadMinutes, durationMinutes, note }` | `{ result? }` |
+| `ClockIn` / `ClockOut` | slot actions | `{ slotId }` | `{ result? }` |
+| `CancelSlot` | slot action | `{ slotId }` | `{ result? }` |
+| `PokeOccupant` / `ForceClockOut` | next-in-line, overrun | `{ slotId }` | `{ result? }` / `{}` |
+| `ForceNoShow` | next-in-line, reclaimable | `{ slotId }` | `{ result? }` |
+
+`GetSchedule` is the read (engine run read-only against now); the seven mutating RPCs
+are all wired through `PoolPanel`. `ListSlots` still exists on the contract but the UI
+now uses `GetSchedule`.
 
 Every api request carries `Authorization: Bearer <acting-as token>` + `X-QLab-Lab:
 <workspace lab>`, attached centrally by the api interceptor (components never set
@@ -264,7 +293,7 @@ Both transports use `baseUrl = env.apiBaseUrl || window.location.origin`:
   signed-out or different operator can never see or act on the previous session's data
   (a token refresh keeps the same uid, so this doesn't fire spuriously). This is the
   one place `WorkspaceProvider` depends on `SessionProvider`.
-- `canQuery` (workspace + acting-as user + pool) gates `SlotList`'s query. No explicit
+- `canQuery` (workspace + acting-as user + pool) gates `PoolPanel`'s query. No explicit
   query-cache eviction — TanStack Query's default `gcTime` + the `enabled` gate suffice
   once the holder stops yielding a token.
 
