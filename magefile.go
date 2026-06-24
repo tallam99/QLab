@@ -46,8 +46,6 @@ const (
 	// host port; in CI a background emulator binds it — mirroring how Postgres is a
 	// compose service locally and a service container in CI.
 	firebaseEmulatorHost = "localhost:9099"
-	// engineDir is the pure scheduling engine; mutation testing recurses it.
-	engineDir = "./backend/internal/dynamicqueue"
 	// goosePackage pins the migration tool. It's run via `go run …@version` rather
 	// than a go.mod tool dependency so its many DB-driver deps don't bloat the
 	// module (we only use Postgres).
@@ -341,7 +339,8 @@ func TestIntegration() error {
 // order. Add logic-dense packages here as they land; glue/infra packages (DB
 // wiring, HTTP lifecycle) aren't good mutation fodder.
 var mutateDirs = []string{
-	engineDir,
+	// The pure scheduling engine — the product's core logic.
+	"./backend/internal/dynamicqueue",
 	// The authentication provisioning state machine: branchy logic with unit tests.
 	"./backend/internal/services/authentication/v1",
 }
