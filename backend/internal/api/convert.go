@@ -3,45 +3,18 @@ package api
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/tallam99/qlab/backend/internal/protoconv"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	"github.com/tallam99/qlab/backend/internal/services/scheduling"
-	"github.com/tallam99/qlab/backend/internal/store"
 )
 
-// This file holds the only proto <-> domain conversions in the service; the engine
-// and store never see proto (ALGORITHM §10). Times use the zero instant for "unset"
-// on the domain side and a nil timestamp on the wire.
-
-// uuidStr renders a uuid for the wire, mapping uuid.Nil (the domain's "unset") to
-// an empty string.
-func uuidStr(id uuid.UUID) string {
-	if id == uuid.Nil {
-		return ""
-	}
-	return id.String()
-}
-
-// slotToProto converts a persisted slot to its wire form.
-func slotToProto(s store.Slot) *v1.Slot {
-	return &v1.Slot{
-		Id:                 s.ID.String(),
-		LabId:              s.LabID.String(),
-		UserId:             s.UserID.String(),
-		ResourcePoolId:     s.ResourcePoolID.String(),
-		AssignedResourceId: uuidStr(s.ResourceID),
-		SlotPriority:       int32(s.Priority),
-		Status:             slotStatusToProto(s.Status),
-		DesiredStart:       timeToProto(s.DesiredStart),
-		LookaheadMinutes:   s.LookaheadMinutes,
-		DurationMinutes:    s.DurationMinutes,
-		CommittedStart:     timeToProto(s.CommittedStart),
-		ActualStart:        timeToProto(s.ActualStart),
-		Note:               s.Note,
-	}
-}
+// This file holds the request-side proto -> domain conversions and the
+// reschedule-result conversion; the shared store -> wire conversions (slot, time,
+// uuid) live in internal/protoconv. The engine and store never see proto
+// (ALGORITHM §10). Times use the zero instant for "unset" on the domain side and a
+// nil timestamp on the wire.
 
 // resultToProto converts a reschedule result (live slots + engine verdicts).
 func resultToProto(r scheduling.Result) *v1.RescheduleResult {
@@ -51,46 +24,18 @@ func resultToProto(r scheduling.Result) *v1.RescheduleResult {
 		Positions:      make([]*v1.SlotPosition, 0, len(r.Positions)),
 	}
 	for _, s := range r.Slots {
-		out.Slots = append(out.Slots, slotToProto(s))
+		out.Slots = append(out.Slots, protoconv.Slot(s))
 	}
 	for _, p := range r.Positions {
 		out.Positions = append(out.Positions, &v1.SlotPosition{
 			SlotId:             p.SlotID.String(),
-			ActualStart:        timeToProto(p.ActualStart),
-			AssignedResourceId: uuidStr(p.AssignedResourceID),
+			ActualStart:        protoconv.Time(p.ActualStart),
+			AssignedResourceId: protoconv.UUID(p.AssignedResourceID),
 			Recommitted:        p.Recommitted,
 			Reclaimable:        p.Reclaimable,
 		})
 	}
 	return out
-}
-
-// slotStatusToProto maps the persistence status enum to the wire enum (same
-// labels). An unknown value maps to UNSPECIFIED rather than panicking.
-func slotStatusToProto(s store.SlotStatus) v1.SlotStatus {
-	switch s {
-	case store.SlotStatusScheduled:
-		return v1.SlotStatus_SLOT_STATUS_SCHEDULED
-	case store.SlotStatusActive:
-		return v1.SlotStatus_SLOT_STATUS_ACTIVE
-	case store.SlotStatusComplete:
-		return v1.SlotStatus_SLOT_STATUS_COMPLETE
-	case store.SlotStatusCancelled:
-		return v1.SlotStatus_SLOT_STATUS_CANCELLED
-	case store.SlotStatusNoShow:
-		return v1.SlotStatus_SLOT_STATUS_NO_SHOW
-	default:
-		return v1.SlotStatus_SLOT_STATUS_UNSPECIFIED
-	}
-}
-
-// timeToProto renders an instant, mapping the zero value (the domain's "unset") to
-// a nil timestamp.
-func timeToProto(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
 }
 
 // timeFromProto reads a wire timestamp, mapping nil to the zero instant.

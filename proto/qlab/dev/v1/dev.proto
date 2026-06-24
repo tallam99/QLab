@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+// Package qlab.dev.v1 is the STAGING/LOCAL-ONLY operator surface: provision demo
+// lab workspaces, mint a token to act as any seeded user, and inspect/tear down
+// workspaces. It is the dev-experience tooling (decision 0008), deliberately a
+// SEPARATE service from qlab.v1 so the production binary simply never mounts it —
+// there is no operator capability in prod by construction. Every call is gated by
+// the operator secret; the server refuses to enable any of this in production.
+package qlab.dev.v1;
+
+import "buf/validate/validate.proto";
+import "qlab/v1/types.proto";
+
+// LabMember pairs a provisioned user with their role in the workspace.
+message LabMember {
+  qlab.v1.User user = 1;
+  qlab.v1.LabRole role = 2;
+}
+
+// ProvisionLab creates a fresh demo workspace: a lab (named for the feature), a
+// head plus member_count members, and one resource pool with resource_count
+// interchangeable resources. Users are created unlinked (no Firebase identity yet);
+// MintToken / first login links them.
+message ProvisionLabRequest {
+  // feature labels the workspace (stored as the lab name) so workspaces can be
+  // listed/torn down per feature.
+  string feature = 1 [(buf.validate.field).string = {min_len: 1, max_len: 100}];
+  // member_count is how many MEMBER users to create in addition to the single HEAD.
+  int32 member_count = 2 [(buf.validate.field).int32 = {gte: 0, lte: 50}];
+  // resource_count is how many interchangeable resources the pool holds.
+  int32 resource_count = 3 [(buf.validate.field).int32 = {gte: 1, lte: 20}];
+}
+
+message ProvisionLabResponse {
+  qlab.v1.Lab lab = 1;
+  qlab.v1.ResourcePool pool = 2;
+  repeated LabMember members = 3;
+  repeated qlab.v1.Resource resources = 4;
+}
+
+// MintToken issues a real Firebase ID token to act as the given seeded user — the
+// "act as anyone without the OAuth dance" primitive. Send it as Authorization:
+// Bearer, plus X-QLab-Lab for the lab you're acting in.
+message MintTokenRequest {
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message MintTokenResponse {
+  string id_token = 1;
+  qlab.v1.User user = 2;
+}
+
+// ListLabs lists demo workspaces, optionally filtered to those whose feature
+// (lab name) contains the given substring.
+message ListLabsRequest {
+  string feature = 1 [(buf.validate.field).string.max_len = 100];
+}
+
+message LabSummary {
+  qlab.v1.Lab lab = 1;
+  int32 user_count = 2;
+  int32 resource_count = 3;
+}
+
+message ListLabsResponse {
+  repeated LabSummary labs = 1;
+}
+
+// GetLab dumps a workspace's full state — members, pools, resources, and the whole
+// slot queue — the bounded snapshot for handing to Claude / debugging (the
+// state-export from the observability convention).
+message GetLabRequest {
+  string lab_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetLabResponse {
+  qlab.v1.Lab lab = 1;
+  repeated LabMember members = 2;
+  repeated qlab.v1.ResourcePool pools = 3;
+  repeated qlab.v1.Resource resources = 4;
+  repeated qlab.v1.Slot slots = 5;
+}
+
+// TeardownLab deletes a workspace and everything in it (cascade).
+message TeardownLabRequest {
+  string lab_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message TeardownLabResponse {}
+
+// DevService is the operator API. Mounted only outside production; every method
+// requires the operator secret.
+service DevService {
+  rpc ProvisionLab(ProvisionLabRequest) returns (ProvisionLabResponse);
+  rpc MintToken(MintTokenRequest) returns (MintTokenResponse);
+  rpc ListLabs(ListLabsRequest) returns (ListLabsResponse);
+  rpc GetLab(GetLabRequest) returns (GetLabResponse);
+  rpc TeardownLab(TeardownLabRequest) returns (TeardownLabResponse);
+}

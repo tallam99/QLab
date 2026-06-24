@@ -11,17 +11,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tallam99/qlab/backend/internal/logging"
+	authenticationv1 "github.com/tallam99/qlab/backend/internal/services/authentication/v1"
 )
 
 // TestConnectServiceMounted verifies the Connect data API is wired onto the router:
-// a POST to a QlabService procedure with no caller principal must reach the handler
-// and come back as Connect's "unauthenticated" (HTTP 401) — not a 404, which would
-// mean the service was never mounted. This is a wiring check (is the handler
-// reachable, and is the auth gate in front of it?), not endpoint functionality;
-// real behavior is covered by the Phase-7 integration suite.
+// a POST to a QlabService procedure with no bearer token must reach the auth
+// interceptor and come back as Connect's "unauthenticated" (HTTP 401) — not a 404,
+// which would mean the service was never mounted. This is a wiring check (is the
+// handler reachable, and is the auth gate in front of it?), not endpoint
+// functionality; real behavior is covered by the integration suite.
 func TestConnectServiceMounted(t *testing.T) {
-	srv := httptest.NewServer(New(Options{Logger: logging.Noop()}))
+	s := New(testOptions(t))
+	// Wire the auth interceptor's dependency (a rejecting verifier is enough): until
+	// it is set the interceptor returns Unavailable, not Unauthenticated.
+	s.apiService.SetAuthentication(authenticationv1.New(authenticationv1.Options{
+		Verifier: fakeVerifier{}, Store: fakeStore{},
+	}))
+	srv := httptest.NewServer(s)
 	defer srv.Close()
 
 	// A valid-uuid pool id so the request passes the protovalidate interceptor and

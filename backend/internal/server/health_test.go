@@ -12,13 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
-	"github.com/tallam99/qlab/backend/internal/logging"
 )
 
 // testHandler builds a server with discarded logs. It is not marked ready, so it
 // also exercises that liveness (/healthq) is up independent of readiness.
-func testHandler() http.Handler {
-	return New(Options{Logger: logging.Noop()})
+func testHandler(t *testing.T) http.Handler {
+	return New(testOptions(t))
 }
 
 // TestHealthq verifies the liveness probe: it must return 200 with the ok body
@@ -26,7 +25,7 @@ func testHandler() http.Handler {
 // server up and wired?), not endpoint functionality — that lives in integration
 // suites once real endpoints exist.
 func TestHealthq(t *testing.T) {
-	srv := httptest.NewServer(testHandler())
+	srv := httptest.NewServer(testHandler(t))
 	defer srv.Close()
 
 	resp, err := srv.Client().Get(srv.URL + pathHealthq)

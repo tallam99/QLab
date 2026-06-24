@@ -245,6 +245,52 @@ live revision references them.
 
 ---
 
+## Operator surface (staging only)
+
+The operator tooling (`qlab.dev.v1.DevService`: provision workspaces, mint tokens to
+act as seeded users — decision 0008) is enabled by three env vars on the **staging**
+Cloud Run service, all sourced from Secret Manager. **None are set on production** —
+the service refuses to boot if any is present there, and the surface is not mounted
+in prod regardless.
+
+- `OPERATOR_SECRET` — the gate every operator call must present.
+- `OPERATOR_DATABASE_URL` — the operator's elevated, cross-tenant connection.
+- `FIREBASE_WEB_API_KEY` — the staging Web API key the operator's `MintToken` uses to
+  exchange a custom token for an ID token.
+
+**Elevated DB connection — reuse the migrator (owner) credential.** The operator's
+cross-tenant work (create a lab, list all workspaces) needs to bypass RLS. Neon has
+no superuser, so a `BYPASSRLS` role is impossible — but the table *owner* already
+bypasses RLS (our policies are `ENABLE`, not `FORCE`), and the migrator credential
+(`db-url-staging-migrator`) *is* the owner. So `OPERATOR_DATABASE_URL` reuses that
+secret — **no new Neon role**. The tradeoff: the staging runtime then holds the
+owner (DDL-capable) credential. Acceptable for staging — gated by the operator
+secret, demo data only, and entirely absent in production. (A dedicated operator role
++ an RLS-policy exemption is the stricter alternative if least-privilege matters
+more; it costs a migration.)
+
+All of this is **already done** by Claude under the boundary exception
+(`qlab-staging`); it activates on the next staging deploy:
+- `operator-secret` created (random) + runtime SA granted `secretAccessor`.
+- runtime SA granted `roles/iam.serviceAccountTokenCreator` on itself (for `MintToken`).
+- runtime SA granted `secretAccessor` on `db-url-staging-migrator` (the operator DB url).
+- `firebase-web-api-key` secret created from the project's auto-created Firebase
+  "Browser key" + runtime SA granted `secretAccessor`.
+- `OPERATOR_SECRET` + `OPERATOR_DATABASE_URL` (= `DATABASE_MIGRATOR_SECRET`) +
+  `FIREBASE_WEB_API_KEY` wired into the staging Cloud Run deploy (`_deploy.yml`,
+  staging-only).
+
+> If the Firebase **Browser key** ever gets API restrictions that exclude the
+> Identity Toolkit API, `MintToken`'s server-side `signInWithCustomToken` exchange
+> will fail; rotate `firebase-web-api-key` to an unrestricted (or Identity-Toolkit-
+> allowed) key then.
+
+Drive the surface with the curl flow in `docs/runbook.md` → "Operator surface",
+pointing it at the staging API URL (retrieve the gate value with
+`gcloud secrets versions access latest --secret=operator-secret --project qlab-staging`).
+
+---
+
 ## One-time GCP setup
 
 > ✅ **Done (2026-06-20)** for both `qlab-staging` and `qlab-production`, by Claude

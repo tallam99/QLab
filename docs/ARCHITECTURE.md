@@ -40,6 +40,9 @@ QLab is two separate surfaces plus managed backing services:
     reading through the store (no separate database).
   - **notifications** — builds the outbox row for each event (re-commit, poke);
     delivery is Phase 11.
+  - **authentication** — resolves a verified bearer token to a local `users` row,
+    provisioning invited users on first login by linking their Firebase uid to the
+    row matched by verified email (invite-only).
 - **Scheduling engine** (`internal/dynamicqueue`) — **pure**, no DB/HTTP/clock.
   The product's core; specified in `docs/ALGORITHM.md`. A single `reschedule()`
   operation re-flows the queue on every event.
@@ -48,7 +51,17 @@ QLab is two separate surfaces plus managed backing services:
   the pool's slots) so the queue is never observed half-shifted.
 - **Notifications** — `Notifier`/`Channel` abstraction + transactional outbox with
   retry and dead-letter; email first, SMS/push additive.
-- **Auth middleware** — verifies Firebase JWTs, maps UID → user → lab membership/role.
+- **Auth** — a Connect interceptor verifies the Firebase ID token (via the
+  `auth.TokenVerifier` seam over the Admin SDK; the Auth emulator locally), resolves
+  it to a user through the `authentication` service, and attaches the principal with
+  the selected lab. A bad token is `Unauthenticated`, a valid-but-uninvited one
+  `PermissionDenied`. The Auth emulator backs local/CI verification (decision 0008).
+- **Operator surface** (`internal/devapi` over `services/operator`) — a
+  **separate** Connect service (`qlab.dev.v1`) for the staging dev experience:
+  provision demo workspaces, mint a token to act as any seeded user, list/inspect/
+  tear down workspaces. Gated by an operator secret and run over an elevated
+  (RLS-bypassing) DB connection. Mounted only outside production — the prod binary
+  contains no operator capability at all (decision 0008).
 
 ## Data model (shape)
 
@@ -81,7 +94,7 @@ simplicity (one-directional, plain HTTP, auto-reconnect).
 
 | Env | Frontend | API | DB | Auth |
 |-----|----------|-----|----|----|
-| local | Vite dev server | Go in Docker Compose | local Postgres | dev-login |
+| local | Vite dev server | Go in Docker Compose | local Postgres | Auth emulator + operator surface |
 | staging | Firebase Hosting (staging) | Cloud Run (staging) | Neon staging branch | Firebase staging |
 | prod | Firebase Hosting (prod) | Cloud Run (prod) | Neon prod branch | Firebase prod |
 

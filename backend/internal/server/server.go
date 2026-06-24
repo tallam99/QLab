@@ -17,15 +17,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"firebase.google.com/go/v4/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/tallam99/qlab/backend/internal/api"
+	"github.com/tallam99/qlab/backend/internal/auth/firebaseauth"
 	"github.com/tallam99/qlab/backend/internal/clients/postgres"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue/basic"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/logging"
+	authenticationv1 "github.com/tallam99/qlab/backend/internal/services/authentication/v1"
 	authzv1 "github.com/tallam99/qlab/backend/internal/services/authz/v1"
 	notificationsv1 "github.com/tallam99/qlab/backend/internal/services/notifications/v1"
 	"github.com/tallam99/qlab/backend/internal/services/scheduling"
@@ -79,6 +82,22 @@ type Options struct {
 	// AllowedOrigins is the CORS allow-list for the browser PWA (a separate origin
 	// from the API; decision 0001). Empty means same-origin only.
 	AllowedOrigins []string
+	// FirebaseAuth is the Firebase Auth client backing token verification. Required:
+	// every data RPC is authenticated.
+	FirebaseAuth *auth.Client
+	// OperatorMount, when non-nil, mounts the staging/local-only operator surface
+	// (qlab.dev.v1; decision 0008) at its Connect path. The caller builds it only
+	// outside production — config refuses to load OPERATOR_* in production, so it is
+	// never non-nil there.
+	OperatorMount *OperatorMount
+}
+
+// OperatorMount is a built operator (qlab.dev.v1) Connect handler and the path to
+// mount it on. Construction lives in the caller (main / the test harness), which
+// owns the elevated DB connection it needs; the server just mounts it (non-prod only).
+type OperatorMount struct {
+	Path    string
+	Handler http.Handler
 }
 
 // Server is the service: its HTTP handler plus the lifecycle that initializes
@@ -106,6 +125,9 @@ type Server struct {
 	// must read it only after loading ready, so the atomic acquire pairs with
 	// Ready's release and they observe the write.
 	store store.Store
+	// firebaseAuth is the Firebase Auth client (from Options); the WithAuthentication
+	// injector builds the verifier over it once the store is ready.
+	firebaseAuth *auth.Client
 }
 
 // New builds the server and its middleware/route wiring. It panics if a required
@@ -114,19 +136,30 @@ func New(opts Options) *Server {
 	if opts.Logger == nil {
 		panic("server: New requires a Logger")
 	}
-	s := &Server{logger: opts.Logger, apiService: api.New()}
+	if opts.FirebaseAuth == nil {
+		panic("server: New requires a FirebaseAuth client")
+	}
+	s := &Server{logger: opts.Logger, apiService: api.New(), firebaseAuth: opts.FirebaseAuth}
 
 	r := chi.NewRouter()
 
-	// Order matters — each line wraps everything below it:
+	// Order matters — each line wraps everything below it. Authentication is NOT a
+	// chi middleware: it is a Connect interceptor on the API handler (so it yields
+	// native Connect error codes), which is why there is no principal middleware here.
 	r.Use(httpmw.CORS(opts.AllowedOrigins))  // answer browser preflights / add CORS headers (outermost: skip logging OPTIONS noise)
 	r.Use(middleware.RequestID)              // generate/propagate a per-request id (in ctx + response header)
 	r.Use(httpmw.Recoverer(opts.Logger))     // turn downstream panics into a logged 500, never a crash
 	r.Use(httpmw.RequestLogger(opts.Logger)) // one structured log line per request + request-scoped logger in ctx
-	r.Use(httpmw.DevPrincipal)               // attach the caller principal from the dev header (Phase 8 replaces with JWT)
 
 	r.Get(pathHealthq, s.healthq) // liveness: is the process up? (always 200)
 	r.Get(pathReadyq, s.readyq)   // readiness: have dependencies initialized?
+
+	// Operator surface (qlab.dev.v1): staging/local only (decision 0008). Mounted
+	// only when configured; absent entirely in production. It is a separate Connect
+	// service with its own operator-secret gate, built by the caller.
+	if opts.OperatorMount != nil {
+		r.Mount(opts.OperatorMount.Path, opts.OperatorMount.Handler)
+	}
 
 	// Mount the Connect-RPC data API. The handler matches the full procedure paths
 	// under apiPath, so it mounts cleanly alongside the health routes; its
@@ -246,10 +279,13 @@ func (s *Server) closeDependencies() {
 	}
 }
 
-// initPgStore opens the Postgres pool and verifies it, retrying transient
-// failures with bounded exponential backoff. A returned store is ready to use; an
-// error means the database stayed unreachable.
-func (s *Server) initPgStore(ctx context.Context, databaseURL string) (*pgstore.Store, error) {
+// ConnectStore opens a Postgres pool at databaseURL and verifies it, retrying
+// transient failures with bounded exponential backoff. A returned store is ready to
+// use (it owns the pool — Close it to release); an error means the database stayed
+// unreachable. This is the single connect-with-retry path shared by the main app
+// store (WithPostgres) and the operator surface's elevated pool (decision 0008), so
+// both ride out a Neon cold start identically instead of failing on the first ping.
+func ConnectStore(ctx context.Context, logger logging.Logger, databaseURL string) (*pgstore.Store, error) {
 	pool, err := postgres.New(ctx, postgres.Options{DatabaseURL: databaseURL})
 	if err != nil {
 		return nil, fmt.Errorf("open database pool: %w", err)
@@ -261,14 +297,14 @@ func (s *Server) initPgStore(ctx context.Context, databaseURL string) (*pgstore.
 		dataStore, err := pgstore.New(pingCtx, pool)
 		cancel()
 		if err == nil {
-			s.logger.Info("database connected")
+			logger.Info("database connected")
 			return dataStore, nil
 		}
 		if attempt >= dbInitAttempts {
 			pool.Close()
 			return nil, fmt.Errorf("database unreachable after %d attempts: %w", dbInitAttempts, err)
 		}
-		s.logger.Warn("database not ready; retrying",
+		logger.Warn("database not ready; retrying",
 			attrError, err, "attempt", attempt, "retry_in", delay)
 		select {
 		case <-time.After(delay):
@@ -284,12 +320,39 @@ func (s *Server) initPgStore(ctx context.Context, databaseURL string) (*pgstore.
 // it to the server. Pass it to InjectDependency.
 func WithPostgres(databaseURL string) func(context.Context, *Server) error {
 	return func(ctx context.Context, s *Server) error {
-		dataStore, err := s.initPgStore(ctx, databaseURL)
+		dataStore, err := ConnectStore(ctx, s.logger, databaseURL)
 		if err != nil {
 			return err
 		}
 		s.store = dataStore
 		s.closers = append(s.closers, dataStore)
+		return nil
+	}
+}
+
+// WithAuthentication returns an injector that builds the authentication service
+// (the Firebase token verifier over the ready store, which provisions invited users
+// on first login) and attaches it to the mounted Connect handler's auth interceptor.
+// Register it AFTER WithPostgres: it needs the store.
+func WithAuthentication() func(context.Context, *Server) error {
+	return func(_ context.Context, s *Server) error {
+		if s.store == nil {
+			return errors.New("WithAuthentication requires the store; register WithPostgres first")
+		}
+		if s.firebaseAuth == nil {
+			return errors.New("WithAuthentication requires a Firebase Auth client")
+		}
+		// The store field is the (narrow) scheduling surface; recover the identity
+		// surface from the same concrete store. The real pgstore satisfies both.
+		authStore, ok := s.store.(store.AuthStore)
+		if !ok {
+			return errors.New("WithAuthentication requires a store that implements AuthStore")
+		}
+		authnService := authenticationv1.New(authenticationv1.Options{
+			Verifier: firebaseauth.New(s.firebaseAuth),
+			Store:    authStore,
+		})
+		s.apiService.SetAuthentication(authnService)
 		return nil
 	}
 }

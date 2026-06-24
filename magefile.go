@@ -38,8 +38,14 @@ const (
 	// database its TestMain creates, migrates, and drops.
 	integrationTestDir = "./backend/integration_test/..."
 	integrationTestDB  = "qlab_integration_test"
-	// engineDir is the pure scheduling engine; mutation testing recurses it.
-	engineDir = "./backend/internal/dynamicqueue"
+	// firebaseProject is the demo project id the Auth emulator runs under. The
+	// `demo-` prefix tells the SDK/emulator it is offline (no real credentials).
+	firebaseProject = "demo-qlab"
+	// firebaseEmulatorHost is where the integration suite (and the local api
+	// container) reach the Auth emulator. Locally the compose service publishes this
+	// host port; in CI a background emulator binds it — mirroring how Postgres is a
+	// compose service locally and a service container in CI.
+	firebaseEmulatorHost = "localhost:9099"
 	// goosePackage pins the migration tool. It's run via `go run …@version` rather
 	// than a go.mod tool dependency so its many DB-driver deps don't bloat the
 	// module (we only use Postgres).
@@ -319,6 +325,11 @@ func TestIntegration() error {
 		"INTEGRATION_TEST_DATABASE_URL="+env.hostDatabaseURLFor(integrationTestDB),
 		"INTEGRATION_TEST_MIGRATIONS_DIR="+abs(migrationsDir),
 		"INTEGRATION_TEST_GOOSE_PKG="+goosePackage,
+		// Firebase Auth emulator coordinates. FIREBASE_AUTH_EMULATOR_HOST is read by
+		// the Admin SDK itself (so token verification targets the emulator); the suite
+		// also reads both to build its client and mint test tokens.
+		"FIREBASE_PROJECT_ID="+firebaseProject,
+		"FIREBASE_AUTH_EMULATOR_HOST="+firebaseEmulatorHost,
 	)
 	// -count=1 disables the test cache: the result depends on live DB state.
 	return runWithEnv(testEnv, "go", "test", "-tags", "integration", "-count=1", integrationTestDir)
@@ -328,7 +339,10 @@ func TestIntegration() error {
 // order. Add logic-dense packages here as they land; glue/infra packages (DB
 // wiring, HTTP lifecycle) aren't good mutation fodder.
 var mutateDirs = []string{
-	engineDir,
+	// The pure scheduling engine — the product's core logic.
+	"./backend/internal/dynamicqueue",
+	// The authentication provisioning state machine: branchy logic with unit tests.
+	"./backend/internal/services/authentication/v1",
 }
 
 // Mutate runs mutation testing (gremlins) over mutateDirs to verify the test suite

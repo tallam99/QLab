@@ -19,8 +19,8 @@ import (
 func overrunSetup(t *testing.T, lab labFixture) (activeID, waitingID string) {
 	t.Helper()
 	ctx := context.Background()
-	m1 := h.client(lab.Member1, lab.LabID)
-	m2 := h.client(lab.Member2, lab.LabID)
+	m1 := h.client(t, lab.Member1, lab.LabID)
+	m2 := h.client(t, lab.Member2, lab.LabID)
 
 	respA, err := m1.CreateSlot(ctx, createReq(lab.PoolID, at(0), 0, 30, "A"))
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func (s *IntegrationSuite) TestForceClockOutOverrun() {
 	activeID, _ := overrunSetup(t, lab)
 
 	// Not overrunning yet (clock still at 0): rejected.
-	_, err := h.client(lab.Member2, lab.LabID).
+	_, err := h.client(t, lab.Member2, lab.LabID).
 		ForceClockOut(ctx, connect.NewRequest(&v1.ForceClockOutRequest{SlotId: activeID}))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
@@ -52,12 +52,12 @@ func (s *IntegrationSuite) TestForceClockOutOverrun() {
 	h.clock.set(at(45))
 
 	// The head is not the next-in-line user → denied.
-	_, err = h.client(lab.Head, lab.LabID).
+	_, err = h.client(t, lab.Head, lab.LabID).
 		ForceClockOut(ctx, connect.NewRequest(&v1.ForceClockOutRequest{SlotId: activeID}))
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 
 	// The next-in-line user (Member2) boots the occupant.
-	_, err = h.client(lab.Member2, lab.LabID).
+	_, err = h.client(t, lab.Member2, lab.LabID).
 		ForceClockOut(ctx, connect.NewRequest(&v1.ForceClockOutRequest{SlotId: activeID}))
 	require.NoError(t, err)
 	assert.Equal(t, "COMPLETE", h.slot(t, activeID).Status)
@@ -73,23 +73,24 @@ func (s *IntegrationSuite) TestPoke() {
 	activeID, _ := overrunSetup(t, lab)
 
 	// Not overrunning yet: rejected, nothing enqueued.
-	err := pokeErr(ctx, lab, lab.Member2, activeID)
+	err := pokeErr(t, ctx, lab, lab.Member2, activeID)
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
 	h.clock.set(at(45))
 
 	// Non-next-in-line caller rejected.
-	err = pokeErr(ctx, lab, lab.Head, activeID)
+	err = pokeErr(t, ctx, lab, lab.Head, activeID)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 
 	// Next-in-line pokes successfully; one outbox row, occupant still ACTIVE.
-	require.NoError(t, pokeErr(ctx, lab, lab.Member2, activeID))
+	require.NoError(t, pokeErr(t, ctx, lab, lab.Member2, activeID))
 	assert.Equal(t, "ACTIVE", h.slot(t, activeID).Status)
 	assert.Equal(t, 1, h.outboxCount(t, lab.LabID, "poke"))
 }
 
-func pokeErr(ctx context.Context, lab labFixture, user, slotID string) error {
-	_, err := h.client(user, lab.LabID).
+func pokeErr(t *testing.T, ctx context.Context, lab labFixture, user, slotID string) error {
+	t.Helper()
+	_, err := h.client(t, user, lab.LabID).
 		PokeOccupant(ctx, connect.NewRequest(&v1.PokeOccupantRequest{SlotId: slotID}))
 	return err
 }
@@ -101,8 +102,8 @@ func (s *IntegrationSuite) TestForceNoShowGraceLapsed() {
 	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
-	m1 := h.client(lab.Member1, lab.LabID)
-	m2 := h.client(lab.Member2, lab.LabID)
+	m1 := h.client(t, lab.Member1, lab.LabID)
+	m2 := h.client(t, lab.Member2, lab.LabID)
 
 	// B (prio 1) is committed to start at 0 but never clocks in; C (prio 2) waits.
 	respB, err := m1.CreateSlot(ctx, createReq(lab.PoolID, at(0), 0, 60, "B"))
@@ -120,7 +121,7 @@ func (s *IntegrationSuite) TestForceNoShowGraceLapsed() {
 	h.clock.set(at(20))
 
 	// A non-next-in-line caller (the head) is still rejected.
-	_, err = h.client(lab.Head, lab.LabID).
+	_, err = h.client(t, lab.Head, lab.LabID).
 		ForceNoShow(ctx, connect.NewRequest(&v1.ForceNoShowRequest{SlotId: slotB}))
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 

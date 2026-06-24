@@ -18,13 +18,20 @@
 
 ## The stack
 
-`docker-compose.yml` runs two services:
+`docker-compose.yml` runs three services:
 
 - **`postgres`** — Postgres 18 (matches the Neon major version), data in the named
   volume `qlab_pgdata`, host port 5432, gated by a `pg_isready` healthcheck.
+- **`firebase-auth`** — the Firebase Auth emulator (built from
+  `docker/firebase-emulator/Dockerfile`: Node + a JRE + pinned `firebase-tools`,
+  Auth-only, offline under the demo project `demo-qlab`), host port 9099, gated by a
+  healthcheck. Token verification and dev-login run against it locally, so **no real
+  Firebase project is needed for local dev** (decision 0008).
 - **`api`** — the Go service built from `backend/Dockerfile`, on host port 8090.
-  Waits for Postgres to be healthy, then connects + pings it on boot (a failed
-  connection is a hard boot failure, not a stream of failing requests).
+  Waits for Postgres and the emulator to be healthy, then connects + pings Postgres
+  on boot (a failed connection is a hard boot failure, not a stream of failing
+  requests). It is configured for the emulator via `FIREBASE_AUTH_EMULATOR_HOST` and
+  the demo project id.
 
 Config comes from `.env.json` (gitignored; `mage` creates it from
 `.env.example.json` on first run) — fields: `postgres_user`, `postgres_password`,
@@ -48,7 +55,7 @@ same fields.
 | `mage testUnit` | `go test -tags testunit ./backend/...` (Go unit tests) |
 | `mage testSecurity` | the Yaak secret-scanner's own tests **and** the scanner against the committed workspace |
 | `mage testSchema` | DB-level schema tests (constraints/triggers/seed) against a throwaway DB; **requires the stack up**. Its `TestMain` creates/migrates/seeds/drops `qlab_schema_test` |
-| `mage testIntegration` | full-stack suite: boots the real server (as an RLS-bound app role) against a throwaway DB and drives it through the Connect client; **requires the stack up**. Its `TestMain` creates/migrates/drops `qlab_integration_test` |
+| `mage testIntegration` | full-stack suite: boots the real server (as an RLS-bound app role) against a throwaway DB and drives it through the Connect client with **real emulator-issued tokens**; **requires the stack up** (Postgres + the Auth emulator). Its `TestMain` creates/migrates/drops `qlab_integration_test` |
 | `mage genMocks` / `mage clearMocks` | (re)generate / remove the mockery mocks. Mocks are **not** committed (`.mockery.yaml`); generate before building code that imports one, then `go mod tidy` |
 | `mage mutate` | mutation-test the engine with gremlins; gates on mutant coverage (config in `.gremlins.yaml`; also a soft CI job). Needs gremlins installed. |
 | `mage serviceLogs` | follow all services' logs (last 100 lines, then live) |
@@ -90,13 +97,57 @@ runs the same CI gate before deploying — so schema tests also gate CD.
 ## Connect API
 
 The data API is mounted at `/qlab.v1.QlabService/<Method>` (Connect-RPC; speaks
-JSON or binary protobuf on the same path). The methods are stubs that return a
-Connect `unimplemented` error (HTTP 501) until they're wired to the engine + store.
-Drive them from the Yaak workspace, or with curl:
+JSON or binary protobuf on the same path). The methods are wired to the engine +
+store, and **every call is authenticated**: it needs an `Authorization: Bearer
+<id-token>` header and an `X-QLab-Lab: <lab-uuid>` header (the lab the caller is
+acting in). A call with no token is rejected:
 
     curl -s -X POST localhost:8090/qlab.v1.QlabService/ListSlots \
-      -H 'Content-Type: application/json' -d '{"resourcePoolId":"demo"}'
-    # → {"code":"unimplemented","message":"qlab.v1.QlabService.ListSlots is not implemented"}
+      -H 'Content-Type: application/json' \
+      -d '{"resourcePoolId":"11111111-1111-1111-1111-111111111111"}'
+    # → HTTP 401, {"code":"unauthenticated", ...}
+
+## Operator surface (staging/local dev experience)
+
+The **operator surface** (`qlab.dev.v1.DevService`, decision 0008) provisions demo
+workspaces and mints tokens to act as their users — the staging dev loop. It is a
+separate Connect service mounted only outside production, gated by the operator
+secret (`X-QLab-Operator-Secret`). Locally the secret is `local-operator-secret`
+(docker-compose) and the elevated DB connection is the local superuser. Drive it
+with curl (JSON over Connect):
+
+    OP=localhost:8090/qlab.dev.v1.DevService
+    SECRET='X-QLab-Operator-Secret: local-operator-secret'
+
+    # Provision a per-feature workspace: a head + 3 members, 2 resources.
+    curl -s -X POST $OP/ProvisionLab -H "$SECRET" -H 'Content-Type: application/json' \
+      -d '{"feature":"search","memberCount":3,"resourceCount":2}'
+    # → {lab:{id,name}, pool:{...}, members:[{user:{id,email},role}], resources:[...]}
+
+    # Mint a token to act as one of those users (use a member's user id from above).
+    TOKEN=$(curl -s -X POST $OP/MintToken -H "$SECRET" -H 'Content-Type: application/json' \
+      -d '{"userId":"<user-uuid>"}' | jq -r .idToken)
+
+    # Act as them against the data API, in their lab.
+    curl -s -X POST localhost:8090/qlab.v1.QlabService/ListSlots \
+      -H "Authorization: Bearer $TOKEN" -H "X-QLab-Lab: <lab-uuid>" \
+      -H 'Content-Type: application/json' -d '{"resourcePoolId":"<pool-uuid>"}'
+
+Other methods: `ListLabs` (`{"feature":"..."}` filter, or `{}` for all), `GetLab`
+(`{"labId":"..."}` — full state export), `TeardownLab` (`{"labId":"..."}`). A call
+with a wrong/missing secret is `permission_denied`.
+
+First login provisions invited users: minting (or a real Google login) links the
+Firebase identity to the `users` row matched by the verified email. A valid token
+for an un-invited email is rejected with `permission_denied` (not provisioned).
+
+> **Staging operator setup.** The operator surface needs three env vars on the
+> staging Cloud Run service, from staging's Secret Manager: `OPERATOR_SECRET` (the
+> gate), `OPERATOR_DATABASE_URL` (the elevated cross-tenant connection — it reuses the
+> migrator/owner secret, which bypasses RLS), and `FIREBASE_WEB_API_KEY` (for
+> `MintToken`'s exchange). All MUST be absent on production — the service refuses to
+> boot otherwise. Most of this is already wired; the exact commands and the one
+> remaining step (the Web API key) live in `docs/deploy.md`.
 
 ## Debugging
 

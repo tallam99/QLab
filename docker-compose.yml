@@ -42,11 +42,41 @@ services:
       # "postgres", not localhost — distinct from the host-facing DATABASE_URL
       # in .env that host tooling uses.
       DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      # Firebase Auth: the demo project + the emulator (reached at the compose
+      # service name). With the emulator host set the Admin SDK skips signature
+      # verification and needs no credentials — local only.
+      FIREBASE_PROJECT_ID: "demo-qlab"
+      FIREBASE_AUTH_EMULATOR_HOST: "firebase-auth:9099"
+      # Operator surface (qlab.dev.v1): staging/local only. The secret gates it; the
+      # elevated DB URL is the local superuser (which already bypasses RLS locally).
+      # Both are absent in production by construction (decision 0008).
+      OPERATOR_SECRET: "local-operator-secret"
+      OPERATOR_DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
     ports:
       - "8090:8090"
     depends_on:
       postgres:
         condition: service_healthy
+      firebase-auth:
+        condition: service_healthy
+
+  firebase-auth:
+    # Local Firebase Auth emulator (see docker/firebase-emulator/Dockerfile). Token
+    # verification and the operator token-minting run against this offline, so no real
+    # Firebase project is needed for local dev or the integration suite.
+    build:
+      context: .
+      dockerfile: docker/firebase-emulator/Dockerfile
+    ports:
+      # Published so host-run tooling (the integration suite) reaches it at
+      # localhost:9099, the same way it reaches Postgres.
+      - "9099:9099"
+    healthcheck:
+      # The emulator answers a config endpoint once it's up; gate dependents on it.
+      test: ["CMD-SHELL", "curl -sf http://localhost:9099/emulator/v1/projects/demo-qlab/config || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 volumes:
   pgdata:

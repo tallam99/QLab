@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -16,11 +17,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/tallam99/qlab/backend/internal/httpmw"
+	"github.com/tallam99/qlab/backend/internal/api"
+	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
+	"github.com/tallam99/qlab/backend/internal/devapi"
 	"github.com/tallam99/qlab/backend/internal/logging"
+	"github.com/tallam99/qlab/backend/internal/protogen/qlab/dev/v1/devv1connect"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	"github.com/tallam99/qlab/backend/internal/protogen/qlab/v1/qlabv1connect"
 	"github.com/tallam99/qlab/backend/internal/server"
+	operatorv1 "github.com/tallam99/qlab/backend/internal/services/operator/v1"
+	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
 
 // base anchors every test's clock; tests advance from here. A fixed instant keeps
@@ -51,18 +57,32 @@ func (c *testClock) set(t time.Time) {
 
 // harness holds everything a test touches: the admin pool (superuser, bypasses RLS
 // — for arranging state and reading ground truth), the running server, the HTTP
-// client + base URL for building Connect clients, and the clock.
+// client + base URL for building Connect clients, the clock, the auth helpers (a
+// userID→email map and a per-email ID-token cache, minted in-process against the
+// real Auth emulator), and the operator-secret used by the DevService.
 type harness struct {
-	admin   *pgxpool.Pool
-	baseURL string
-	http    *http.Client
-	clock   *testClock
-	cancel  context.CancelFunc
-	done    chan struct{}
+	admin          *pgxpool.Pool
+	baseURL        string
+	http           *http.Client
+	clock          *testClock
+	cancel         context.CancelFunc
+	done           chan struct{}
+	minter         *firebaseclient.Minter
+	operatorSecret string
+
+	mu     sync.Mutex
+	emails map[string]string // userID -> email (for minting that user's token)
+	tokens map[string]string // email -> cached ID token
 }
 
+// operatorSecret is the gate for the DevService in the suite.
+const itestOperatorSecret = "itest-operator-secret"
+
 // startHarness boots the real server (connecting as the app role) on an ephemeral
-// port, waits for readiness, and opens the admin pool for arranging state.
+// port, waits for readiness, and opens the admin pool for arranging state. The
+// server verifies tokens against the Auth emulator and mounts the operator
+// (qlab.dev.v1) surface over the admin (elevated) pool. The harness mints auth
+// tokens in-process via the same Auth emulator.
 func startHarness(appURL string) (*harness, error) {
 	ctx := context.Background()
 	admin, err := pgxpool.New(ctx, adminDatabaseURL)
@@ -70,12 +90,35 @@ func startHarness(appURL string) (*harness, error) {
 		return nil, fmt.Errorf("open admin pool: %w", err)
 	}
 
+	// The Admin SDK reads FIREBASE_AUTH_EMULATOR_HOST itself (set by mage), so this
+	// client talks to the emulator; the project id is the demo project.
+	emulatorHost := os.Getenv("FIREBASE_AUTH_EMULATOR_HOST")
+	firebaseAuth, err := firebaseclient.New(ctx, firebaseclient.Options{ProjectID: os.Getenv("FIREBASE_PROJECT_ID")})
+	if err != nil {
+		admin.Close()
+		return nil, fmt.Errorf("build firebase client: %w", err)
+	}
+	minter := firebaseclient.NewMinter(firebaseAuth, emulatorHost, "")
+
+	// Operator surface over the admin pool (the elevated, RLS-bypassing connection),
+	// mounted as the production binary would mount it outside prod.
+	operatorStore, err := pgstore.New(ctx, admin)
+	if err != nil {
+		admin.Close()
+		return nil, fmt.Errorf("build operator store: %w", err)
+	}
+	operatorSvc := operatorv1.New(operatorv1.Options{Store: operatorStore, Minter: minter})
+	opPath, opHandler := devapi.New(operatorSvc, itestOperatorSecret).Handler()
+
 	clock := &testClock{now: base}
 	srv := server.New(server.Options{
-		Logger: logging.Noop(),
-		Addr:   "127.0.0.1:0", // ephemeral; discovered via srv.Addr()
+		Logger:        logging.Noop(),
+		Addr:          "127.0.0.1:0", // ephemeral; discovered via srv.Addr()
+		FirebaseAuth:  firebaseAuth,
+		OperatorMount: &server.OperatorMount{Path: opPath, Handler: opHandler},
 	})
 	srv.InjectDependency(server.WithPostgres(appURL))
+	srv.InjectDependency(server.WithAuthentication())
 	srv.InjectDependency(server.WithSchedulingService(testGrace, clock.Now))
 
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -86,11 +129,15 @@ func startHarness(appURL string) (*harness, error) {
 	}()
 
 	h := &harness{
-		admin:  admin,
-		http:   &http.Client{},
-		clock:  clock,
-		cancel: cancel,
-		done:   done,
+		admin:          admin,
+		http:           &http.Client{},
+		clock:          clock,
+		cancel:         cancel,
+		done:           done,
+		minter:         minter,
+		operatorSecret: itestOperatorSecret,
+		emails:         make(map[string]string),
+		tokens:         make(map[string]string),
 	}
 	if err := h.waitReady(srv); err != nil {
 		cancel()
@@ -127,28 +174,98 @@ func (h *harness) shutdown() {
 	h.admin.Close()
 }
 
-// client returns a Connect client whose requests carry the dev principal headers
-// for the given user acting in the given lab.
-func (h *harness) client(userID, labID string) qlabv1connect.QlabServiceClient {
-	return qlabv1connect.NewQlabServiceClient(h.http, h.baseURL,
-		connect.WithInterceptors(devPrincipalInterceptor(userID, labID)))
+// client returns a Connect client authenticated as the given user (by minting a
+// real emulator ID token for that user's email) acting in the given lab.
+func (h *harness) client(t *testing.T, userID, labID string) qlabv1connect.QlabServiceClient {
+	t.Helper()
+	return h.bearerClient(h.tokenFor(t, h.emailOf(t, userID)), labID)
 }
 
-// anonClient returns a client with no principal headers (for auth tests).
+// clientForEmail authenticates as an arbitrary email (which may have no users row),
+// for exercising the not-provisioned path.
+func (h *harness) clientForEmail(t *testing.T, email, labID string) qlabv1connect.QlabServiceClient {
+	t.Helper()
+	return h.bearerClient(h.tokenFor(t, email), labID)
+}
+
+// anonClient returns a client with no Authorization header (for the unauthenticated
+// case).
 func (h *harness) anonClient() qlabv1connect.QlabServiceClient {
 	return qlabv1connect.NewQlabServiceClient(h.http, h.baseURL)
 }
 
-// devPrincipalInterceptor stamps the dev principal headers on every outgoing
-// request — the Phase-7 stand-in for an Authorization: Bearer <jwt> header.
-func devPrincipalInterceptor(userID, labID string) connect.Interceptor {
+// bearerClient builds a Connect client that stamps the given bearer token and
+// selected-lab header on every request — the real auth headers.
+func (h *harness) bearerClient(token, labID string) qlabv1connect.QlabServiceClient {
+	return qlabv1connect.NewQlabServiceClient(h.http, h.baseURL,
+		connect.WithInterceptors(authHeaderInterceptor(token, labID)))
+}
+
+// authHeaderInterceptor sets Authorization: Bearer and the selected-lab header on
+// every outgoing request.
+func authHeaderInterceptor(token, labID string) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if userID != "" {
-				req.Header().Set(httpmw.HeaderDevUser, userID)
+			if token != "" {
+				req.Header().Set(api.HeaderAuthorization, "Bearer "+token)
 			}
 			if labID != "" {
-				req.Header().Set(httpmw.HeaderDevLab, labID)
+				req.Header().Set(api.HeaderSelectedLab, labID)
+			}
+			return next(ctx, req)
+		}
+	})
+}
+
+// emailOf returns the email recorded for a created user.
+func (h *harness) emailOf(t *testing.T, userID string) string {
+	t.Helper()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	email, ok := h.emails[userID]
+	require.Truef(t, ok, "no email recorded for user %s (was it made via makeUser?)", userID)
+	return email
+}
+
+// tokenFor returns an emulator ID token for email, minting one in-process against
+// the Auth emulator on first use and caching it.
+func (h *harness) tokenFor(t *testing.T, email string) string {
+	t.Helper()
+	h.mu.Lock()
+	if tok, ok := h.tokens[email]; ok {
+		h.mu.Unlock()
+		return tok
+	}
+	h.mu.Unlock()
+
+	token, err := h.minter.MintToken(context.Background(), email)
+	require.NoErrorf(t, err, "mint token for %s", email)
+	require.NotEmpty(t, token, "minted an empty token")
+
+	h.mu.Lock()
+	h.tokens[email] = token
+	h.mu.Unlock()
+	return token
+}
+
+// operatorClient returns a DevService client carrying the operator secret.
+func (h *harness) operatorClient() devv1connect.DevServiceClient {
+	return h.operatorClientWithSecret(h.operatorSecret)
+}
+
+// operatorClientWithSecret returns a DevService client carrying the given secret
+// (used to exercise the gate: a wrong or empty secret is rejected).
+func (h *harness) operatorClientWithSecret(secret string) devv1connect.DevServiceClient {
+	return devv1connect.NewDevServiceClient(h.http, h.baseURL,
+		connect.WithInterceptors(operatorSecretInterceptor(secret)))
+}
+
+// operatorSecretInterceptor stamps the operator-secret header on outgoing requests.
+func operatorSecretInterceptor(secret string) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if secret != "" {
+				req.Header().Set(devapi.HeaderOperatorSecret, secret)
 			}
 			return next(ctx, req)
 		}
@@ -165,6 +282,12 @@ func (h *harness) reset(t *testing.T) {
 		 RESTART IDENTITY CASCADE`)
 	require.NoError(t, err)
 	h.clock.set(base)
+	// Drop per-user identity caches: the next test recreates users with fresh
+	// emails, so old mappings/tokens are stale.
+	h.mu.Lock()
+	h.emails = make(map[string]string)
+	h.tokens = make(map[string]string)
+	h.mu.Unlock()
 }
 
 // ---- state builders (admin connection, bypassing RLS) ----
@@ -218,6 +341,9 @@ func (h *harness) makeUser(t *testing.T, labID, role string) string {
 	_, err = h.admin.Exec(ctx, `INSERT INTO labs_users (labs_id, users_id, role) VALUES ($1, $2, $3)`,
 		labID, id, role)
 	require.NoError(t, err)
+	h.mu.Lock()
+	h.emails[id] = email
+	h.mu.Unlock()
 	return id
 }
 

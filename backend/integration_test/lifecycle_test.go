@@ -19,7 +19,7 @@ func (s *IntegrationSuite) TestCreateAndList() {
 	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
-	c := h.client(lab.Member1, lab.LabID)
+	c := h.client(t, lab.Member1, lab.LabID)
 
 	// now = base (at 0); a slot desired an hour out with no earliness stays at desired.
 	resp, err := c.CreateSlot(ctx, createReq(lab.PoolID, at(60), 0, 60, "first"))
@@ -50,7 +50,7 @@ func (s *IntegrationSuite) TestCreatePullsEarlierWithinLookahead() {
 	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
-	c := h.client(lab.Member1, lab.LabID)
+	c := h.client(t, lab.Member1, lab.LabID)
 
 	resp, err := c.CreateSlot(ctx, createReq(lab.PoolID, at(60), 60, 60, "flex"))
 	require.NoError(t, err)
@@ -65,8 +65,8 @@ func (s *IntegrationSuite) TestClockInClockOutPullsForward() {
 	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
-	m1 := h.client(lab.Member1, lab.LabID)
-	m2 := h.client(lab.Member2, lab.LabID)
+	m1 := h.client(t, lab.Member1, lab.LabID)
+	m2 := h.client(t, lab.Member2, lab.LabID)
 
 	// A (prio 1): desired now, 60 min. B (prio 2): desired at 60, lookahead 30 → floor 30.
 	respA, err := m1.CreateSlot(ctx, createReq(lab.PoolID, at(0), 0, 60, "A"))
@@ -101,8 +101,8 @@ func (s *IntegrationSuite) TestCancelPullsForward() {
 	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
-	m1 := h.client(lab.Member1, lab.LabID)
-	m2 := h.client(lab.Member2, lab.LabID)
+	m1 := h.client(t, lab.Member1, lab.LabID)
+	m2 := h.client(t, lab.Member2, lab.LabID)
 
 	respA, err := m1.CreateSlot(ctx, createReq(lab.PoolID, at(0), 0, 60, "A"))
 	require.NoError(t, err)
@@ -124,12 +124,12 @@ func (s *IntegrationSuite) TestClockInOnlyOwnSlot() {
 	t := s.T()
 	ctx := context.Background()
 	lab := h.makeLab(t, 1)
-	respA, err := h.client(lab.Member1, lab.LabID).
+	respA, err := h.client(t, lab.Member1, lab.LabID).
 		CreateSlot(ctx, createReq(lab.PoolID, at(0), 0, 60, "A"))
 	require.NoError(t, err)
 	slotA := slotIDByNote(t, respA.Msg.GetResult(), "A")
 
-	_, err = h.client(lab.Member2, lab.LabID).
+	_, err = h.client(t, lab.Member2, lab.LabID).
 		ClockIn(ctx, connect.NewRequest(&v1.ClockInRequest{SlotId: slotA}))
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 }

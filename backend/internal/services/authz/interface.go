@@ -1,7 +1,7 @@
 // Package authz answers authorization questions — "may this principal do this?" —
 // over the application's data. It is a thin policy layer the business services
 // depend on through an interface, so the rules live in one place and can grow
-// (Phase 8 adds head-only actions, the dev-login guard, etc.) without leaking into
+// (head-only actions like the invite RPC, etc.) without leaking into
 // scheduling. It deliberately has no database of its own: membership/roles live in
 // the main DB (the slots->labs_users foreign key depends on that), so the
 // implementation reads through store.Store. The v1 implementation is in authz/v1.
