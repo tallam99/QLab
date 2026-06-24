@@ -4,17 +4,23 @@
 
 function required(name: string): string {
   const value = import.meta.env[name];
-  if (!value) {
-    throw new Error(`missing required environment variable ${name}`);
+  // Distinguish unset from set-but-blank so a misconfigured deploy gets an accurate
+  // diagnostic instead of being told a variable that IS present is "missing".
+  if (value === undefined || value === "") {
+    throw new Error(`environment variable ${name} is ${value === undefined ? "missing" : "empty"}`);
   }
   return value;
 }
 
 export const env = {
-  // Empty in local dev: the app calls the API same-origin and the Vite proxy
-  // forwards to the Go service (see vite.config.ts). Set to the full cross-origin
-  // API URL in staging/prod.
-  apiBaseUrl: (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "",
+  // Local dev leaves this empty: the app calls the API same-origin and the Vite
+  // proxy forwards to the Go service (see vite.config.ts). In a production build it
+  // is required — an empty value there is a deploy misconfiguration, and silently
+  // falling back to the Hosting origin (transport.ts) would 404 every RPC, so fail
+  // loudly at startup like the Firebase vars do.
+  apiBaseUrl: import.meta.env.PROD
+    ? required("VITE_API_BASE_URL")
+    : ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ""),
   firebase: {
     apiKey: required("VITE_FIREBASE_API_KEY"),
     authDomain: required("VITE_FIREBASE_AUTH_DOMAIN"),

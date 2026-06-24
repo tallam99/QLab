@@ -1,6 +1,6 @@
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { useQuery } from "@connectrpc/connect-query";
 import { QlabService } from "../protogen/qlab/v1/service_pb";
 import { SlotStatus } from "../protogen/qlab/v1/types_pb";
@@ -28,8 +28,10 @@ export function SlotList() {
     return <p className="text-slate-400">Loading slots…</p>;
   }
   if (error) {
+    // ConnectError.code is the numeric Code enum; map it to its name so the user
+    // sees e.g. "unauthenticated" rather than a bare "16".
     const message =
-      error instanceof ConnectError ? `${error.code}: ${error.rawMessage}` : String(error);
+      error instanceof ConnectError ? `${Code[error.code]}: ${error.rawMessage}` : String(error);
     return <p className="text-red-400">Failed to load slots — {message}</p>;
   }
 
@@ -52,7 +54,7 @@ export function SlotList() {
         {slots.map((slot) => (
           <tr key={slot.id} className="border-t border-slate-700">
             <td className="py-1 pr-4">{slot.slotPriority}</td>
-            <td className="py-1 pr-4">{SlotStatus[slot.status]}</td>
+            <td className="py-1 pr-4">{SlotStatus[slot.status] ?? `status ${slot.status}`}</td>
             <td className="py-1 pr-4">{formatStart(slot.actualStart, slot.desiredStart)}</td>
             <td className="py-1 pr-4">{slot.durationMinutes}m</td>
           </tr>

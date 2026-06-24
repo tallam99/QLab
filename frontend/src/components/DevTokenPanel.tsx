@@ -7,7 +7,8 @@ import { useSession } from "../session/SessionProvider";
 // and only the lab/pool selection is applied. There is no public ListPools RPC
 // yet (Phase 10), so the ids are entered from the operator ProvisionLab response.
 export function DevTokenPanel() {
-  const { setSelection, setManualToken, selection, manualToken, clear } = useSession();
+  const { setSelection, setManualToken, selection, manualToken, clear, user, canQuery } =
+    useSession();
   const [labId, setLabId] = useState(selection?.labId ?? "");
   const [poolId, setPoolId] = useState(selection?.poolId ?? "");
   const [token, setToken] = useState("");
@@ -51,6 +52,16 @@ export function DevTokenPanel() {
           placeholder="operator-minted ID token"
         />
       </label>
+      {/* Which credential the transport actually sends: a pasted token takes
+          precedence over a Google session (decision 0008 act-as), so surface it —
+          otherwise a stale minted token silently overrides a live sign-in. */}
+      {canQuery && (
+        <p className="text-xs text-slate-400">
+          Active credential:{" "}
+          <span className="text-slate-200">{manualToken ? "minted token" : "Google sign-in"}</span>
+          {manualToken && user ? " — overriding your Google session" : ""}
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <button
           type="submit"

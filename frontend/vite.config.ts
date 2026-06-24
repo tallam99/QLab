@@ -16,9 +16,13 @@ export default defineConfig({
     // Connect RPC paths to the local Go API. This avoids cross-origin/CORS and
     // WSL2 localhost quirks locally. Staging/prod set VITE_API_BASE_URL to the
     // real cross-origin API URL, so CORS is still exercised where it matters.
-    // Connect paths are "/<package>.<Service>/<method>".
+    // Connect paths are "/<package>.<Service>/<method>". Proxy both the data API
+    // (qlab.v1) and the local operator surface (qlab.dev.v1) — the in-app dev
+    // switcher will call DevService from the browser, and "/qlab.v1." does not
+    // prefix-match "/qlab.dev.v1.".
     proxy: {
       "/qlab.v1.": { target: "http://localhost:8090", changeOrigin: true },
+      "/qlab.dev.v1.": { target: "http://localhost:8090", changeOrigin: true },
     },
   },
   test: {

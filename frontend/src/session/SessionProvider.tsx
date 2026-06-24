@@ -48,13 +48,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Mirror the credential + selected lab into the transport's holder so every
-  // Connect call carries fresh headers without rebuilding the transport.
-  useEffect(() => {
-    setAuthHolder({
-      getToken: async () => manualToken ?? (user ? await user.getIdToken() : null),
-      labId: selection?.labId ?? null,
-    });
-  }, [user, manualToken, selection]);
+  // Connect call carries fresh headers without rebuilding the transport. Written
+  // synchronously during render (not in an effect) so it is current before any
+  // child commits: SlotList's query fires from a child effect, which runs before
+  // this parent's effects would — an effect here would let the first fetch after a
+  // lab/credential switch read a stale lab or token. The write is idempotent.
+  setAuthHolder({
+    getToken: async () => manualToken ?? (user ? await user.getIdToken() : null),
+    labId: selection?.labId ?? null,
+  });
 
   const value = useMemo<SessionValue>(
     () => ({

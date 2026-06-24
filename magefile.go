@@ -476,16 +476,21 @@ func GenProto() error {
 	return runIn(protoDir, "buf", "generate", "--template", "buf.gen.ts.yaml", "--include-imports")
 }
 
-// Frontend runs the frontend gate — a clean install then typecheck, lint (Biome),
-// unit tests (Vitest), and a production build — the same set the CI `frontend` job
-// enforces. Mirrors the npm scripts in frontend/package.json so a green run means
-// the same thing locally and in CI. Uses `npm ci` for a reproducible, lockfile-
-// pinned install (it wipes and reinstalls node_modules).
+// Frontend runs the frontend gate — a clean install then lint (Biome), unit tests
+// (Vitest), and a production build — the same set the CI `frontend` job enforces.
+// Mirrors the npm scripts in frontend/package.json so a green run means the same
+// thing locally and in CI. Uses `npm ci` for a reproducible, lockfile-pinned
+// install (it wipes and reinstalls node_modules).
+//
+// `build` already type-checks (`tsc --noEmit && vite build`), so the standalone
+// `typecheck` script is not run here — that would type-check the whole project
+// twice per gate for no added coverage. `npm run typecheck` stays for fast local
+// feedback without a bundle.
 func Frontend() error {
 	if err := runIn(frontendDir, "npm", "ci"); err != nil {
 		return err
 	}
-	for _, script := range []string{"typecheck", "lint", "test", "build"} {
+	for _, script := range []string{"lint", "test", "build"} {
 		if err := runIn(frontendDir, "npm", "run", script); err != nil {
 			return err
 		}
