@@ -106,11 +106,19 @@ func (m *Minter) exchange(ctx context.Context, customToken string) (string, erro
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return "", err
-	}
-	if resp.StatusCode != http.StatusOK || decoded.IDToken == "" {
+	// Decode best-effort, but judge the HTTP status FIRST: a non-2xx error body may
+	// be non-JSON (a proxy 502 HTML page, an empty gateway-timeout body), in which
+	// case a decode error would otherwise mask the real status. Status check first
+	// surfaces "identity toolkit returned 502" instead of "invalid character '<'".
+	decodeErr := json.NewDecoder(resp.Body).Decode(&decoded)
+	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("identity toolkit returned %d: %s", resp.StatusCode, decoded.Error.Message)
+	}
+	if decodeErr != nil {
+		return "", fmt.Errorf("decode identity toolkit response: %w", decodeErr)
+	}
+	if decoded.IDToken == "" {
+		return "", fmt.Errorf("identity toolkit returned 200 but no id token")
 	}
 	return decoded.IDToken, nil
 }

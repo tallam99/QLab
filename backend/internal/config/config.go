@@ -94,6 +94,13 @@ func (c Config) validate() error {
 	if c.OperatorEnabled() && c.OperatorDatabaseURL == "" {
 		return fmt.Errorf("OPERATOR_DATABASE_URL is required when OPERATOR_SECRET is set")
 	}
+	// Against real Firebase (no emulator) the operator MintToken exchange needs the
+	// project's real Identity Toolkit key; without it the minter falls back to a dummy
+	// key that real Firebase rejects, so every MintToken would fail silently. The
+	// emulator accepts any key, so it is only required when the emulator is absent.
+	if c.OperatorEnabled() && c.FirebaseAuthEmulatorHost == "" && c.FirebaseWebAPIKey == "" {
+		return fmt.Errorf("FIREBASE_WEB_API_KEY is required when the operator surface is enabled against real Firebase (no FIREBASE_AUTH_EMULATOR_HOST)")
+	}
 	return nil
 }
 

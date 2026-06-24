@@ -14,14 +14,12 @@ import (
 	"syscall"
 
 	firebaseclient "github.com/tallam99/qlab/backend/internal/clients/firebase"
-	"github.com/tallam99/qlab/backend/internal/clients/postgres"
 	"github.com/tallam99/qlab/backend/internal/config"
 	"github.com/tallam99/qlab/backend/internal/devapi"
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue"
 	slogging "github.com/tallam99/qlab/backend/internal/logging/slog"
 	"github.com/tallam99/qlab/backend/internal/server"
 	operatorv1 "github.com/tallam99/qlab/backend/internal/services/operator/v1"
-	"github.com/tallam99/qlab/backend/internal/store/pgstore"
 )
 
 func main() {
@@ -78,17 +76,16 @@ func run() error {
 	// 0008). It runs over an elevated, cross-tenant DB connection; main owns that
 	// pool and closes it on shutdown.
 	if cfg.OperatorEnabled() {
-		operatorPool, err := postgres.New(ctx, postgres.Options{DatabaseURL: cfg.OperatorDatabaseURL})
-		if err != nil {
-			logger.Error("build operator db pool", "error", err)
-			return err
-		}
-		defer operatorPool.Close()
-		operatorStore, err := pgstore.New(ctx, operatorPool)
+		// Reuse the server's connect-with-retry path so the elevated operator pool
+		// rides out a transient DB failure (e.g. a Neon cold start) the same way the
+		// main store does, instead of failing on the first ping. The returned store
+		// owns the pool; closing it on shutdown releases the connection.
+		operatorStore, err := server.ConnectStore(ctx, logger, cfg.OperatorDatabaseURL)
 		if err != nil {
 			logger.Error("connect operator db", "error", err)
 			return err
 		}
+		defer func() { _ = operatorStore.Close() }()
 		minter := firebaseclient.NewMinter(firebaseAuth, cfg.FirebaseAuthEmulatorHost, cfg.FirebaseWebAPIKey)
 		operatorSvc := operatorv1.New(operatorv1.Options{Store: operatorStore, Minter: minter})
 		path, handler := devapi.New(operatorSvc, cfg.OperatorSecret).Handler()

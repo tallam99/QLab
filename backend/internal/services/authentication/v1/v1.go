@@ -67,8 +67,10 @@ func (s *Service) Authenticate(ctx context.Context, rawToken string) (store.User
 // provision links a verified identity to its invited user row, or reports
 // ErrNotProvisioned if no invite exists.
 func (s *Service) provision(ctx context.Context, identity auth.Identity) (store.User, error) {
-	if identity.Email == "" {
-		// Without a verified email there is no invite to match — treat as no invite.
+	// Provisioning matches an invite by email, so the email must be present AND
+	// verified — an unverified address can't be trusted to claim someone else's
+	// invited row. Either way there is no invite we may act on: treat as no invite.
+	if identity.Email == "" || !identity.EmailVerified {
 		return store.User{}, authentication.ErrNotProvisioned
 	}
 	invited, err := s.store.UserByEmail(ctx, identity.Email)
@@ -82,11 +84,18 @@ func (s *Service) provision(ctx context.Context, identity auth.Identity) (store.
 	// linked to a DIFFERENT identity, the same email maps to two Firebase accounts —
 	// a data conflict we refuse rather than silently rebind.
 	if invited.FirebaseUID != "" && invited.FirebaseUID != identity.FirebaseUID {
-		return store.User{}, fmt.Errorf("authentication: email %q already linked to a different identity", identity.Email)
+		return store.User{}, authentication.ErrIdentityConflict
 	}
 
 	first, last := splitName(identity.Name)
 	user, err := s.store.LinkFirebaseUID(ctx, invited.ID, identity.FirebaseUID, first, last)
+	// LinkFirebaseUID only updates an unlinked row (the write self-guards on
+	// firebase_uid IS NULL). We just confirmed the row exists and was unlinked, so a
+	// not-found here means a concurrent first login won the race and linked it first:
+	// surface the same conflict rather than an opaque internal error.
+	if errors.Is(err, store.ErrNotFound) {
+		return store.User{}, authentication.ErrIdentityConflict
+	}
 	if err != nil {
 		return store.User{}, fmt.Errorf("authentication: link identity: %w", err)
 	}

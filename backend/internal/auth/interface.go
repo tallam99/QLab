@@ -28,9 +28,14 @@ var ErrInvalidToken = errors.New("auth: invalid token")
 type Identity struct {
 	// FirebaseUID is the provider's stable user id (the token subject).
 	FirebaseUID string
-	// Email is the verified email claim, lowercased by the provider/our verifier so
-	// it matches the canonical lowercase users.email.
+	// Email is the email claim, lowercased by the provider/our verifier so it
+	// matches the canonical lowercase users.email. Trust it for invite matching only
+	// when EmailVerified is true.
 	Email string
+	// EmailVerified reports whether the provider has confirmed the user owns Email.
+	// First-login provisioning matches an invite by email, so an unverified email
+	// must not be trusted to claim someone else's invited row.
+	EmailVerified bool
 	// Name is the display name claim, if the provider supplied one (may be empty).
 	Name string
 }

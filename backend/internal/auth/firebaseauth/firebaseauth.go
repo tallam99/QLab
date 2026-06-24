@@ -18,8 +18,9 @@ import (
 // Claim keys in a Firebase ID token. Firebase stores these in the Token.Claims
 // map (the standard email/name OIDC claims), not as typed fields.
 const (
-	claimEmail = "email"
-	claimName  = "name"
+	claimEmail         = "email"
+	claimEmailVerified = "email_verified"
+	claimName          = "name"
 )
 
 // Verifier verifies tokens via a Firebase auth.Client.
@@ -50,8 +51,9 @@ func (v *Verifier) Verify(ctx context.Context, rawToken string) (qauth.Identity,
 		FirebaseUID: token.UID,
 		// Lowercase to match the canonical lowercase users.email (the column CHECKs
 		// lower(email)); provisioning looks up by this value.
-		Email: strings.ToLower(claimString(token, claimEmail)),
-		Name:  claimString(token, claimName),
+		Email:         strings.ToLower(claimString(token, claimEmail)),
+		EmailVerified: claimBool(token, claimEmailVerified),
+		Name:          claimString(token, claimName),
 	}, nil
 }
 
@@ -61,6 +63,15 @@ func claimString(token *auth.Token, key string) string {
 		return v
 	}
 	return ""
+}
+
+// claimBool reads a bool claim, tolerating its absence or a non-bool value (a
+// missing email_verified is treated as unverified — fail closed).
+func claimBool(token *auth.Token, key string) bool {
+	if v, ok := token.Claims[key].(bool); ok {
+		return v
+	}
+	return false
 }
 
 // errInvalid wraps cause behind auth.ErrInvalidToken so errors.Is(err,

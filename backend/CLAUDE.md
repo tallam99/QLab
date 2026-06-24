@@ -131,7 +131,12 @@ come.
 - `internal/protogen/` — **generated** Go from the `proto/qlab/v1` contract (`mage
   genProto`); committed, never hand-edited. `qlab/v1` holds the message types,
   `qlab/v1/qlabv1connect` the Connect server/client stubs. The pure engine and the
-  store never import this — proto ⇄ domain conversions live in the handlers.
+  store never import this — proto ⇄ domain conversions live in the handlers (and, for
+  the store→wire shapes shared by more than one transport, in `internal/protoconv`).
+- `internal/protoconv/` — the store-domain → `qlab.v1` wire conversions shared by the
+  public API and the operator surface (`Slot`/`SlotStatus`/`Time`/`UUID`), so the slot
+  wire mapping lives in one place. Transport-specific conversions (request parsing,
+  reschedule results, lab/role/kind shapes) stay in each transport's `convert.go`.
 - `internal/api/` — the Connect service implementation (`qlab.v1.QlabService`): a
   thin transport adapter. Two interceptors run before every method (outermost
   first): the **auth interceptor** (`auth.go`) verifies the bearer token, resolves

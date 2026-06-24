@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/principal"
+	"github.com/tallam99/qlab/backend/internal/protoconv"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	"github.com/tallam99/qlab/backend/internal/protogen/qlab/v1/qlabv1connect"
 	"github.com/tallam99/qlab/backend/internal/services/authentication"
@@ -110,7 +111,7 @@ func (s *Service) ListSlots(ctx context.Context, req *connect.Request[v1.ListSlo
 	}
 	out := &v1.ListSlotsResponse{Slots: make([]*v1.Slot, 0, len(slots))}
 	for _, sl := range slots {
-		out.Slots = append(out.Slots, slotToProto(sl))
+		out.Slots = append(out.Slots, protoconv.Slot(sl))
 	}
 	return connect.NewResponse(out), nil
 }

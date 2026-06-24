@@ -77,11 +77,15 @@ func bearerToken(header string) string {
 
 // authConnectError maps an authentication error to a Connect status code:
 // not-provisioned (valid token, no invite) is PermissionDenied so the client can
-// tell "you're not invited" from "your token is bad" (Unauthenticated).
+// tell "you're not invited" from "your token is bad" (Unauthenticated); an identity
+// conflict (email linked to a different account) is FailedPrecondition — a data
+// state an operator must resolve, not an internal error.
 func authConnectError(err error) error {
 	switch {
 	case errors.Is(err, authentication.ErrNotProvisioned):
 		return connect.NewError(connect.CodePermissionDenied, err)
+	case errors.Is(err, authentication.ErrIdentityConflict):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, authentication.ErrUnauthenticated):
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	default:

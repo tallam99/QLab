@@ -16,6 +16,8 @@ import (
 	"connectrpc.com/validate"
 	"github.com/google/uuid"
 
+	"github.com/tallam99/qlab/backend/internal/httpmw"
+	"github.com/tallam99/qlab/backend/internal/protoconv"
 	devv1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/dev/v1"
 	"github.com/tallam99/qlab/backend/internal/protogen/qlab/dev/v1/devv1connect"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
@@ -100,6 +102,11 @@ func (s *Service) MintToken(ctx context.Context, req *connect.Request[devv1.Mint
 	if err != nil {
 		return nil, devError(err)
 	}
+	// Audit every impersonation: minting a token = "act as this user". The operator
+	// secret is the only gate, so record who was impersonated (the request-scoped
+	// logger already carries the request id) to bound the blast radius if it leaks.
+	httpmw.LoggerFromContext(ctx).Warn("operator minted impersonation token",
+		"impersonated_user_id", user.ID.String(), "impersonated_email", user.Email)
 	return connect.NewResponse(&devv1.MintTokenResponse{IdToken: token, User: userToProto(user)}), nil
 }
 
@@ -137,7 +144,7 @@ func (s *Service) GetLab(ctx context.Context, req *connect.Request[devv1.GetLabR
 		out.Pools = append(out.Pools, poolToProto(p))
 	}
 	for _, sl := range state.Slots {
-		out.Slots = append(out.Slots, slotToProto(sl))
+		out.Slots = append(out.Slots, protoconv.Slot(sl))
 	}
 	return connect.NewResponse(out), nil
 }

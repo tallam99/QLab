@@ -280,7 +280,7 @@ UPDATE users SET
     last_name    = COALESCE(NULLIF($3::text, ''), last_name),
     updated_by   = $4,
     updated_at   = now()
-WHERE users_id = $5
+WHERE users_id = $5 AND firebase_uid IS NULL
 RETURNING users_id, firebase_uid, email, first_name, last_name
 `
 
@@ -300,9 +300,12 @@ type LinkFirebaseUIDRow struct {
 	LastName    string
 }
 
-// First-login provisioning: bind a Firebase uid to an existing user row and fill
-// any name parts the invite left blank (keep an existing name if the provider sent
-// none). The user is recorded as their own updater.
+// First-login provisioning: bind a Firebase uid to an existing UNLINKED user row and
+// fill any name parts the invite left blank (keep an existing name if the provider
+// sent none). The user is recorded as their own updater. The firebase_uid IS NULL
+// guard makes the write self-protecting: a concurrent first login for the same row
+// updates zero rows (no row returned) rather than racing to rebind an already-linked
+// identity.
 func (q *Queries) LinkFirebaseUID(ctx context.Context, arg LinkFirebaseUIDParams) (LinkFirebaseUIDRow, error) {
 	row := q.db.QueryRow(ctx, linkFirebaseUID,
 		arg.FirebaseUid,

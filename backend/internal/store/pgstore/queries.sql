@@ -20,16 +20,19 @@ SELECT users_id, firebase_uid, email, first_name, last_name
 FROM users WHERE email = $1;
 
 -- name: LinkFirebaseUID :one
--- First-login provisioning: bind a Firebase uid to an existing user row and fill
--- any name parts the invite left blank (keep an existing name if the provider sent
--- none). The user is recorded as their own updater.
+-- First-login provisioning: bind a Firebase uid to an existing UNLINKED user row and
+-- fill any name parts the invite left blank (keep an existing name if the provider
+-- sent none). The user is recorded as their own updater. The firebase_uid IS NULL
+-- guard makes the write self-protecting: a concurrent first login for the same row
+-- updates zero rows (no row returned) rather than racing to rebind an already-linked
+-- identity.
 UPDATE users SET
     firebase_uid = @firebase_uid::text,
     first_name   = COALESCE(NULLIF(@first_name::text, ''), first_name),
     last_name    = COALESCE(NULLIF(@last_name::text, ''), last_name),
     updated_by   = @actor,
     updated_at   = now()
-WHERE users_id = @users_id
+WHERE users_id = @users_id AND firebase_uid IS NULL
 RETURNING users_id, firebase_uid, email, first_name, last_name;
 
 -- name: ResourcePoolByID :one

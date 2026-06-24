@@ -95,7 +95,7 @@ func TestAuthenticate(t *testing.T) {
 		},
 		{
 			name:     "first login provisions the invited row by email",
-			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-2", Email: "invited@x.io", Name: "Ada Lovelace"}},
+			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-2", Email: "invited@x.io", EmailVerified: true, Name: "Ada Lovelace"}},
 			store: &fakeStore{
 				byEmail: map[string]store.User{"invited@x.io": {ID: invitedID, Email: "invited@x.io"}},
 			},
@@ -105,15 +105,25 @@ func TestAuthenticate(t *testing.T) {
 		},
 		{
 			name:     "no invite is not provisioned",
-			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-3", Email: "stranger@x.io"}},
+			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-3", Email: "stranger@x.io", EmailVerified: true}},
 			store:    &fakeStore{},
 			wantErr:  authentication.ErrNotProvisioned,
 		},
 		{
 			name:     "verified token with no email is not provisioned",
-			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-4"}},
+			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-4", EmailVerified: true}},
 			store:    &fakeStore{},
 			wantErr:  authentication.ErrNotProvisioned,
+		},
+		{
+			// An unverified email must not be trusted to claim an invited row, even
+			// when one exists at that address — the takeover guard (decision 0008).
+			name:     "unverified email is not provisioned even with a matching invite",
+			verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-5", Email: "invited@x.io", EmailVerified: false}},
+			store: &fakeStore{
+				byEmail: map[string]store.User{"invited@x.io": {ID: invitedID, Email: "invited@x.io"}},
+			},
+			wantErr: authentication.ErrNotProvisioned,
 		},
 	}
 
@@ -147,8 +157,8 @@ func TestAuthenticate(t *testing.T) {
 }
 
 // TestAuthenticateIdentityConflict: an invited email already linked to a DIFFERENT
-// Firebase identity is refused (not silently rebound) — a data conflict that is none
-// of the auth sentinels.
+// Firebase identity is refused (not silently rebound) — a distinct ErrIdentityConflict
+// the transport maps to FailedPrecondition, not an opaque internal error.
 func TestAuthenticateIdentityConflict(t *testing.T) {
 	st := &fakeStore{
 		byEmail: map[string]store.User{
@@ -156,19 +166,40 @@ func TestAuthenticateIdentityConflict(t *testing.T) {
 		},
 	}
 	svc := New(Options{
-		Verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-new", Email: "taken@x.io"}},
+		Verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-new", Email: "taken@x.io", EmailVerified: true}},
 		Store:    st,
 	})
 
 	_, err := svc.Authenticate(context.Background(), "token")
-	if err == nil {
-		t.Fatal("expected an error for the identity conflict")
+	if !errors.Is(err, authentication.ErrIdentityConflict) {
+		t.Fatalf("error = %v, want wrap of %v", err, authentication.ErrIdentityConflict)
 	}
 	if errors.Is(err, authentication.ErrUnauthenticated) || errors.Is(err, authentication.ErrNotProvisioned) {
-		t.Errorf("conflict should be a distinct error, got %v", err)
+		t.Errorf("conflict must be distinct from the other auth sentinels, got %v", err)
 	}
 	if st.linked != nil {
 		t.Error("must not rebind the existing identity")
+	}
+}
+
+// TestAuthenticateLinkRaceIsConflict: the pre-check sees an unlinked invited row,
+// but a concurrent first login links it first, so the guarded LinkFirebaseUID
+// updates zero rows (store.ErrNotFound). That must surface as ErrIdentityConflict —
+// the same clean FailedPrecondition as the pre-check, never an internal 500.
+func TestAuthenticateLinkRaceIsConflict(t *testing.T) {
+	invitedID := uuid.New()
+	st := &fakeStore{
+		byEmail: map[string]store.User{"invited@x.io": {ID: invitedID, Email: "invited@x.io"}},
+		linkErr: store.ErrNotFound, // the guarded UPDATE matched no row (lost the race)
+	}
+	svc := New(Options{
+		Verifier: fakeVerifier{identity: auth.Identity{FirebaseUID: "fb-new", Email: "invited@x.io", EmailVerified: true}},
+		Store:    st,
+	})
+
+	_, err := svc.Authenticate(context.Background(), "token")
+	if !errors.Is(err, authentication.ErrIdentityConflict) {
+		t.Fatalf("error = %v, want wrap of %v", err, authentication.ErrIdentityConflict)
 	}
 }
 

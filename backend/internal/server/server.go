@@ -279,10 +279,13 @@ func (s *Server) closeDependencies() {
 	}
 }
 
-// initPgStore opens the Postgres pool and verifies it, retrying transient
-// failures with bounded exponential backoff. A returned store is ready to use; an
-// error means the database stayed unreachable.
-func (s *Server) initPgStore(ctx context.Context, databaseURL string) (*pgstore.Store, error) {
+// ConnectStore opens a Postgres pool at databaseURL and verifies it, retrying
+// transient failures with bounded exponential backoff. A returned store is ready to
+// use (it owns the pool — Close it to release); an error means the database stayed
+// unreachable. This is the single connect-with-retry path shared by the main app
+// store (WithPostgres) and the operator surface's elevated pool (decision 0008), so
+// both ride out a Neon cold start identically instead of failing on the first ping.
+func ConnectStore(ctx context.Context, logger logging.Logger, databaseURL string) (*pgstore.Store, error) {
 	pool, err := postgres.New(ctx, postgres.Options{DatabaseURL: databaseURL})
 	if err != nil {
 		return nil, fmt.Errorf("open database pool: %w", err)
@@ -294,14 +297,14 @@ func (s *Server) initPgStore(ctx context.Context, databaseURL string) (*pgstore.
 		dataStore, err := pgstore.New(pingCtx, pool)
 		cancel()
 		if err == nil {
-			s.logger.Info("database connected")
+			logger.Info("database connected")
 			return dataStore, nil
 		}
 		if attempt >= dbInitAttempts {
 			pool.Close()
 			return nil, fmt.Errorf("database unreachable after %d attempts: %w", dbInitAttempts, err)
 		}
-		s.logger.Warn("database not ready; retrying",
+		logger.Warn("database not ready; retrying",
 			attrError, err, "attempt", attempt, "retry_in", delay)
 		select {
 		case <-time.After(delay):
@@ -317,7 +320,7 @@ func (s *Server) initPgStore(ctx context.Context, databaseURL string) (*pgstore.
 // it to the server. Pass it to InjectDependency.
 func WithPostgres(databaseURL string) func(context.Context, *Server) error {
 	return func(ctx context.Context, s *Server) error {
-		dataStore, err := s.initPgStore(ctx, databaseURL)
+		dataStore, err := ConnectStore(ctx, s.logger, databaseURL)
 		if err != nil {
 			return err
 		}

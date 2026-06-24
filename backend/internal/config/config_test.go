@@ -24,9 +24,11 @@ func TestOperatorEnabled(t *testing.T) {
 	}
 }
 
-// TestValidate checks the cross-field guard: the Auth emulator (which skips
-// signature verification) must never be configured in production, since it would
-// make the service accept forged tokens.
+// TestValidate checks the cross-field guards: the Auth emulator (which skips
+// signature verification) must never be configured in production (it would make the
+// service accept forged tokens); the operator surface must be absent in production
+// and, when enabled against real Firebase, requires the web API key its token-mint
+// exchange needs (otherwise MintToken fails silently).
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -39,7 +41,11 @@ func TestValidate(t *testing.T) {
 		{"operator secret in production rejected", Config{Env: EnvProduction, OperatorSecret: "s"}, true},
 		{"operator db url in production rejected", Config{Env: EnvProduction, OperatorDatabaseURL: "postgres://x"}, true},
 		{"operator secret without db url rejected", Config{Env: EnvStaging, OperatorSecret: "s"}, true},
-		{"operator secret with db url allowed", Config{Env: EnvStaging, OperatorSecret: "s", OperatorDatabaseURL: "postgres://x"}, false},
+		// Operator against the emulator: any web API key works, so none is required.
+		{"operator with db url and emulator allowed", Config{Env: EnvLocal, OperatorSecret: "s", OperatorDatabaseURL: "postgres://x", FirebaseAuthEmulatorHost: "localhost:9099"}, false},
+		// Operator against real Firebase (no emulator) needs the real web API key.
+		{"operator real firebase without web api key rejected", Config{Env: EnvStaging, OperatorSecret: "s", OperatorDatabaseURL: "postgres://x"}, true},
+		{"operator real firebase with web api key allowed", Config{Env: EnvStaging, OperatorSecret: "s", OperatorDatabaseURL: "postgres://x", FirebaseWebAPIKey: "AIzaKey"}, false},
 	}
 	for _, tt := range tests {
 		err := tt.cfg.validate()
