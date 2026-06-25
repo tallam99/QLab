@@ -173,23 +173,22 @@ jobs:
           npm --prefix frontend ci
           npm --prefix frontend run build
 
-      - name: Install Firebase CLI
-        # Pinned (not "latest") so a future major can't change deploy behaviour silently.
-        run: npm install -g firebase-tools@15.22.2
+      - name: Load Firebase Hosting service-account key
+        # firebase-tools' CLI can't authenticate from a service-account key or the WIF ADC
+        # (only a refresh token), so Hosting deploys go through the official action, which
+        # authenticates the SA against the Hosting REST API. The dedicated, hosting-only SA
+        # key lives in Secret Manager; fetch it via gcloud (WIF) as compact single-line
+        # JSON, mask it, and hand it to the action. Cloud Run above stays keyless on WIF.
+        run: |
+          key="$(gcloud secrets versions access latest \
+            --secret='firebase-hosting-key' --project='${{ vars.GCP_PROJECT_ID }}' | jq -c .)"
+          echo "::add-mask::$key"
+          echo "FIREBASE_SERVICE_ACCOUNT=$key" >> "$GITHUB_ENV"
 
       - name: Deploy web to Firebase Hosting
-        # firebase-tools cannot consume the Workload Identity Federation (external_account)
-        # ADC that gcloud uses — its requireAuth only accepts a service-account key or a
-        # refresh token. So Hosting deploys authenticate with a dedicated, hosting-only
-        # service-account key, stored in Secret Manager (like every other secret here) and
-        # fetched via gcloud (WIF) into a temp file used only for the firebase command.
-        # The Cloud Run steps above stay keyless on WIF; the command-scoped
-        # GOOGLE_APPLICATION_CREDENTIALS leaves them untouched.
-        run: |
-          keyfile="$(mktemp)"
-          trap 'rm -f "$keyfile"' EXIT
-          gcloud secrets versions access latest \
-            --secret="firebase-hosting-key" --project="${{ vars.GCP_PROJECT_ID }}" > "$keyfile"
-          GOOGLE_APPLICATION_CREDENTIALS="$keyfile" \
-            firebase deploy --only hosting \
-            --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ env.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          channelId: live
