@@ -28,6 +28,7 @@ import (
 	"github.com/tallam99/qlab/backend/internal/dynamicqueue/basic"
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/logging"
+	"github.com/tallam99/qlab/backend/internal/realtime"
 	authenticationv1 "github.com/tallam99/qlab/backend/internal/services/authentication/v1"
 	authzv1 "github.com/tallam99/qlab/backend/internal/services/authz/v1"
 	notificationsv1 "github.com/tallam99/qlab/backend/internal/services/notifications/v1"
@@ -109,6 +110,10 @@ type Server struct {
 	// apiService is the mounted Connect service; its scheduling dependency is
 	// attached by the WithScheduling injector once the store is ready.
 	apiService *api.Service
+	// broker fans pool-schedule changes out to the SSE stream handler. Created in New
+	// (no dependencies) and fed by the realtime listener, which the WithScheduleListener
+	// injector starts once the database URL is known.
+	broker *realtime.Broker
 	// boundAddr is the listener's actual address, published once Run binds it (so
 	// tests using a :0 port can discover it). Empty until then.
 	boundAddr atomic.Pointer[string]
@@ -139,7 +144,15 @@ func New(opts Options) *Server {
 	if opts.FirebaseAuth == nil {
 		panic("server: New requires a FirebaseAuth client")
 	}
-	s := &Server{logger: opts.Logger, apiService: api.New(), firebaseAuth: opts.FirebaseAuth}
+	s := &Server{
+		logger:       opts.Logger,
+		apiService:   api.New(),
+		broker:       realtime.NewBroker(),
+		firebaseAuth: opts.FirebaseAuth,
+	}
+	// The SSE stream handler subscribes to the broker; attach it now so the endpoint is
+	// wired before serving (it still returns Unavailable until the scheduling service is).
+	s.apiService.SetBroker(s.broker)
 
 	r := chi.NewRouter()
 
@@ -168,6 +181,11 @@ func New(opts Options) *Server {
 	// (until then, methods return Unavailable).
 	apiPath, apiHandler := s.apiService.Handler()
 	r.Mount(apiPath, apiHandler)
+
+	// The live-schedule SSE stream: a plain HTTP route (not a Connect procedure), so it
+	// is registered alongside the API mount rather than inside it. It does its own
+	// bearer-token auth (the same path the RPC interceptor uses).
+	r.Get(api.StreamSchedulePath, s.apiService.StreamSchedule())
 
 	s.handler = r
 	s.httpServer = &http.Server{
@@ -378,6 +396,22 @@ func WithSchedulingService(grace dynamicqueue.Minutes, clock scheduling.Clock) f
 			Logger:        s.logger,
 		})
 		s.apiService.SetScheduling(schedulingService)
+		return nil
+	}
+}
+
+// WithScheduleListener returns an injector that starts the realtime Postgres listener:
+// the single LISTEN session that turns transactional schedule-change NOTIFYs into
+// broker deliveries to the SSE streams (decision 0010). databaseURL must allow a
+// session-pinned connection — the DIRECT (unpooled) endpoint in the cloud; locally the
+// app URL works. The listener runs for the server's lifetime (its goroutine exits when
+// the Run context is cancelled on shutdown); a listener that can't connect degrades to
+// no-live-updates rather than failing the process, so this injector never errors on a
+// connection problem.
+func WithScheduleListener(databaseURL string) func(context.Context, *Server) error {
+	return func(ctx context.Context, s *Server) error {
+		listener := realtime.NewListener(databaseURL, s.broker, s.logger)
+		go listener.Run(ctx)
 		return nil
 	}
 }

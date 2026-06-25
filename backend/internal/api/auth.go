@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
 	"github.com/tallam99/qlab/backend/internal/httpmw"
 	"github.com/tallam99/qlab/backend/internal/observability"
@@ -40,44 +42,76 @@ func (s *Service) authInterceptor() connect.UnaryInterceptorFunc {
 				return next(ctx, req)
 			}
 
-			authn := s.authn.Load()
-			if authn == nil {
-				return nil, connect.NewError(connect.CodeUnavailable, errors.New("authentication not ready"))
-			}
-
-			rawToken := bearerToken(req.Header().Get(HeaderAuthorization))
-			if rawToken == "" {
-				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("missing bearer token"))
-			}
-
-			user, err := (*authn).Authenticate(ctx, rawToken)
+			p, err := s.resolvePrincipal(ctx, req.Header())
 			if err != nil {
-				return nil, authConnectError(err)
+				return nil, authResolveConnectError(err)
 			}
-
-			labID, err := parseUUID(req.Header().Get(HeaderSelectedLab))
-			if err != nil {
-				// Authenticated but no (valid) lab selected. The lab is required up front
-				// (RLS is fail-closed), so this is a client error, not an auth failure.
-				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("missing or invalid "+HeaderSelectedLab+" header"))
-			}
-
-			ctx = principal.NewContext(ctx, principal.Principal{UserID: user.ID, LabID: labID})
+			ctx = principal.NewContext(ctx, p)
 
 			// Now that the caller is known, tag the RPC span and enrich the
 			// request-scoped logger so every line this request emits — and the span tree —
 			// carries lab_id/user_id. One structured line per authenticated RPC records the
 			// procedure (the observability per-request log line; deeper layers add spans).
-			observability.Annotate(ctx, observability.LabID(labID), observability.UserID(user.ID))
+			observability.Annotate(ctx, observability.LabID(p.LabID), observability.UserID(p.UserID))
 			logger := httpmw.LoggerFromContext(ctx).With(
-				observability.KeyLabID, labID.String(),
-				observability.KeyUserID, user.ID.String(),
+				observability.KeyLabID, p.LabID.String(),
+				observability.KeyUserID, p.UserID.String(),
 			)
 			ctx = httpmw.WithLogger(ctx, logger)
 			logger.Info("rpc", "procedure", req.Spec().Procedure)
 
 			return next(ctx, req)
 		}
+	}
+}
+
+// Sentinel errors resolvePrincipal returns for transport-agnostic mapping. The
+// authentication-service errors (authentication.Err*) pass through unwrapped so each
+// caller's mapper can distinguish them from these.
+var (
+	errAuthUnavailable = errors.New("authentication not ready")
+	errMissingBearer   = errors.New("missing bearer token")
+	errMissingLab      = errors.New("missing or invalid " + HeaderSelectedLab + " header")
+)
+
+// resolvePrincipal verifies the bearer token and the selected-lab header on a request
+// and returns the caller principal. It is the single auth path shared by the Connect
+// interceptor (unary RPCs) and the SSE stream handler (a plain HTTP route), so both
+// surfaces authenticate identically. Returned errors are the sentinels above or an
+// authentication.Err* value; callers map them to their transport's status.
+func (s *Service) resolvePrincipal(ctx context.Context, header http.Header) (principal.Principal, error) {
+	authn := s.authn.Load()
+	if authn == nil {
+		return principal.Principal{}, errAuthUnavailable
+	}
+	rawToken := bearerToken(header.Get(HeaderAuthorization))
+	if rawToken == "" {
+		return principal.Principal{}, errMissingBearer
+	}
+	user, err := (*authn).Authenticate(ctx, rawToken)
+	if err != nil {
+		return principal.Principal{}, err
+	}
+	labID, err := uuid.Parse(header.Get(HeaderSelectedLab))
+	if err != nil {
+		// Authenticated but no (valid) lab selected. The lab is required up front (RLS
+		// is fail-closed), so this is a client error, not an auth failure.
+		return principal.Principal{}, errMissingLab
+	}
+	return principal.Principal{UserID: user.ID, LabID: labID}, nil
+}
+
+// authResolveConnectError maps a resolvePrincipal error to a Connect status code.
+func authResolveConnectError(err error) error {
+	switch {
+	case errors.Is(err, errAuthUnavailable):
+		return connect.NewError(connect.CodeUnavailable, err)
+	case errors.Is(err, errMissingBearer):
+		return connect.NewError(connect.CodeUnauthenticated, err)
+	case errors.Is(err, errMissingLab):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	default:
+		return authConnectError(err)
 	}
 }
 

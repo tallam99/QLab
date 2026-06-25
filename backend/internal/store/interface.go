@@ -38,10 +38,16 @@ type PoolState struct {
 
 // PoolMutation is what a WithPool callback returns for the store to persist
 // atomically: the full desired state of every slot to write (insert-or-update by
-// ID) and any outbox rows to enqueue.
+// ID), any outbox rows to enqueue, and an optional schedule-change notification.
 type PoolMutation struct {
 	Slots  []Slot
 	Outbox []OutboxRow
+	// Notify, when non-empty, makes WithPool emit a ScheduleNotifyChannel
+	// notification (kind = this value) inside the same transaction, so it is
+	// delivered atomically with the commit and never for a rolled-back event. Empty
+	// means "no notification" (e.g. a read, or an event that changed no schedule
+	// state). The realtime listener turns it into a live push to subscribers.
+	Notify ScheduleChangeKind
 }
 
 // Store is the data store the service reads and writes its data model through.
