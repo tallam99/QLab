@@ -23,14 +23,15 @@ deploy to Firebase Hosting.
 **Auth is Workload Identity Federation (WIF)** — GitHub mints a short-lived OIDC
 token that GCP trusts, so `gcloud` (Cloud Run, Artifact Registry, Secret Manager)
 uses **no long-lived key**. The one exception is **Firebase Hosting**:
-firebase-tools cannot consume the WIF `external_account` ADC (its `requireAuth`
-only accepts a service-account key or a refresh token), so the Hosting deploy
-authenticates with a dedicated, hosting-only service account
-(`qlab-hosting-deployer`, scoped to `firebasehosting.admin` + read-only
-`firebase.viewer`). Its key lives in **Secret Manager** (`firebase-hosting-key`,
-readable by `qlab-deployer`), is fetched by gcloud at deploy time, and is used
-only for the `firebase deploy` command — so a leak is confined to Hosting and the
-rest of the pipeline stays keyless. (No key in the repo or in GitHub secrets.)
+firebase-tools' CLI can't authenticate from the WIF `external_account` ADC *or* a
+service-account key (only a refresh token), so the Hosting deploy uses the official
+`FirebaseExtended/action-hosting-deploy` action, which authenticates a dedicated,
+hosting-only service account (`qlab-hosting-deployer`, scoped to
+`firebasehosting.admin` + read-only `firebase.viewer`) against the Hosting REST API.
+That SA's key lives in **Secret Manager** (`firebase-hosting-key`, readable by
+`qlab-deployer`) and is fetched by gcloud at deploy time and handed to the action —
+so a leak is confined to Hosting and the rest of the pipeline stays keyless. (No key
+in the repo or in GitHub secrets.)
 
 ## Promotion strategy
 
