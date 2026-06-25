@@ -31,6 +31,7 @@ src/
     operatorTransport.ts        operator transport (→ qlab.dev.v1) + operator-token interceptor
     operatorClient.ts           imperative generated client over operatorTransport
     authHolder.ts               mutable singleton bridging React → the api interceptor
+    scheduleStream.ts           SSE subscription to the live-schedule stream (header auth)
     headers.ts                  request-header name constants
   session/
     SessionProvider.tsx         context: the OPERATOR identity (Firebase user)
@@ -42,7 +43,7 @@ src/
     WorkspacePicker.tsx         provision a new / load an existing workspace
     ProvisionModal.tsx          new-workspace form (feature, member/resource counts)
     ActAsSwitcher.tsx           pick which user to act as + which pool
-    PoolPanel.tsx               container: GetSchedule + the mutating RPCs → PoolView
+    PoolPanel.tsx               container: GetSchedule + the mutating RPCs + live stream → PoolView
     PoolView.tsx                presentational: running grid + proportional timeline
     slot-ui.tsx                 shared SlotRow + StatusPill + SlotActions
     ThemeToggle.tsx             light/dark toggle (theme.ts; tokens in index.css)
@@ -201,27 +202,36 @@ Acting-as path (the queue):
     → api transport interceptor reads authHolder → Authorization + X-QLab-Lab
     → POST {baseUrl}/qlab.v1.QlabService/<Method>
     → resultToRows(GetScheduleResponse.result) → SlotRow[] → PoolView
-    → every mutation refetch()es GetSchedule (the engine reschedule is the truth)
+    → the acting mutation refetch()es GetSchedule (immediate local confirmation)
+    → and the live SSE stream pushes the new RescheduleResult into the SAME query
+      cache, so other clients update without a refetch
     → DOM
 ```
 
 - **One data model:** `GetSchedule` returns the engine's `RescheduleResult`; mutations
-  return the same shape (and the SSE stream will, next phase). `PoolPanel` reads only
-  `GetSchedule` and refetches after each mutation — no optimistic updates, no cache
-  invalidation juggling.
+  and the SSE `QueueEvent` carry the same shape, so `PoolPanel` reads only the
+  `GetSchedule` query cache — no optimistic updates, no normalization. The mutation's
+  own `refetch()` gives the actor immediate feedback; the stream keeps every *other*
+  client current.
+- **Live updates:** `PoolPanel` subscribes via `subscribeSchedule(poolId)`
+  (`api/scheduleStream.ts`). Each `QueueEvent` is written into the GetSchedule query
+  key with `queryClient.setQueryData`, so a change made by anyone re-renders the view
+  with no refetch. The stream's first frame is the current snapshot, so a fresh or
+  reconnected subscription is immediately consistent.
 - **Token cache:** `actAs(userId)` mints via the operator client only on a cache miss;
   a hit (a user already acted as) sets `actingUserId` with no network call.
 - **Local transforms:** `model.ts` flattens operator proto responses to
-  `{Member, Pool, Resource, Workspace}`; `resultToRows` derives the per-slot view
-  flags. No normalization layer; the SSE/streaming path (the `QueueEvent` envelope)
-  is generated but not yet wired (next phase).
+  `{Member, Pool, Resource, Workspace}`; `resultToRows` derives the per-slot view flags.
 
 ## 4. API boundary
 
 The frontend calls **two** Connect services over HTTP POST at
 `/<package>.<Service>/<Method>`, each on its own transport. Access is only through the
 generated clients — Connect-Query hooks for the public API, the imperative
-`operatorClient` for the operator surface; no hand-written `fetch`.
+`operatorClient` for the operator surface; no hand-written `fetch`. The **one
+exception** is the SSE stream below: a Server-Sent Events subscription is not a unary
+RPC, so it is not expressible as a Connect call. It still uses the generated
+`QueueEvent` type to parse each frame and the same bearer-token auth as every RPC.
 
 ### `qlab.dev.v1.DevService` — operator transport (operator's Google token)
 
@@ -253,8 +263,20 @@ now uses `GetSchedule`.
 
 Every api request carries `Authorization: Bearer <acting-as token>` + `X-QLab-Lab:
 <workspace lab>`, attached centrally by the api interceptor (components never set
-headers). `ClockIn`/`ClockOut`/`PokeOccupant`/`ForceClockOut`/`ForceNoShow` remain
-generated-but-unwired. Header names: `api/headers.ts`.
+headers). Header names: `api/headers.ts`.
+
+### Live-schedule stream — SSE (acting-as minted token)
+
+`GET {baseUrl}/v1/stream/schedule?resource_pool_id=<pool>` is a long-lived
+Server-Sent Events stream. `subscribeSchedule` (`api/scheduleStream.ts`) opens it with
+`@microsoft/fetch-event-source` — a fetch-based SSE client, chosen because the browser's
+native `EventSource` cannot send an `Authorization` header, and decision 0001 requires
+the bearer token on every endpoint (a token in the URL would leak into logs/history). It
+sends the same `Authorization: Bearer` + `X-QLab-Lab` headers as the api transport,
+reading them from the same `authHolder`. Each frame is a `QueueEvent` (`{ type,
+result }`); the first frame is the current snapshot, then one per change. It reconnects
+itself with backoff, minting a fresh token per attempt, so it survives token expiry and
+network blips; each (re)connection's snapshot frame closes any gap. See decision 0010.
 
 ### Base URL & transport
 
