@@ -24,3 +24,5 @@ One file per decision, numbered `NNNN-short-title.md`. Each records:
 - [0005 — Row-level security for tenant isolation](0005-row-level-security-tenant-isolation.md)
 - [0006 — Request identity (principal) and lab scoping](0006-request-identity-and-lab-scoping.md)
 - [0008 — Operator tooling for the staging dev experience](0008-operator-tooling-staging-dev-experience.md)
+- [0009 — Observability: tracing + structured-logging conventions](0009-observability-tracing-conventions.md)
+- [0010 — Live schedule updates: SSE over Postgres LISTEN/NOTIFY](0010-realtime-schedule-sse-listen-notify.md)
