@@ -174,9 +174,26 @@ jobs:
           npm --prefix frontend run build
 
       - name: Install Firebase CLI
-        run: npm install -g firebase-tools
+        # Pinned (not "latest") so a future major can't change deploy behaviour silently.
+        run: npm install -g firebase-tools@15.22.2
 
       - name: Deploy web to Firebase Hosting
-        # firebase-tools authenticates via the WIF credentials exported by the auth
-        # step (GOOGLE_APPLICATION_CREDENTIALS) — no Firebase token/SA key needed.
-        run: firebase deploy --only hosting --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
+        # firebase-tools cannot consume the Workload Identity Federation (external_account)
+        # ADC that gcloud uses — its requireAuth only accepts a service-account key or a
+        # refresh token. So Hosting deploys authenticate with a dedicated, hosting-only
+        # service-account key (the FIREBASE_SA_KEY env-scoped secret) written to a temp
+        # file. The Cloud Run steps above stay keyless on WIF; setting
+        # GOOGLE_APPLICATION_CREDENTIALS only for this command leaves them untouched.
+        env:
+          FIREBASE_SA_KEY: ${{ secrets.FIREBASE_SA_KEY }}
+        run: |
+          if [ -z "$FIREBASE_SA_KEY" ]; then
+            echo "::error::FIREBASE_SA_KEY secret is not set for ${{ inputs.environment }}" >&2
+            exit 1
+          fi
+          keyfile="$(mktemp)"
+          trap 'rm -f "$keyfile"' EXIT
+          printf '%s' "$FIREBASE_SA_KEY" > "$keyfile"
+          GOOGLE_APPLICATION_CREDENTIALS="$keyfile" \
+            firebase deploy --only hosting \
+            --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
