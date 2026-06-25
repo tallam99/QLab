@@ -181,19 +181,15 @@ jobs:
         # firebase-tools cannot consume the Workload Identity Federation (external_account)
         # ADC that gcloud uses — its requireAuth only accepts a service-account key or a
         # refresh token. So Hosting deploys authenticate with a dedicated, hosting-only
-        # service-account key (the FIREBASE_SA_KEY env-scoped secret) written to a temp
-        # file. The Cloud Run steps above stay keyless on WIF; setting
-        # GOOGLE_APPLICATION_CREDENTIALS only for this command leaves them untouched.
-        env:
-          FIREBASE_SA_KEY: ${{ secrets.FIREBASE_SA_KEY }}
+        # service-account key, stored in Secret Manager (like every other secret here) and
+        # fetched via gcloud (WIF) into a temp file used only for the firebase command.
+        # The Cloud Run steps above stay keyless on WIF; the command-scoped
+        # GOOGLE_APPLICATION_CREDENTIALS leaves them untouched.
         run: |
-          if [ -z "$FIREBASE_SA_KEY" ]; then
-            echo "::error::FIREBASE_SA_KEY secret is not set for ${{ inputs.environment }}" >&2
-            exit 1
-          fi
           keyfile="$(mktemp)"
           trap 'rm -f "$keyfile"' EXIT
-          printf '%s' "$FIREBASE_SA_KEY" > "$keyfile"
+          gcloud secrets versions access latest \
+            --secret="firebase-hosting-key" --project="${{ vars.GCP_PROJECT_ID }}" > "$keyfile"
           GOOGLE_APPLICATION_CREDENTIALS="$keyfile" \
             firebase deploy --only hosting \
             --project "${{ vars.FIREBASE_PROJECT_ID }}" --non-interactive
