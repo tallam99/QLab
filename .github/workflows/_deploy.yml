@@ -173,22 +173,9 @@ jobs:
           npm --prefix frontend ci
           npm --prefix frontend run build
 
-      - name: Load Firebase Hosting service-account key
-        # firebase-tools' CLI can't authenticate from a service-account key or the WIF ADC
-        # (only a refresh token), so Hosting deploys go through the official action, which
-        # authenticates the SA against the Hosting REST API. The dedicated, hosting-only SA
-        # key lives in Secret Manager; fetch it via gcloud (WIF) as compact single-line
-        # JSON, mask it, and hand it to the action. Cloud Run above stays keyless on WIF.
-        run: |
-          key="$(gcloud secrets versions access latest \
-            --secret='firebase-hosting-key' --project='${{ vars.GCP_PROJECT_ID }}' | jq -c .)"
-          echo "::add-mask::$key"
-          echo "FIREBASE_SERVICE_ACCOUNT=$key" >> "$GITHUB_ENV"
-
       - name: Deploy web to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ env.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
-          channelId: live
+        # Keyless: deploy frontend/dist to the Hosting REST API using the WIF access token
+        # (gcloud is already authenticated above; the deploy SA holds firebasehosting.admin).
+        # firebase-tools' CLI can't authenticate without a refresh token, so we drive the
+        # REST API directly and carry no firebase-tools dependency. See scripts/deploy-hosting.sh.
+        run: ./scripts/deploy-hosting.sh "${{ vars.FIREBASE_PROJECT_ID }}"

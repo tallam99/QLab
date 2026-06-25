@@ -20,18 +20,17 @@ before the new revision) → deploy to Cloud Run → **build the frontend** (`vi
 with the live Cloud Run URL and the Firebase web config injected at build time) →
 deploy to Firebase Hosting.
 
-**Auth is Workload Identity Federation (WIF)** — GitHub mints a short-lived OIDC
-token that GCP trusts, so `gcloud` (Cloud Run, Artifact Registry, Secret Manager)
-uses **no long-lived key**. The one exception is **Firebase Hosting**:
-firebase-tools' CLI can't authenticate from the WIF `external_account` ADC *or* a
-service-account key (only a refresh token), so the Hosting deploy uses the official
-`FirebaseExtended/action-hosting-deploy` action, which authenticates a dedicated,
-hosting-only service account (`qlab-hosting-deployer`, scoped to
-`firebasehosting.admin` + read-only `firebase.viewer`) against the Hosting REST API.
-That SA's key lives in **Secret Manager** (`firebase-hosting-key`, readable by
-`qlab-deployer`) and is fetched by gcloud at deploy time and handed to the action —
-so a leak is confined to Hosting and the rest of the pipeline stays keyless. (No key
-in the repo or in GitHub secrets.)
+**Auth is Workload Identity Federation (WIF), end to end** — GitHub mints a
+short-lived OIDC token that GCP trusts, so there is **no long-lived key anywhere**
+(not in the repo, not in GitHub secrets). `gcloud` uses it natively for Cloud Run,
+Artifact Registry, and Secret Manager.
+
+Firebase Hosting needs a small workaround: firebase-tools' CLI can't authenticate
+non-interactively without a `firebase login:ci` refresh token — it ignores both the
+WIF ADC and service-account keys — so we **don't use firebase-tools at all**. Instead
+`scripts/deploy-hosting.sh` deploys `frontend/dist` straight to the **Hosting REST
+API** using the deploy SA's WIF access token (the SA carries `firebasehosting.admin`).
+Keyless, and with no firebase-tools dependency to break.
 
 ## Promotion strategy
 
@@ -398,48 +397,19 @@ gcloud iam service-accounts create qlab-api \
 export RUNTIME_SA="qlab-api@${PROJECT_ID}.iam.gserviceaccount.com"
 ```
 
-Grant the **deploy SA** what it needs to ship the API + push images:
+Grant the **deploy SA** what it needs to ship both surfaces:
 
 ```sh
 for ROLE in roles/run.admin roles/artifactregistry.writer \
-            roles/iam.serviceAccountUser; do
+            roles/iam.serviceAccountUser roles/firebasehosting.admin; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${DEPLOY_SA}" --role="$ROLE"
 done
 ```
 
 (`iam.serviceAccountUser` lets the deployer "act as" the runtime SA when deploying
-the service.) The deploy SA does **not** carry `firebasehosting.admin`: firebase-tools
-can't use WIF, so Hosting deploys run under a separate hosting-only SA (below), and
-the deploy SA only needs to *read its key* from Secret Manager (granted in §5).
-
-#### Hosting deploy SA (firebase-tools can't use WIF)
-
-firebase-tools' `requireAuth` rejects the WIF `external_account` ADC, so Hosting
-deploys use a dedicated, hosting-only SA whose key is stored in Secret Manager and
-fetched by the deploy SA at deploy time:
-
-```sh
-gcloud iam service-accounts create qlab-hosting-deployer \
-  --display-name="QLab Hosting deployer (CI)" --project "$PROJECT_ID"
-export HOSTING_SA="qlab-hosting-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
-
-# Scope: deploy hosting + the read-only project preflight firebase-tools does.
-for ROLE in roles/firebasehosting.admin roles/firebase.viewer; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:${HOSTING_SA}" --role="$ROLE"
-done
-
-# Store a key in Secret Manager (never on disk); let the deploy SA read it.
-gcloud secrets create firebase-hosting-key --project "$PROJECT_ID" --replication-policy=automatic
-gcloud iam service-accounts keys create /dev/stdout --iam-account="$HOSTING_SA" \
-  | gcloud secrets versions add firebase-hosting-key --project "$PROJECT_ID" --data-file=-
-gcloud secrets add-iam-policy-binding firebase-hosting-key --project "$PROJECT_ID" \
-  --member="serviceAccount:${DEPLOY_SA}" --role="roles/secretmanager.secretAccessor"
-```
-
-> ✅ **Done** in both projects (`qlab-staging`, `qlab-production`). Rotate by adding a
-> new key version and revoking the old user-managed key.
+the service.) `firebasehosting.admin` lets `scripts/deploy-hosting.sh` push to the
+Hosting REST API with the deploy SA's WIF access token — no firebase-tools, no key.
 
 ### 4. Secret Manager — the database URL secret
 
