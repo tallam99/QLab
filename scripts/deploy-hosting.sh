@@ -28,19 +28,22 @@ PUBLIC_DIR="$(jq -r '.hosting.public' "$FIREBASE_JSON")"
 REWRITES="$(jq -c '[.hosting.rewrites[]? | {glob: .source, path: .destination}]' "$FIREBASE_JSON")"
 [ -d "$PUBLIC_DIR" ] || { echo "::error::public dir '$PUBLIC_DIR' not found" >&2; exit 1; }
 
-# One token for the whole run (deploys finish well inside its lifetime). The quota project
-# must be named explicitly: it's required when the token is a user credential (local runs)
-# and harmless when it's a service-account/WIF token (CI). For our default site, the site
-# id equals the GCP project id, so SITE doubles as the quota project.
+# One token for the whole run (deploys finish well inside its lifetime).
 TOKEN="$(gcloud auth print-access-token)"
 AUTH="Authorization: Bearer ${TOKEN}"
-QUOTA="x-goog-user-project: ${SITE}"
+
+# Quota project: a *user* credential (local runs) must name one explicitly, so set
+# HOSTING_QUOTA_PROJECT=<project> when running by hand. A service-account / WIF token (CI)
+# bills its own project and must NOT send this header — the SA would additionally need
+# serviceusage access on the project, which it doesn't have.
+QUOTA_ARGS=()
+[ -n "${HOSTING_QUOTA_PROJECT:-}" ] && QUOTA_ARGS=(-H "x-goog-user-project: ${HOSTING_QUOTA_PROJECT}")
 
 # api METHOD PATH [JSON_BODY] — a JSON REST call that fails the script on a non-2xx.
 api() {
   local method="$1" path="$2" body="${3:-}"
   curl -sS --fail-with-body -X "$method" \
-    -H "$AUTH" -H "$QUOTA" -H "Content-Type: application/json" \
+    -H "$AUTH" "${QUOTA_ARGS[@]}" -H "Content-Type: application/json" \
     ${body:+-d "$body"} \
     "${API}/${path}"
 }
@@ -75,7 +78,7 @@ mapfile -t required < <(jq -r '.uploadRequiredHashes // [] | .[]' <<<"$populate"
 echo "Uploading ${#required[@]} new/changed files…"
 for h in "${required[@]}"; do
   curl -sS --fail-with-body -X POST \
-    -H "$AUTH" -H "$QUOTA" -H "Content-Type: application/octet-stream" \
+    -H "$AUTH" "${QUOTA_ARGS[@]}" -H "Content-Type: application/octet-stream" \
     --data-binary "@${blob_by_hash[$h]}" \
     "${upload_url}/${h}" > /dev/null
 done
