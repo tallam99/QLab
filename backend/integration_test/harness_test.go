@@ -122,6 +122,9 @@ func startHarness(appURL string) (*harness, error) {
 	srv.InjectDependency(server.WithPostgres(appURL))
 	srv.InjectDependency(server.WithAuthentication())
 	srv.InjectDependency(server.WithSchedulingService(testGrace, clock.Now))
+	// The realtime listener so the suite can exercise the live SSE stream. The throwaway
+	// test database is a single local Postgres (no pooler), so the app URL works for LISTEN.
+	srv.InjectDependency(server.WithScheduleListener(appURL))
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

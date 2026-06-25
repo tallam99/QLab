@@ -159,7 +159,18 @@ come.
   principal, converts proto → domain, calls `services/scheduling` (and, like
   authentication, held behind an `atomic.Pointer` set once the store is ready — until
   then RPCs return `Unavailable`), and converts the result back. proto types live
-  only here; domain errors map to Connect codes in `connectError`.
+  only here; domain errors map to Connect codes in `connectError`. It also serves the
+  **SSE live-schedule stream** (`stream.go`, `GET /v1/stream/schedule`): a plain HTTP
+  route (SSE isn't a unary RPC), authenticated by the same `resolvePrincipal` the
+  interceptor uses, that subscribes to the realtime broker and pushes a `QueueEvent`
+  per change. proto→JSON via protojson so the generated TS `fromJson` parses it.
+- `internal/realtime/` — the live-update fan-out (decision 0010): an in-process
+  `Broker` (per-pool subscriber channels, non-blocking sends) fed by a `Listener` that
+  holds one dedicated Postgres `LISTEN` connection. A pool-mutating tx emits a
+  transactional `pg_notify` (in `pgstore.WithPool`, driven by `PoolMutation.Notify`);
+  the listener decodes it and publishes to the broker, which the SSE handler reads.
+  LISTEN needs a **session-pinned** connection — the direct (unpooled) Neon endpoint in
+  cloud (`SCHEDULE_LISTENER_DATABASE_URL`, defaults to `DATABASE_URL` locally).
 - `internal/server/` — the server: router, handlers (methods on `Server`), and the
   lifecycle. `New` returns a `*Server`; `Run(ctx)` serves immediately (so
   `/healthq` liveness is 200 at once), runs the registered dependency injectors

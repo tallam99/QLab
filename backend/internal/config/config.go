@@ -25,6 +25,13 @@ type Config struct {
 	// points at the Compose Postgres; on Cloud Run it's the Neon string. Required:
 	// the service pings the database on boot, so there is no DB-less mode.
 	DatabaseURL string `envconfig:"DATABASE_URL" required:"true"`
+	// ScheduleListenerDatabaseURL is the connection string the realtime listener uses
+	// for its dedicated Postgres LISTEN session (decision 0010). Optional: empty falls
+	// back to DatabaseURL (see ListenerDatabaseURL). It exists because LISTEN needs a
+	// session-pinned connection, which a transaction-pooled endpoint (Neon's pooled
+	// host) does not provide — so in the cloud this must point at the DIRECT, unpooled
+	// endpoint. Locally the single Postgres has no pooler, so the default is correct.
+	ScheduleListenerDatabaseURL string `envconfig:"SCHEDULE_LISTENER_DATABASE_URL" default:""`
 	// AllowedOrigins is the CORS allow-list — the Firebase Hosting origin(s) the
 	// PWA is served from (the PWA and API are separate origins, decision 0001).
 	// Comma-separated; set per environment to the Hosting URL(s). The local
@@ -120,3 +127,14 @@ func (c Config) OperatorEnabled() bool {
 
 // IsLocal reports whether the service is running in the local dev environment.
 func (c Config) IsLocal() bool { return c.Env == EnvLocal }
+
+// ListenerDatabaseURL returns the connection string the realtime listener should use:
+// the dedicated ScheduleListenerDatabaseURL when set, otherwise DatabaseURL. Keep the
+// fallback so local dev (and any single-endpoint Postgres) needs no extra config; the
+// cloud sets the dedicated direct-endpoint string (decision 0010).
+func (c Config) ListenerDatabaseURL() string {
+	if c.ScheduleListenerDatabaseURL != "" {
+		return c.ScheduleListenerDatabaseURL
+	}
+	return c.DatabaseURL
+}

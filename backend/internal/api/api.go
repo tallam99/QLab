@@ -27,6 +27,7 @@ import (
 	"github.com/tallam99/qlab/backend/internal/protoconv"
 	v1 "github.com/tallam99/qlab/backend/internal/protogen/qlab/v1"
 	"github.com/tallam99/qlab/backend/internal/protogen/qlab/v1/qlabv1connect"
+	"github.com/tallam99/qlab/backend/internal/realtime"
 	"github.com/tallam99/qlab/backend/internal/services/authentication"
 	"github.com/tallam99/qlab/backend/internal/services/scheduling"
 )
@@ -41,6 +42,10 @@ type Service struct {
 	// authn holds the authentication service (token -> user), attached once the store
 	// is ready, like sched. The auth interceptor reads it per call; nil => Unavailable.
 	authn atomic.Pointer[authentication.Service]
+	// broker fans pool-schedule changes out to the SSE stream handler, attached once
+	// the realtime stack is ready (SetBroker). Read through an atomic pointer like the
+	// others; nil => the stream endpoint returns Unavailable.
+	broker atomic.Pointer[realtime.Broker]
 	// validate enforces the .proto buf.validate rules at the transport edge.
 	validate connect.Interceptor
 	// otel opens an RPC span (named for the procedure) and propagates trace context on
@@ -70,6 +75,12 @@ func (s *Service) SetScheduling(svc scheduling.Service) {
 // Called by the server's dependency injector once the store is ready.
 func (s *Service) SetAuthentication(svc authentication.Service) {
 	s.authn.Store(&svc)
+}
+
+// SetBroker attaches the realtime broker the SSE stream handler subscribes to.
+// Called by the server's dependency injector once the realtime stack is ready.
+func (s *Service) SetBroker(broker *realtime.Broker) {
+	s.broker.Store(broker)
 }
 
 // Handler returns the mount path and the HTTP handler for the Connect service. Three

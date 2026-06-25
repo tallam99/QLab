@@ -122,12 +122,31 @@ func (s *service) mutate(ctx context.Context, p principal.Principal, event strin
 			return store.PoolMutation{}, err
 		}
 		result = res
+		// A successful reschedule changed the pool's live schedule: tag the mutation so
+		// the store emits a transactional schedule-change notification, which the realtime
+		// listener fans out to subscribed SSE streams (decision 0010).
+		mut.Notify = eventChangeKind[event]
 		return mut, nil
 	})
 	if err == nil {
 		s.logReschedule(ctx, event, p.LabID, poolID, result)
 	}
 	return result, err
+}
+
+// eventChangeKind maps a mutating event's name (the same string used for its span)
+// to the schedule-change kind the store notifies subscribers with. force_clock_out
+// settles the slot COMPLETE, so it shares the clocked-out kind. Every event that
+// flows through mutate must appear here; an unmapped event simply pushes no live
+// update (the queue is still correct on the next load). PokeOccupant is absent
+// because it changes no schedule state and never calls mutate.
+var eventChangeKind = map[string]store.ScheduleChangeKind{
+	"create_slot":     store.ScheduleChangeSlotCreated,
+	"clock_in":        store.ScheduleChangeClockedIn,
+	"clock_out":       store.ScheduleChangeClockedOut,
+	"cancel":          store.ScheduleChangeCancelled,
+	"force_clock_out": store.ScheduleChangeClockedOut,
+	"force_no_show":   store.ScheduleChangeNoShow,
 }
 
 // placement is a slot's reschedule outcome, rendered into a structured log line. It

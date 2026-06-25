@@ -3,6 +3,7 @@ import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { useMutation, useQuery } from "@connectrpc/connect-query";
 import { useEffect, useMemo, useState } from "react";
+import { usePoolScheduleStream } from "../api/usePoolScheduleStream";
 import { QlabService } from "../protogen/qlab/v1/service_pb";
 import type { RescheduleResult } from "../protogen/qlab/v1/types_pb";
 import { SlotStatus } from "../protogen/qlab/v1/types_pb";
@@ -86,9 +87,10 @@ export function resultToRows(result: RescheduleResult | undefined, ctx: MapConte
 }
 
 // PoolPanel is the container behind the product view: it loads the pool's schedule via
-// the read-only GetSchedule, maps it to rows, and wires the seven mutating RPCs. Every
-// action refetches so the queue reflects the engine's reschedule (the SSE stream will
-// replace the refetch in the next phase).
+// the read-only GetSchedule, maps it to rows, and wires the seven mutating RPCs. The
+// acting user's mutation refetches for immediate feedback; the live SSE stream pushes
+// every change (including other users') into the same query cache, so the queue stays
+// current without a refresh.
 export function PoolPanel() {
   const { poolId, canQuery, actingUserId, workspace } = useWorkspace();
   const { data, error, isLoading, refetch } = useQuery(
@@ -96,6 +98,11 @@ export function PoolPanel() {
     { resourcePoolId: poolId ?? "" },
     { enabled: canQuery },
   );
+
+  // Live updates: subscribe to the pool's schedule stream and let it write the
+  // GetSchedule cache (above) directly — a clock-out in another browser updates here
+  // with no refetch. Gated to a selected pool inside the hook.
+  usePoolScheduleStream(canQuery ? poolId : null);
 
   const createSlot = useMutation(QlabService.method.createSlot);
   const clockIn = useMutation(QlabService.method.clockIn);

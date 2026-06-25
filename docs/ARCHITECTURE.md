@@ -29,7 +29,12 @@ QLab is two separate surfaces plus managed backing services:
 ## Backend components (Go)
 
 - **API / Connect handlers** (`internal/api`) — thin transport adapters; convert
-  proto ⇄ domain at the edges and call the scheduling service.
+  proto ⇄ domain at the edges and call the scheduling service. Also hosts the SSE
+  live-schedule stream (`/v1/stream/schedule`), a plain HTTP route sharing the RPC
+  auth path (see **Live updates**).
+- **Realtime** (`internal/realtime`) — an in-process broker + a single Postgres
+  `LISTEN` connection that fans pool-schedule changes out to the SSE streams
+  (decision 0010).
 - **Domain services** (`internal/services/*`, each an `interface.go` + `v1/` impl):
   - **scheduling** — the orchestration between the API and the engine, store,
     authorizer, and notification builder (all interfaces). One method per ALGORITHM
@@ -86,9 +91,20 @@ deploy, and is regression-tested by `backend/schema_test` (`mage testSchema`).
 
 ## Live updates
 
-Server-Sent Events (SSE) push queue-changed events (proto envelope) to subscribed
-clients; all writes still go through normal API calls. Chosen over WebSockets for
-simplicity (one-directional, plain HTTP, auto-reconnect).
+Server-Sent Events (SSE) push queue-changed events (the `QueueEvent` proto envelope,
+JSON-encoded) to subscribed clients; all writes still go through normal API calls.
+Chosen over WebSockets for simplicity (one-directional, plain HTTP, auto-reconnect).
+
+A pool-mutating transaction emits a transactional `pg_notify` (so the signal fires only
+on commit); a per-process listener (`internal/realtime`) on a dedicated, session-pinned
+connection fans it out to an in-process broker, and the SSE handler recomputes and pushes
+the new schedule. Postgres `LISTEN`/`NOTIFY` is the cross-instance hop, so a write on any
+Cloud Run instance reaches subscribers on every instance. The browser uses
+`fetch-event-source` (not native `EventSource`) so the stream carries the same bearer
+token as every RPC. Each frame is a `RescheduleResult` — the same shape `GetSchedule`
+returns — so the frontend keeps one query cache. The listener needs the **direct**
+(unpooled) Neon endpoint; the pooled endpoint can't hold a `LISTEN` session. See
+decision 0010.
 
 ## Environments
 

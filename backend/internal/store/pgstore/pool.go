@@ -2,6 +2,7 @@ package pgstore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -87,6 +88,23 @@ func (s *Store) WithPool(ctx context.Context, labID, poolID, actorUserID uuid.UU
 		observability.Count("slots_upserted", len(mutation.Slots)),
 		observability.Count("outbox_enqueued", len(mutation.Outbox)),
 	)
+
+	// A schedule-change notification, emitted INSIDE the transaction so Postgres
+	// delivers it only on commit (and never for a rollback) — the realtime fan-out
+	// is therefore exactly as durable as the write it announces. The payload is the
+	// minimal {lab, pool, kind}; listeners recompute the schedule themselves.
+	if mutation.Notify != "" {
+		payload, err := json.Marshal(store.ScheduleNotification{LabID: labID, PoolID: poolID, Kind: mutation.Notify})
+		if err != nil {
+			return fmt.Errorf("marshal schedule notification: %w", err)
+		}
+		// pg_notify is the function form of NOTIFY, so the channel and payload are
+		// bound as parameters rather than interpolated into SQL.
+		if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, store.ScheduleNotifyChannel, string(payload)); err != nil {
+			return fmt.Errorf("notify schedule change: %w", err)
+		}
+		span.SetAttributes(observability.Event(string(mutation.Notify)))
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)

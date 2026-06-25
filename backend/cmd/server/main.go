@@ -134,6 +134,10 @@ func run() error {
 	// WithPostgres. Clock is nil → the scheduling service uses the real time.Now.
 	s.InjectDependency(server.WithAuthentication())
 	s.InjectDependency(server.WithSchedulingService(dynamicqueue.Minutes(cfg.ClockInGraceMinutes), nil))
+	// The realtime listener for live schedule streams (decision 0010). Its DSN must
+	// allow a session-pinned LISTEN — the direct (unpooled) endpoint in the cloud;
+	// ListenerDatabaseURL falls back to DATABASE_URL locally.
+	s.InjectDependency(server.WithScheduleListener(cfg.ListenerDatabaseURL()))
 
 	if err := s.Run(ctx); err != nil {
 		logger.Error("run server", "error", err)

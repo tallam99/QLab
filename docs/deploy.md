@@ -304,6 +304,42 @@ pointing it at the staging API URL (retrieve the gate value with
 
 ---
 
+## Live schedule updates (Phase 10 — realtime listener) — you run these
+
+> ⚠️ **Not yet configured in the cloud.** Until the secret + variable below exist, the
+> app runs fine but pushes **no cross-client live updates** in staging/prod (each user's
+> own actions still update immediately; another user's don't until they reload). Local
+> dev needs none of this.
+
+Live schedule updates use Postgres `LISTEN`/`NOTIFY` (decision 0010). `LISTEN` needs a
+**session-pinned** connection, which Neon's **pooled** endpoint (PgBouncer, transaction
+mode) does **not** provide — on the pooled host `LISTEN` runs but notifications never
+arrive. So the listener uses a dedicated connection to the branch's **direct (unpooled)**
+endpoint, configured by `SCHEDULE_LISTENER_DATABASE_URL`.
+
+To enable it per environment:
+
+1. **Build the direct connection string** for the `qlab_app` role: take the existing
+   `db-url-<env>` value and **remove `-pooler`** from the host (Neon's direct host is the
+   pooled host minus that suffix). Same role, same database, `sslmode=require`.
+2. **Store it** in a new Secret Manager secret and grant the runtime SA access:
+   ```bash
+   printf '%s' 'postgres://qlab_app:<password>@<direct-host>/<db>?sslmode=require' \
+     | gcloud secrets create db-url-staging-listener --data-file=- --project qlab-staging
+   gcloud secrets add-iam-policy-binding db-url-staging-listener \
+     --member="serviceAccount:qlab-api@qlab-staging.iam.gserviceaccount.com" \
+     --role=roles/secretAccessor --project qlab-staging
+   ```
+3. **Point the deploy at it** with an environment-scoped Actions variable (Settings →
+   Environments → staging/production → Variables): set **`SCHEDULE_LISTENER_SECRET`** =
+   `db-url-<env>-listener`. `_deploy.yml` attaches it as `SCHEDULE_LISTENER_DATABASE_URL`
+   only when the variable is set, so the deploy never breaks before the secret exists.
+
+The Cloud Run request timeout is already raised to `--timeout=3600` in `_deploy.yml` so
+the SSE stream can stay open; no other change is needed.
+
+---
+
 ## Cloud Trace (Phase 7.5 — tracing)
 
 Tracing exports to **Google Cloud Trace** in staging/prod (stdout locally), chosen by

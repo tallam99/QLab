@@ -110,6 +110,15 @@ jobs:
           if [ "${{ inputs.environment }}" = "staging" ]; then
             SECRETS="$SECRETS,OPERATOR_SECRET=operator-secret:latest,OPERATOR_DATABASE_URL=${{ vars.DATABASE_MIGRATOR_SECRET }}:latest,FIREBASE_WEB_API_KEY=firebase-web-api-key:latest"
           fi
+          # The realtime listener's dedicated connection for live schedule updates
+          # (decision 0010). LISTEN needs a session-pinned connection, which Neon's pooled
+          # endpoint can't provide, so SCHEDULE_LISTENER_SECRET must name a Secret Manager
+          # secret holding the DIRECT (unpooled) connection string. Optional: when the
+          # variable is unset the app runs fine but pushes no cross-client live updates,
+          # so a deploy never breaks before the secret exists.
+          if [ -n "${{ vars.SCHEDULE_LISTENER_SECRET }}" ]; then
+            SECRETS="$SECRETS,SCHEDULE_LISTENER_DATABASE_URL=${{ vars.SCHEDULE_LISTENER_SECRET }}:latest"
+          fi
           # Container env vars. --set-env-vars REPLACES the whole set (it is not
           # additive), so every var goes in this one string; ^|^ makes '|' the
           # delimiter so comma-bearing values (the CORS list, a multi-email allowlist)
@@ -131,7 +140,11 @@ jobs:
             --allow-unauthenticated \
             --service-account "${{ vars.CLOUD_RUN_RUNTIME_SA }}" \
             --set-env-vars "^|^$ENVVARS" \
-            --set-secrets "$SECRETS"
+            --set-secrets "$SECRETS" \
+            --timeout=3600
+            # --timeout=3600 (the max) lets the SSE live-schedule stream (decision 0010)
+            # hold a request open; it runs over HTTP/1.1 and the client reconnects across
+            # the cap. It applies to all requests, which is harmless — unary RPCs finish in ms.
           url="$(gcloud run services describe "${{ vars.CLOUD_RUN_SERVICE }}" \
             --project "${{ vars.GCP_PROJECT_ID }}" --region "${{ vars.GCP_REGION }}" \
             --format='value(status.url)')"
